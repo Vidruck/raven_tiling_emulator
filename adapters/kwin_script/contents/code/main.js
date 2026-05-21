@@ -1,5 +1,5 @@
 /**
- * @fileoverview Raven Bridge para KDE Plasma 6 (Wayland) - Versión Ruta A Estable.
+ * @fileoverview Raven Bridge para KDE Plasma 6 (Wayland) - Versión 2.6.1 (Estabilización Adaptativa).
  * @author Alejandro González Hernández (Vidruck)
  */
 
@@ -88,10 +88,6 @@ function requestStateSync() {
     }
 }
 
-/**
- * Mapeador geométrico abstracto y seguro.
- * Garantiza la extracción de propiedades de QRect/QRectF sin generar valores NaN.
- */
 function getRectGeometry(rect) {
     if (!rect) return { x: 0, y: 0, w: 1920, h: 1080 };
     var x = typeof rect.x === "function" ? rect.x() : (rect.x !== undefined ? rect.x : 0);
@@ -118,7 +114,7 @@ function syncState() {
     var winState = [];
     var screens = {};
     
-    var outs = workspace.outputs || [];
+    var outs = workspace.screens || []; 
     var desks = workspace.desktops || [];
     var currentDesk = workspace.currentDesktop;
 
@@ -209,14 +205,11 @@ function syncWindowDelta(w) {
     } catch (e) { print("[Raven] Error Delta Sync: " + e); }
 }
 
-/**
- * Migración atómica corregida para Wayland utilizando sendClientToScreen.
- */
 function migrateWindow(win, target_output_name, target_desktop_id) {
     if (!win || win.deleted) return;
     try {
         if (target_output_name) {
-            var outputs = workspace.outputs || [];
+            var outputs = workspace.screens || []; 
             for (var i = 0; i < outputs.length; i++) {
                 if (outputs[i].name === target_output_name) {
                     workspace.sendClientToScreen(win, outputs[i]);
@@ -253,7 +246,7 @@ function applyCommands(commandsJson) {
                     
                     if (cmd.action === "move") {
                         try {
-                            if (w.maximizeMode === 3 || w.interactiveMove || w.interactiveResize) break;
+                            if (w.maximizeMode === 3 || w.interactiveMove || w.interactiveResize || w.__raven_ui_migrating) break;
                             w.__raven_mutating = true;
                             w.frameGeometry = { x: Math.round(cmd.x), y: Math.round(cmd.y), width: Math.round(cmd.width), height: Math.round(cmd.height) };
                             
@@ -337,18 +330,48 @@ function listenForCommands() {
 
 function bindWindow(w) {
     try {
-        if (!isManageable(w) || w.__raven_bound || w.__raven_quarantined) return;
+        if (!isManageable(w) || w.__raven_bound) return;
         w.__raven_bound = true;
         
         w.minimizedChanged.connect(function() { if (w && !w.deleted && !w.__raven_mutating && !w.interactiveMove && !w.interactiveResize) requestStateSync(); });
-        w.outputChanged.connect(function() { if (w && !w.deleted && !w.__raven_mutating && !w.interactiveMove && !w.interactiveResize) requestStateSync(); });
-        w.desktopsChanged.connect(function() { if (w && !w.deleted && !w.__raven_mutating && !w.interactiveMove && !w.interactiveResize) requestStateSync(); });
+        
+        w.outputChanged.connect(function() { 
+            if (!w || w.deleted) return;
+            if (w.__raven_mutating) return;
+            
+            if (!w.interactiveMove && !w.interactiveResize) {
+                w.__raven_ui_migrating = true;
+                (function(cw) {
+                    setKWinTimeout(function() { if (cw && !cw.deleted) cw.__raven_ui_migrating = false; }, 250);
+                })(w);
+            }
+            requestStateSync(); 
+        });
+        
+        w.desktopsChanged.connect(function() { 
+            if (!w || w.deleted) return;
+            if (w.__raven_mutating) return; 
+            
+            if (!w.interactiveMove && !w.interactiveResize) {
+                w.__raven_ui_migrating = true;
+                (function(cw) {
+                    setKWinTimeout(function() { if (cw && !cw.deleted) cw.__raven_ui_migrating = false; }, 250);
+                })(w);
+            }
+            requestStateSync(); 
+        });
         
         w.frameGeometryChanged.connect(function() {
             if (!w || w.deleted) return;
+            if (w.__raven_quarantined && w.__raven_stab_timer) {
+                w.__raven_stab_timer.stop();
+                w.__raven_stab_timer.start();
+                return;
+            }
+
             if (w.interactiveMove || w.interactiveResize) { w.__was_interacting = true; return; }
             if (w.__was_interacting && !w.interactiveMove && !w.interactiveResize) { w.__was_interacting = false; requestStateSync(); return; }
-            if (w.__raven_mutating) return;
+            if (w.__raven_mutating || w.__raven_ui_migrating) return;
 
             syncWindowDelta(w);
         });
@@ -360,7 +383,7 @@ function bindWindow(w) {
 }
 
 function init() {
-    print("[Raven Bridge] Inicializando v2.9 (Ruta A: Topología Multi-Monitor Atómica)...");
+    print("[Raven Bridge] Inicializando v2.6.1...");
     
     var initialWindows = workspace.windowList();
     for (var i=0; i<initialWindows.length; i++) { bindWindow(initialWindows[i]); }
@@ -376,10 +399,26 @@ function init() {
 
         if (needsQuarantine) {
             w.__raven_quarantined = true;
-            setKWinTimeout(function() {
-                if (w && !w.deleted) { w.__raven_quarantined = false; w.__raven_strict_birth = true; bindWindow(w); requestStateSync(); }
-            }, 180); 
-        } else { bindWindow(w); requestStateSync(); }
+            bindWindow(w); 
+            var stabTimer = new QTimer();
+            stabTimer.interval = 100; 
+            stabTimer.singleShot = true;
+            w.__raven_stab_timer = stabTimer;
+            
+            stabTimer.timeout.connect(function() {
+                if (w && !w.deleted) {
+                    w.__raven_quarantined = false;
+                    w.__raven_strict_birth = true;
+                    w.__raven_stab_timer = null;
+                    requestStateSync(); 
+                }
+                stabTimer.destroy();
+            });
+            stabTimer.start();
+        } else { 
+            bindWindow(w); 
+            requestStateSync(); 
+        }
     });
 
     workspace.windowRemoved.connect(function() { requestStateSync(); });
@@ -391,7 +430,8 @@ function init() {
     });
 
     try { callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "bridgeReady", function() {}); } catch (e) {}
+    
+    requestStateSync();
     listenForCommands();
 }
-
 try { init(); } catch (e) { print("[Raven Bridge] Error crítico: " + e); }

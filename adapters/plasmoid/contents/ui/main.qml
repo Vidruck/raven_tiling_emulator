@@ -12,14 +12,17 @@ PlasmoidItem {
     property bool isEngineEnabled: true
     property int monitorCount: 1
     property int desktopCount: 1
-    property string queryCmd: "dbus-send --session --print-reply=literal --type=method_call --dest=org.kde.raven.Daemon /Events org.kde.raven.Events.getTilingState"
-    property string queryMonitorsCmd: "dbus-send --session --print-reply=literal --type=method_call --dest=org.kde.raven.Daemon /Events org.kde.raven.Events.getMonitorCount"
-    property string queryDesktopsCmd: "dbus-send --session --print-reply=literal --type=method_call --dest=org.kde.raven.Daemon /Events org.kde.raven.Events.getDesktopCount"
+    
+    property string queryCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getTilingState"
+    property string queryMonitorsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getMonitorCount"
+    property string queryDesktopsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getDesktopCount"
 
-    // --- Lógica de Comunicación ---
     function execDbus(method, args) {
-        let cmd = "dbus-send --session --type=method_call --dest=org.kde.raven.Daemon /Events org.kde.raven.Events." + method;
-        if (args) { cmd += " " + args; }
+        let cmd = "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events." + method;
+        if (args) { 
+            let cleanArgs = args.toString().replace("int32:", "");
+            cmd += " " + cleanArgs; 
+        }
         executable.exec(cmd);
     }
 
@@ -45,13 +48,15 @@ PlasmoidItem {
         onNewData: (sourceName, data) => {
             if (data["stdout"] !== undefined) {
                 let output = data["stdout"].trim();
+                let cleanOutput = output.replace(/[a-zA-Z]/g, "").trim();
+
                 if (sourceName === root.queryCmd) {
                     root.isEngineEnabled = output.toLowerCase().includes("true");
                 } else if (sourceName === root.queryMonitorsCmd) {
-                    let val = parseInt(output, 10);
+                    let val = parseInt(cleanOutput, 10);
                     root.monitorCount = isNaN(val) ? 1 : val;
                 } else if (sourceName === root.queryDesktopsCmd) {
-                    let val = parseInt(output, 10);
+                    let val = parseInt(cleanOutput, 10);
                     root.desktopCount = isNaN(val) ? 1 : val;
                 }
             }
@@ -60,7 +65,6 @@ PlasmoidItem {
         function exec(cmd) { connectSource(cmd); }
     }
 
-    // --- Representación Compacta (Icono en el panel) ---
     compactRepresentation: MouseArea {
         id: compactRoot
         activeFocusOnTab: true
@@ -69,10 +73,9 @@ PlasmoidItem {
         Kirigami.Icon {
             anchors.fill: parent
             anchors.margins: Kirigami.Units.smallSpacing
-            source: "view-grid" // Icono genérico más orgánico para el panel
+            source: "view-grid" 
             active: root.isEngineEnabled
             opacity: root.isEngineEnabled ? 1.0 : 0.4
-            
             Behavior on opacity { OpacityAnimator { duration: Kirigami.Units.longDuration } }
         }
         
@@ -81,19 +84,16 @@ PlasmoidItem {
         }
     }
 
-    // --- Representación Extendida (Popup) ---
     fullRepresentation: Kirigami.Page {
         implicitWidth: Kirigami.Units.gridUnit * 18
         implicitHeight: Kirigami.Units.gridUnit * 20
-        
-        background: null // Usar fondo transparente del tema de Plasma
+        background: null
 
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: Kirigami.Units.largeSpacing
             spacing: Kirigami.Units.largeSpacing
 
-            // Encabezado Premium
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.mediumSpacing
@@ -128,7 +128,6 @@ PlasmoidItem {
 
             Kirigami.Separator { Layout.fillWidth: true }
 
-            // Sección de Control de Foco y Layout
             Kirigami.Heading {
                 text: "Gestión de Ventanas"
                 level: 4
@@ -163,7 +162,6 @@ PlasmoidItem {
                 }
             }
 
-            // Sección de Dimensiones
             Kirigami.Heading {
                 text: "Ajustes de Espacio"
                 level: 4
@@ -192,13 +190,12 @@ PlasmoidItem {
                     PlasmaComponents.Label { text: "Márgenes"; Layout.alignment: Qt.AlignHCenter; opacity: 0.8; font.pixelSize: Kirigami.Units.gridUnit * 0.7 }
                     RowLayout {
                         spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button { icon.name: "zoom-out"; Layout.fillWidth: true; onClicked: root.execDbus("incrementGaps", "int32:-2") }
-                        PlasmaComponents.Button { icon.name: "zoom-in"; Layout.fillWidth: true; onClicked: root.execDbus("incrementGaps", "int32:2") }
+                        PlasmaComponents.Button { icon.name: "zoom-out"; Layout.fillWidth: true; onClicked: root.execDbus("incrementGaps", "-2") }
+                        PlasmaComponents.Button { icon.name: "zoom-in"; Layout.fillWidth: true; onClicked: root.execDbus("incrementGaps", "2") }
                     }
                 }
             }
 
-            // Sección de Migración Premium (Nueva característica)
             Kirigami.Heading {
                 text: "Enviar Foco Activo"
                 level: 4
@@ -215,7 +212,7 @@ PlasmoidItem {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
                     PlasmaComponents.Label { 
-                        text: "Monitor (" + root.monitorCount + ")"
+                        text: "Monitor | " + root.monitorCount + " |"
                         Layout.alignment: Qt.AlignHCenter 
                         opacity: 0.8 
                         font.pixelSize: Kirigami.Units.gridUnit * 0.7 
@@ -240,7 +237,7 @@ PlasmoidItem {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
                     PlasmaComponents.Label { 
-                        text: "Escritorio (" + root.desktopCount + ")"
+                        text: "Escritorio | " + root.desktopCount + " |"
                         Layout.alignment: Qt.AlignHCenter 
                         opacity: 0.8 
                         font.pixelSize: Kirigami.Units.gridUnit * 0.7 
@@ -263,10 +260,7 @@ PlasmoidItem {
                 }
             }
 
-
-
-
-            Item { Layout.fillHeight: true } // Espaciador final
+            Item { Layout.fillHeight: true } 
             
             PlasmaComponents.Label {
                 text: "© 2026 Vidruck"

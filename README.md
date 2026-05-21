@@ -11,35 +11,36 @@
 ![Wayland](https://img.shields.io/badge/Wayland-9999ff?style=for-the-badge&logo=wayland&logoColor=white)
 ![GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)
 
-Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.6**, Raven se reestrutura y ajusta a los estándares de la **Arquitectura Hexagonal**, logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo, a la vez que introduce optimizaciones agresivas de tamaño y estabilidad.
+Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.6**, Raven se reestructura y ajusta a los estándares de la **Arquitectura Hexagonal**, logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo, a la vez que introduce optimizaciones agresivas de estabilidad y contención de recursos.
 
 ## 🚀 El Salto a la Versión 2.6: Arquitectura Hexagonal y Micro-Optimización
-Esta versión se enfoca en la perfección estructural y la corrección de fallos críticos, garantizando una experiencia inquebrantable:
+Esta versión se enfoca en la robustes estructural y la corrección de fallos críticos, garantizando una experiencia inquebrantable en entornos multi-monitor:
 
 ### 📉 Eficiencia Energética y de Almacenamiento
-La optimización sigue siendo el pilar. El motor opera con recursos ridículamente bajos y el ejecutable ha sido comprimido al máximo:
+La optimización sigue siendo el pilar fundamental. El motor opera con recursos sumamente bajos y contenidos:
 
 | Versión | Arquitectura | RAM (Runtime) | ROM (Binario) |
 |---|---|---|---|
 | **v1.0** | Python Puro | 55.0 MB | ~15 MB |
 | **v1.6** | Híbrida (Python + Rust FFI) | ~25.9 MB | ~18 MB |
-| **v2.6** | **Optimized Rust** | **~5.5 MB** | **1.4 MB** |
+| **v2.6** | ***Asynchronous Native Rust** | **~4.3 MB** | **1.4 MB** |
 
 *La eficiencia extrema ha sido una directriz arquitectónica fundamental desde el inicio del proyecto. Tras validaciones exhaustivas en hardware real, se logró consolidar un motor de alto rendimiento que minimiza el impacto en recursos. Gracias al uso de LTO, el pruning de dependencias y la eliminación de símbolos, entregamos un binario ultra-compacto sin comprometer la estabilidad.*
 
 ## 🌟 Nuevas Funciones y Estabilidad (v2.6+)
 - **Resiliencia y Comunicación Asíncrona:** El puente KWin-Raven ahora es completamente no bloqueante. El motor Rust utiliza offloading asíncrono con `tokio::spawn` para liberar el bus de datos instantáneamente.
+- **Estabilización de Ventanas Adaptativa:** Incorporación de un motor de detección por *Silencio Geométrico*. Las aplicaciones complejas (como Firefox, Floorp o Zen Browser) se mantienen en cuarentena dinámica hasta que cesan sus micro-redimensionamientos internos de Wayland, logrando un mosaico limpio y libre de parpadeos.
 - **Gestión de Desbordamiento Inteligente:** Raven detecta matemáticamente la saturación de pantallas y escritorios. En lugar de fallos de layout, minimiza automáticamente las ventanas excedentes y lanza una notificación al usuario.
-- **Robustez en el Adaptador JavaScript:** Refactorización del bridge con manejo defensivo de errores (`try/catch`), garantizando que el entorno gráfico permanezca estable incluso ante fallos de comunicación o estados inconsistentes.
+- **Robustez en el Adaptador JavaScript:** Refactorización del bridge con manejo defensivo de errores (`try/catch`) y filtrado atómico de señales (`__raven_ui_migrating`), garantizando que el entorno gráfico permanezca estable e inmune a efectos de rebote.
+-**Envio de Ventanas mediante Toggle:** El toggle permite enviar la ultima ventana en foco a el monitor alterno para comodidad del usuario.
+-**Soporte a traspaso de ventanas via arrastre:** Se incluye capacidad de arrastrar con el ratón la ventana a otro monitor o escritorio virtual disponible con reacomodo instantaneo de la composición. 
 
 ### 🏗️ Arquitectura de Comunicación (High-Performance Bridge)
 El sistema utiliza un puente de baja latencia altamente desacoplado entre el compositor KWin y el motor Raven, optimizado para los estándares de **Plasma 6 (Wayland)**:
 - **Puente de Alto Rendimiento (Sensor-Actuator Model):** Basado en una investigación profunda de la API `QJSEngine`, Raven ahora utiliza un sistema de sincronización atómica donde el script de KWin actúa como un sensor debounced.
 - **Optimización de D-Bus:** Se ha eliminado el envío masivo de estados redundantes. El tráfico en el bus de sistema se ha reducido en un **~70%**, liberando recursos críticos del compositor.
-- **Uso de Identificadores Nativos:** Migración completa al uso de `internalId` y `output.geometry` de Plasma 6, eliminando desincronizaciones en configuraciones multi-monitor.
-- **Mecanismo Watchdog:** El script de KWin incorpora un temporizador de vigilancia (Watchdog) de 8 segundos para liberar bloqueos potenciales en la comunicación IPC.
-- **Acciones Amigables de Almacenamiento:** Compilación nivel 3 con `strip`, `lto` y `codegen-units=1`. El instalador ahora realiza una limpieza residual profunda.
-
+- **Uso de Identificadores Nativos:** Migración completa al uso de `internalId` y la topología global de `workspace.screens` de Plasma 6, eliminando desincronizaciones en configuraciones multi-monitor o escritorios virtuales.
+- **Mecanismo Watchdog:** El script de KWin incorpora un temporizador de vigilancia (Watchdog) de 6 segundos para liberar bloqueos potenciales en la comunicación IPC.
 
 ## 🏗️ Nueva Estructura del Proyecto
 - `core/engine_rs/`: El corazón del proyecto. Un daemon nativo asíncrono que escucha al compositor KWin.
