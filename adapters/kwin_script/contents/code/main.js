@@ -128,8 +128,6 @@ function syncState() {
         for (var o = 0; o < outs.length; o++) {
             var output = outs[o];
             var outName = output ? output.name : "default";
-
-            // Calculamos el espacio de colocación ideal libre de paneles usando el escritorio visible
             var placementUsableGeometry = getSafeScreenGeometry(output, currentDesk);
 
             if (desks && desks.length > 0) {
