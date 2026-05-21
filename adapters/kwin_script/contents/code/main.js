@@ -1,24 +1,23 @@
 /**
- * @fileoverview Raven Bridge para KDE Plasma 6 (Wayland).
+ * @fileoverview Raven Bridge para KDE Plasma 6 (Wayland) - Versión Ruta A Estable.
  * @author Alejandro González Hernández (Vidruck)
  */
 
 var _debounceTimer = null;
+var _is_listening = false;
+var _watchdog_timer = null;
+var _active_timers = [];
+var _quarantine_classes = ["firefox", "electron", "zen-browser", "code", "spotify", "floorp", "chrome"];
+
 try {
     _debounceTimer = new QTimer();
-    _debounceTimer.interval = 60; 
+    _debounceTimer.interval = 50; 
     _debounceTimer.singleShot = true;
     _debounceTimer.timeout.connect(syncState);
 } catch (e) {
     print("[Raven Bridge] Error inicializando timer global: " + e);
 }
 
-/**
- * Obtiene el identificador universal nativo de KWin para la ventana.
- * Este UUID es persistente durante todo el ciclo de vida de la superficie Wayland.
- * @param {object} w - Objeto de ventana de KWin.
- * @returns {string|null} Identificador único, o null si es inválida.
- */
 function getSafeWindowId(w) {
     try {
         if (!w || !w.internalId) return null;
@@ -26,11 +25,6 @@ function getSafeWindowId(w) {
     } catch (e) { return null; }
 }
 
-/**
- * Construye un identificador único del espacio de trabajo combinando el monitor y el escritorio virtual.
- * @param {object} window - Objeto de ventana de KWin.
- * @returns {string} Identificador en formato "nombre_salida||id_escritorio".
- */
 function getWorkspaceId(window) {
     try {
         if (!window || window.deleted) return "default||default_desk";
@@ -43,12 +37,6 @@ function getWorkspaceId(window) {
     } catch (e) { return "default||default_desk"; }
 }
 
-/**
- * Determina si una ventana debe ser gestionada por el motor de diseño (tiling).
- * Excluye tooltips, notificaciones, paneles y ventanas especiales.
- * @param {object} w - Objeto de ventana de KWin.
- * @returns {boolean} true si la ventana es gestionable.
- */
 function isManageable(w) {
     try {
         if (!w || w.deleted || !w.managed) return false;
@@ -63,12 +51,6 @@ function isManageable(w) {
     } catch (e) { return false; }
 }
 
-/**
- * Determina si una ventana gestionable debe tratarse como flotante (fuera del layout en mosaico).
- * Identifica modales, diálogos, utilidades, ventanas PiP y herramientas de Raven.
- * @param {object} w - Objeto de ventana de KWin.
- * @returns {boolean} true si la ventana debe ser flotante.
- */
 function isFloating(w) {
     try {
         if (!w || w.deleted) return true;
@@ -90,66 +72,75 @@ function isFloating(w) {
     } catch (e) { return true; }
 }
 
-/**
- * Programa una sincronización de estado agrupando peticiones cercanas mediante debouncing.
- */
 function requestStateSync() {
     try {
         if (!_debounceTimer) {
             _debounceTimer = new QTimer();
-            _debounceTimer.interval = 60; 
+            _debounceTimer.interval = 50; 
             _debounceTimer.singleShot = true;
             _debounceTimer.timeout.connect(syncState);
         }
         if (_debounceTimer.active) _debounceTimer.stop();
         _debounceTimer.start();
     } catch (e) {
-        print("[Raven] Error in requestStateSync: " + e);
+        print("[Raven] Error en requestStateSync: " + e);
         try { syncState(); } catch (err) {}
     }
 }
 
 /**
- * Recopila el estado global de las ventanas gestionables y las áreas de pantalla,
- * transmitiendo el payload resultante al demonio de Raven a través de D-Bus.
+ * Mapeador geométrico abstracto y seguro.
+ * Garantiza la extracción de propiedades de QRect/QRectF sin generar valores NaN.
  */
+function getRectGeometry(rect) {
+    if (!rect) return { x: 0, y: 0, w: 1920, h: 1080 };
+    var x = typeof rect.x === "function" ? rect.x() : (rect.x !== undefined ? rect.x : 0);
+    var y = typeof rect.y === "function" ? rect.y() : (rect.y !== undefined ? rect.y : 0);
+    var w = typeof rect.width === "function" ? rect.width() : (rect.width !== undefined ? rect.width : (typeof rect.w === "function" ? rect.w() : (rect.w !== undefined ? rect.w : 1920)));
+    var h = typeof rect.height === "function" ? rect.height() : (rect.height !== undefined ? rect.height : (typeof rect.h === "function" ? rect.h() : (rect.h !== undefined ? rect.h : 1080)));
+    return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+}
+
+function getSafeScreenGeometry(output, desktop) {
+    if (!output) return { x: 0, y: 0, w: 1920, h: 1080 };
+    try {
+        if (output.geometry) { return getRectGeometry(output.geometry); }
+    } catch(e) {}
+    try {
+        var area = workspace.clientArea(KWin.PlacementArea, output, desktop);
+        if (area) return getRectGeometry(area);
+    } catch (e) {}
+    return { x: 0, y: 0, w: 1920, h: 1080 };
+}
+
 function syncState() {
     var windows = workspace.windowList();
     var winState = [];
     var screens = {};
+    
+    var outs = workspace.outputs || [];
+    var desks = workspace.desktops || [];
+    var currentDesk = workspace.currentDesktop;
+
     try {
-        var outs = workspace.outputs || [];
-        var desks = workspace.desktops || [];
         for (var o = 0; o < outs.length; o++) {
             var output = outs[o];
             var outName = output ? output.name : "default";
+            
             if (desks && desks.length > 0) {
                 for (var d = 0; d < desks.length; d++) {
                     var desktop = desks[d];
                     var deskId = desktop ? desktop.id.toString() : "default_desk";
                     var wsId = outName + "||" + deskId;
-                    try {
-                        var area = workspace.clientArea(KWin.PlacementArea, output, desktop);
-                        screens[wsId] = {
-                            x: Math.round(area.x), y: Math.round(area.y),
-                            w: Math.round(area.width), h: Math.round(area.height)
-                        };
-                    } catch(e) {}
+                    screens[wsId] = getSafeScreenGeometry(output, desktop);
                 }
             } else {
-                var currentDesk = workspace.currentDesktop;
                 var deskId = currentDesk ? currentDesk.id.toString() : "default_desk";
                 var wsId = outName + "||" + deskId;
-                try {
-                    var area = workspace.clientArea(KWin.PlacementArea, output, currentDesk);
-                    screens[wsId] = {
-                        x: Math.round(area.x), y: Math.round(area.y),
-                        w: Math.round(area.width), h: Math.round(area.height)
-                    };
-                } catch(e) {}
+                screens[wsId] = getSafeScreenGeometry(output, currentDesk);
             }
         }
-    } catch(e) { print("[Raven] Error pre-poblando screens: " + e); }
+    } catch(e) { print("[Raven] Error topología pantallas: " + e); }
     
     for (var i = 0; i < windows.length; i++) {
         var w = windows[i];
@@ -163,187 +154,88 @@ function syncState() {
             
             var deskIds = [];
             if (w.desktops) {
-                for (var d = 0; d < w.desktops.length; d++) {
-                    deskIds.push(w.desktops[d].id.toString());
-                }
+                for (var d = 0; d < w.desktops.length; d++) { deskIds.push(w.desktops[d].id.toString()); }
             }
 
             var wsId = getWorkspaceId(w);
             if (output && !screens[wsId]) {
-                var desktop = (w.desktops && w.desktops.length > 0) ? w.desktops[0] : workspace.currentDesktop;
-                var area = workspace.clientArea(KWin.PlacementArea, output, desktop);
-                screens[wsId] = {
-                    x: Math.round(area.x), y: Math.round(area.y),
-                    w: Math.round(area.width), h: Math.round(area.height)
-                };
+                var desktop = (w.desktops && w.desktops.length > 0) ? w.desktops[0] : currentDesk;
+                screens[wsId] = getSafeScreenGeometry(output, desktop);
             }
             
-            var geom = w.frameGeometry;
+            var geom = getRectGeometry(w.frameGeometry);
             winState.push({
-                id: safeId, 
-                ws: getWorkspaceId(w),
-                desktops: deskIds,
-                output: outName,
-                f: isFloating(w),
-                m: Boolean(w.minimized), 
-                p: Boolean(w.keepAbove),
-                x: Math.round(geom.x), y: Math.round(geom.y),
-                w: Math.round(geom.width), h: Math.round(geom.height),
-                min_w: w.minSize ? Math.round(w.minSize.width) : 0,
-                min_h: w.minSize ? Math.round(w.minSize.height) : 0,
+                id: safeId, ws: getWorkspaceId(w), desktops: deskIds, output: outName,
+                f: isFloating(w), m: Boolean(w.minimized), p: Boolean(w.keepAbove),
+                x: geom.x, y: geom.y, w: geom.w, h: geom.h,
+                min_w: w.minSize ? Math.round(w.minSize.width) : 0, min_h: w.minSize ? Math.round(w.minSize.height) : 0,
                 sb: Boolean(w.__raven_strict_birth)
             });
-        } catch (e) { print("[Raven] Error en syncState: " + e); }
+        } catch (e) { print("[Raven] Error mapeando ventana: " + e); }
     }
     
     var masterOutputs = [];
-    var outs = workspace.outputs || [];
-    for (var o = 0; o < outs.length; o++) {
-        if (outs[o] && outs[o].name) masterOutputs.push(outs[o].name.toString());
-    }
+    for (var o = 0; o < outs.length; o++) { if (outs[o] && outs[o].name) masterOutputs.push(outs[o].name.toString()); }
 
     var masterDesktops = [];
-    var desks = workspace.desktops || [];
-    for (var d = 0; d < desks.length; d++) {
-        if (desks[d] && desks[d].id) masterDesktops.push(desks[d].id.toString());
-    }
+    for (var d = 0; d < desks.length; d++) { if (desks[d] && desks[d].id) masterDesktops.push(desks[d].id.toString()); }
 
-    var payload = { 
-        windows: winState, 
-        screens: screens,
-        topology: { outputs: masterOutputs, desktops: masterDesktops }
-    };
+    var payload = { windows: winState, screens: screens, topology: { outputs: masterOutputs, desktops: masterDesktops } };
     try {
         callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "syncState", JSON.stringify(payload));
     } catch (e) { print("[Raven Bridge] D-bus Drop: " + e); }
 }
 
-/**
- * Envía un Delta: Solo la ventana que acaba de mutar.
- * Extremadamente amigable con el Recolector de Basura.
- * @param {object} w - Ventana que mutó.
- */
 function syncWindowDelta(w) {
     try {
         if (!w || w.deleted || !isManageable(w) || w.__raven_quarantined) return;
         var safeId = getSafeWindowId(w);
         if (!safeId) return;
 
-        var output = w.output || workspace.activeOutput;
-        var outName = output ? output.name : "default";
-
+        var geom = getRectGeometry(w.frameGeometry);
         var deskIds = [];
         if (w.desktops) {
-            for (var d = 0; d < w.desktops.length; d++) {
-                deskIds.push(w.desktops[d].id.toString());
-            }
+            for (var d = 0; d < w.desktops.length; d++) { deskIds.push(w.desktops[d].id.toString()); }
         }
 
-        var geom = w.frameGeometry;
         var deltaPayload = {
-            id: safeId,
-            ws: getWorkspaceId(w),
-            output: outName,
-            desktops: deskIds,
-            f: isFloating(w),
-            m: Boolean(w.minimized),
-            p: Boolean(w.keepAbove),
-            x: Math.round(geom.x), y: Math.round(geom.y),
-            w: Math.round(geom.width), h: Math.round(geom.height),
-            min_w: w.minSize ? Math.round(w.minSize.width) : 0,
-            min_h: w.minSize ? Math.round(w.minSize.height) : 0,
+            id: safeId, ws: getWorkspaceId(w), output: (w.output ? w.output.name : "default"), desktops: deskIds,
+            f: isFloating(w), m: Boolean(w.minimized), p: Boolean(w.keepAbove),
+            x: geom.x, y: geom.y, w: geom.w, h: geom.h,
+            min_w: w.minSize ? Math.round(w.minSize.width) : 0, min_h: w.minSize ? Math.round(w.minSize.height) : 0,
             sb: Boolean(w.__raven_strict_birth)
         };
-
         callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "syncWindowDelta", JSON.stringify(deltaPayload));
     } catch (e) { print("[Raven] Error Delta Sync: " + e); }
 }
 
 /**
- * Migra una ventana hacia otra pantalla o escritorio virtual, o la minimiza si no hay espacio.
- * @param {object} win - Objeto de ventana de KWin a migrar.
- * @param {string} target_ws - Espacio de trabajo destino explícito.
+ * Migración atómica corregida para Wayland utilizando sendClientToScreen.
  */
-function migrateWindow(win, target_ws) {
-    if (!target_ws || !win) return;
+function migrateWindow(win, target_output_name, target_desktop_id) {
+    if (!win || win.deleted) return;
     try {
-        if (win.deleted) return;
-        var parts = target_ws.split("||");
-        if (parts.length < 2) return;
-        var outName = parts[0];
-        var deskId = parts[1];
-
-        var outputs = workspace.outputs || [];
-        for (var i = 0; i < outputs.length; i++) {
-            if (outputs[i].name === outName) {
-                win.output = outputs[i];
-                break;
-            }
-        }
-
-        var desktops = workspace.desktops || [];
-        for (var j = 0; j < desktops.length; j++) {
-            if (desktops[j].id.toString() === deskId) {
-                win.desktops = [desktops[j]];
-                break;
-            }
-        }
-    } catch (e) {
-        print("[Raven] Error migración: " + e);
-    }
-}
-
-/**
- * Estrategia de respaldo para desbordar ventanas a otra pantalla, escritorio, o minimizar.
- */
-function migrateWindowFallback(win, strategy) {
-    try {
-        if (!win || win.deleted) return;
-        var outputs = workspace.outputs || [];
-        var desktops = workspace.desktops || [];
-        var tryScreen = (strategy === "auto" || strategy === "screen");
-        var tryDesktop = (strategy === "auto" || strategy === "desktop");
-
-        if (tryScreen && outputs.length > 1) {
-            var currentOut = win.output || workspace.activeOutput;
-            if (!currentOut && outputs.length > 0) currentOut = outputs[0];
-            var nextIdx = 0;
+        if (target_output_name) {
+            var outputs = workspace.outputs || [];
             for (var i = 0; i < outputs.length; i++) {
-                if (currentOut && outputs[i].name === currentOut.name) {
-                    nextIdx = (i + 1) % outputs.length;
+                if (outputs[i].name === target_output_name) {
+                    workspace.sendClientToScreen(win, outputs[i]);
                     break;
                 }
             }
-            win.output = outputs[nextIdx];
-            return;
         }
-
-        if (tryDesktop && desktops.length > 1) {
-            var currentDesks = win.desktops || [];
-            var currentDesk = currentDesks.length > 0 ? currentDesks[0] : workspace.currentDesktop;
-            var nextIdxD = 0;
-            for (var d = 0; d < desktops.length; d++) {
-                if (currentDesk && desktops[d].id === currentDesk.id) {
-                    nextIdxD = (d + 1) % desktops.length;
+        if (target_desktop_id) {
+            var desktops = workspace.desktops || [];
+            for (var j = 0; j < desktops.length; j++) {
+                if (desktops[j].id.toString() === target_desktop_id) {
+                    win.desktops = [desktops[j]];
                     break;
                 }
             }
-            win.desktops = [desktops[nextIdxD]];
-            return;
         }
-
-        if (strategy === "auto") {
-            win.minimized = true; 
-            callDBus("org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications", "Notify",
-                "Raven", 0, "dialog-warning", "Límite de Espacio", "Ventana minimizada por falta de espacio.", [], {}, -1);
-        }
-    } catch (e) { print("[Raven] Error migración fallback: " + e); }
+    } catch (e) { print("[Raven] Fallo en migración nativa: " + e); }
 }
 
-/**
- * Parsea y ejecuta las órdenes de diseño (movimiento, enfoque, migración) enviadas desde Rust.
- * @param {string} commandsJson - Array de comandos en formato JSON.
- */
 function applyCommands(commandsJson) {
     if (!commandsJson) return;
     try {
@@ -352,159 +244,50 @@ function applyCommands(commandsJson) {
 
         for (var i = 0; i < cmds.length; i++) {
             var cmd = cmds[i];
-            
-            // Si Rust nos pide sincronizar (ej. tras un atajo de teclado complejo)
-            if (cmd.action === "request_sync") { 
-                requestStateSync(); 
-                continue; 
-            }
+            if (cmd.action === "request_sync") { requestStateSync(); continue; }
 
-            // Buscamos la ventana objetivo
             for (var j = 0; j < windows.length; j++) {
                 var w = windows[j];
-                
-                // Utilizamos la nueva identidad nativa de Wayland
                 if (getSafeWindowId(w) === cmd.window_id) {
-                    if (!w || w.deleted) {
-                        print("[Raven] Mutacion abortada: La superficie Wayland " + cmd.window_id + " fue destruida en transito.");
-                        break;
-                    }
+                    if (!w || w.deleted) break;
                     
                     if (cmd.action === "move") {
                         try {
                             if (w.maximizeMode === 3 || w.interactiveMove || w.interactiveResize) break;
-                            
-                            var expectedGeom = {
-                                x: Math.round(cmd.x), y: Math.round(cmd.y), 
-                                width: Math.round(cmd.width), height: Math.round(cmd.height) 
-                            };
-
                             w.__raven_mutating = true;
-                            w.__raven_expected_geometry = expectedGeom;
-                            w.frameGeometry = expectedGeom;
+                            w.frameGeometry = { x: Math.round(cmd.x), y: Math.round(cmd.y), width: Math.round(cmd.width), height: Math.round(cmd.height) };
                             
                             (function(capturedWindow) {
                                 setKWinTimeout(function() { 
-                                    try { 
-                                        if (capturedWindow && !capturedWindow.deleted && capturedWindow.__raven_mutating) {
-                                            capturedWindow.__raven_mutating = false; 
-                                            capturedWindow.__raven_expected_geometry = null;
-                                        } 
-                                    } catch(e){} 
-                                }, 500);
+                                    if (capturedWindow && !capturedWindow.deleted) { capturedWindow.__raven_mutating = false; } 
+                                }, 400);
                             })(w);
-                        } catch(e) { print("[Raven] Error apply move: " + e); }
-                        
-                    } else if (cmd.action === "focus") {
-                        try { workspace.activeWindow = w; } catch(e){}
-                        
-                    } else if (cmd.action === "request_feedback") {
-                        try {
-                            if (w.__raven_strict_birth) {
-                                w.__raven_strict_birth = false; // Limpiar para que suceda solo 1 vez
-                                syncWindowDelta(w);
-                            }
-                        } catch(e) { print("[Raven] Error apply request_feedback: " + e); }
-                        
-                    } else if (cmd.action === "minimize") {
-                        try {
-                            w.__raven_mutating = true;
-                            w.minimized = true;
-                            (function(capturedWindow) {
-                                setKWinTimeout(function() { 
-                                    try { 
-                                        if (capturedWindow && !capturedWindow.deleted) {
-                                            capturedWindow.__raven_mutating = false; 
-                                            requestStateSync(); 
-                                        }
-                                    } catch(e){} 
-                                }, 100);
-                            })(w);
-                        } catch(e) { print("[Raven] Error apply minimize: " + e); }
-
-                    } else if (cmd.action === "unminimize") {
-                        try {
-                            w.__raven_mutating = true;
-                            w.minimized = false;
-                            (function(capturedWindow) {
-                                setKWinTimeout(function() { 
-                                    try { 
-                                        if (capturedWindow && !capturedWindow.deleted) {
-                                            capturedWindow.__raven_mutating = false; 
-                                            requestStateSync(); 
-                                        }
-                                    } catch(e){} 
-                                }, 100);
-                            })(w);
-                        } catch(e) { print("[Raven] Error apply unminimize: " + e); }
-                        
-                    } else if (cmd.action === "migrate_to_output") {
-                        try {
-                            w.__raven_mutating = true;
-                            var outs = workspace.outputs || [];
-                            var targetFound = false;
-                            for (var k = 0; k < outs.length; k++) {
-                                if (outs[k].name === cmd.target_ws) {
-                                    if (typeof workspace.sendClientToScreen === "function") {
-                                        try {
-                                            workspace.sendClientToScreen(w, outs[k]); 
-                                        } catch (e) {
-                                            w.output = outs[k];
-                                        }
-                                    } else {
-                                        w.output = outs[k];
-                                    }
-                                    targetFound = true;
-                                    break;
-                                }
-                            }
-                            if (!targetFound) {
-                                w.__raven_mutating = false;
-                                requestStateSync();
-                            } else {
-                                (function(capturedWindow) {
-                                    setKWinTimeout(function() { 
-                                        try { 
-                                            if (capturedWindow && !capturedWindow.deleted) {
-                                                capturedWindow.__raven_mutating = false; 
-                                                requestStateSync(); 
-                                            }
-                                        } catch(e){} 
-                                    }, 100);
-                                })(w);
-                            }
-                        } catch(e) { print("[Raven] Error apply migrate_to_output: " + e); }
-
-                    } else if (cmd.action === "migrate_to_desktop") {
-                        try {
-                            w.__raven_mutating = true;
-                            var desks = workspace.desktops || [];
-                            var targetFound = false;
-                            for (var k = 0; k < desks.length; k++) {
-                                if (desks[k].id.toString() === cmd.target_ws) {
-                                    w.desktops = [desks[k]];
-                                    targetFound = true;
-                                    break;
-                                }
-                            }
-                            if (!targetFound) {
-                                w.__raven_mutating = false;
-                                requestStateSync();
-                            } else {
-                                (function(capturedWindow) {
-                                    setKWinTimeout(function() { 
-                                        try { 
-                                            if (capturedWindow && !capturedWindow.deleted) {
-                                                capturedWindow.__raven_mutating = false; 
-                                                requestStateSync(); 
-                                            }
-                                        } catch(e){} 
-                                    }, 100);
-                                })(w);
-                            }
-                        } catch(e) { print("[Raven] Error apply migrate_to_desktop: " + e); }
+                        } catch(e) {}
+                    } 
+                    else if (cmd.action === "focus") { workspace.activeWindow = w; } 
+                    else if (cmd.action === "request_feedback") {
+                        if (w.__raven_strict_birth) { w.__raven_strict_birth = false; syncWindowDelta(w); }
+                    } 
+                    else if (cmd.action === "minimize") {
+                        w.__raven_mutating = true;
+                        w.minimized = true;
+                        (function(cw) { setKWinTimeout(function() { if (cw && !cw.deleted) { cw.__raven_mutating = false; requestStateSync(); } }, 100); })(w);
+                    } 
+                    else if (cmd.action === "unminimize") {
+                        w.__raven_mutating = true;
+                        w.minimized = false;
+                        (function(cw) { setKWinTimeout(function() { if (cw && !cw.deleted) { cw.__raven_mutating = false; requestStateSync(); } }, 100); })(w);
                     }
-                    
+                    else if (cmd.action === "migrate_to_output") {
+                        w.__raven_mutating = true;
+                        migrateWindow(w, cmd.target_ws, null);
+                        (function(cw) { setKWinTimeout(function() { if (cw && !cw.deleted) { cw.__raven_mutating = false; requestStateSync(); } }, 150); })(w);
+                    }
+                    else if (cmd.action === "migrate_to_desktop") {
+                        w.__raven_mutating = true;
+                        migrateWindow(w, null, cmd.target_ws);
+                        (function(cw) { setKWinTimeout(function() { if (cw && !cw.deleted) { cw.__raven_mutating = false; requestStateSync(); } }, 150); })(w);
+                    }
                     break; 
                 }
             }
@@ -512,303 +295,103 @@ function applyCommands(commandsJson) {
     } catch (e) { print("[Raven Bridge] Error applyCommands: " + e); }
 }
 
-var _is_listening = false;
-var _watchdog_timer = null;
-var _active_timers = [];
-
-/**
- * Crea un temporizador de disparo único (similar a setTimeout) nativo para KWin.
- * Mantiene la referencia viva en una colección global para evitar recolección de basura prematura.
- * @param {function} callback - Función a ejecutar tras el tiempo de espera.
- * @param {number} ms - Milisegundos a esperar.
- * @returns {object} Instancia del QTimer iniciado.
- */
 function setKWinTimeout(callback, ms) {
     try {
         var timer = new QTimer();
         timer.interval = ms;
         timer.singleShot = true;
-        
         _active_timers.push(timer);
-        
         timer.timeout.connect(function() {
-            try {
-                callback();
-            } catch (e) {
-                print("[Raven] Error in timer callback: " + e);
-            } finally {
-                if (timer) {
-                    try { timer.stop(); } catch(e) {}
-                }
+            try { callback(); } catch (e) {} 
+            finally {
+                try { timer.stop(); } catch(err) {}
                 var idx = _active_timers.indexOf(timer);
-                if (idx !== -1) {
-                    _active_timers.splice(idx, 1);
-                }
+                if (idx !== -1) _active_timers.splice(idx, 1);
             }
         });
         timer.start();
         return timer;
-    } catch (e) {
-        print("[Raven] Error setKWinTimeout: " + e);
-        try { callback(); } catch(err) {}
-        return null;
-    }
+    } catch (e) { try { callback(); } catch(err) {} return null; }
 }
 
-/**
- * Inicia el bucle de consulta (long-polling) para recibir comandos pendientes desde D-Bus.
- * Utiliza un temporizador de supervisión (watchdog) para autorecuperarse ante bloqueos.
- */
 function listenForCommands() {
     if (_is_listening) return;
     _is_listening = true;
-    if (_watchdog_timer) {
-        try { _watchdog_timer.stop(); } catch(e) {}
-    }
-    _watchdog_timer = setKWinTimeout(function() { _is_listening = false; listenForCommands(); }, 8000);
+    if (_watchdog_timer) { try { _watchdog_timer.stop(); } catch(e) {} }
+    _watchdog_timer = setKWinTimeout(function() { _is_listening = false; listenForCommands(); }, 6000);
 
     try {
         callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "getPendingCommands", function(response) {
-            try {
-                if (_watchdog_timer) {
-                    try { _watchdog_timer.stop(); } catch(e) {}
-                }
-                _is_listening = false;
-                if (response) { 
-                    applyCommands(response); 
-                    setKWinTimeout(listenForCommands, 50); 
-                } 
-                else { 
-                    setKWinTimeout(listenForCommands, 3000); 
-                }
-            } catch (errInner) {
-                print("[Raven Bridge] Error inside D-Bus response callback: " + errInner);
-                _is_listening = false;
-                setKWinTimeout(listenForCommands, 3000);
+            if (_watchdog_timer) { try { _watchdog_timer.stop(); } catch(e) {} }
+            _is_listening = false;
+            
+            if (response && response !== "[]") { 
+                applyCommands(response); 
+                setKWinTimeout(listenForCommands, 30); 
+            } else { 
+                setKWinTimeout(listenForCommands, 350); 
             }
         });
-    } catch (e) {
-        print("[Raven Bridge] Error getPendingCommands D-Bus: " + e);
-        _is_listening = false;
-        setKWinTimeout(listenForCommands, 3000);
-    }
+    } catch (e) { _is_listening = false; setKWinTimeout(listenForCommands, 1000); }
 }
 
-/**
- * Conecta las señales de una ventana para sincronizar su estado ante cambios de geometría,
- * monitor, escritorio o minimización, respetando interacciones del usuario.
- * @param {object} w - Objeto de ventana de KWin.
- */
 function bindWindow(w) {
     try {
         if (!isManageable(w) || w.__raven_bound || w.__raven_quarantined) return;
         w.__raven_bound = true;
         
-        try {
-            w.minimizedChanged.connect(function() {
-                try {
-                    if (w && !w.deleted && !w.__raven_mutating) {
-                        var hasMove = ("interactiveMove" in w);
-                        var hasResize = ("interactiveResize" in w);
-                        var isInteracting = (hasMove && w.interactiveMove) || (hasResize && w.interactiveResize);
-                        if (!isInteracting) {
-                            requestStateSync();
-                        }
-                    }
-                } catch(e) {}
-            });
-        } catch(e) { print("[Raven] Error connecting minimizedChanged: " + e); }
+        w.minimizedChanged.connect(function() { if (w && !w.deleted && !w.__raven_mutating && !w.interactiveMove && !w.interactiveResize) requestStateSync(); });
+        w.outputChanged.connect(function() { if (w && !w.deleted && !w.__raven_mutating && !w.interactiveMove && !w.interactiveResize) requestStateSync(); });
+        w.desktopsChanged.connect(function() { if (w && !w.deleted && !w.__raven_mutating && !w.interactiveMove && !w.interactiveResize) requestStateSync(); });
         
-        try {
-            w.outputChanged.connect(function() {
-                try {
-                    if (w && !w.deleted && !w.__raven_mutating) {
-                        var hasMove = ("interactiveMove" in w);
-                        var hasResize = ("interactiveResize" in w);
-                        var isInteracting = (hasMove && w.interactiveMove) || (hasResize && w.interactiveResize);
-                        if (!isInteracting) {
-                            requestStateSync();
-                        }
-                    }
-                } catch(e) {}
-            });
-        } catch(e) { print("[Raven] Error connecting outputChanged: " + e); }
-        
-        try {
-            w.desktopsChanged.connect(function() {
-                try {
-                    if (w && !w.deleted && !w.__raven_mutating) {
-                        var hasMove = ("interactiveMove" in w);
-                        var hasResize = ("interactiveResize" in w);
-                        var isInteracting = (hasMove && w.interactiveMove) || (hasResize && w.interactiveResize);
-                        if (!isInteracting) {
-                            requestStateSync();
-                        }
-                    }
-                } catch(e) {}
-            });
-        } catch(e) { print("[Raven] Error connecting desktopsChanged: " + e); }
-        
-        try {
-            w.frameGeometryChanged.connect(function() {
-                try {
-                    if (!w || w.deleted) return;
+        w.frameGeometryChanged.connect(function() {
+            if (!w || w.deleted) return;
+            if (w.interactiveMove || w.interactiveResize) { w.__was_interacting = true; return; }
+            if (w.__was_interacting && !w.interactiveMove && !w.interactiveResize) { w.__was_interacting = false; requestStateSync(); return; }
+            if (w.__raven_mutating) return;
 
-                    var hasMove = ("interactiveMove" in w);
-                    var hasResize = ("interactiveResize" in w);
-                    var isInteracting = (hasMove && w.interactiveMove) || (hasResize && w.interactiveResize);
+            syncWindowDelta(w);
+        });
 
-                    if (isInteracting) { 
-                        w.__was_interacting = true; 
-                        return; 
-                    }
-                    if (w.__was_interacting && !isInteracting) {
-                        w.__was_interacting = false; 
-                        requestStateSync(); 
-                        return;
-                    }
-
-                    if (w.__raven_mutating) {
-                        if (w.__raven_expected_geometry) {
-                            var currentGeom = w.frameGeometry;
-                            var matchX = Math.abs(Math.round(currentGeom.x) - w.__raven_expected_geometry.x) <= 1;
-                            var matchY = Math.abs(Math.round(currentGeom.y) - w.__raven_expected_geometry.y) <= 1;
-                            var matchW = Math.abs(Math.round(currentGeom.width) - w.__raven_expected_geometry.width) <= 1;
-                            var matchH = Math.abs(Math.round(currentGeom.height) - w.__raven_expected_geometry.height) <= 1;
-                            
-                            if (matchX && matchY && matchW && matchH) {
-                                w.__raven_mutating = false;
-                                w.__raven_expected_geometry = null;
-                            }
-                        }
-                        return; 
-                    }
-
-                    syncWindowDelta(w);
-                } catch(e) { print("[Raven] Error frameGeometryChanged callback: " + e); }
-            });
-        } catch(e) { print("[Raven] Error connecting frameGeometryChanged: " + e); }
-
-        try {
-            if (w.interactiveMoveResizeFinished !== undefined) {
-                w.interactiveMoveResizeFinished.connect(function() {
-                    try {
-                        if (!w || w.deleted) return;
-                        w.__was_interacting = false;
-                        requestStateSync();
-                    } catch(e) {}
-                });
-            }
-        } catch(e) { print("[Raven] Señal interactiveMoveResizeFinished no disponible: " + e); }
-        
+        if (w.interactiveMoveResizeFinished !== undefined) {
+            w.interactiveMoveResizeFinished.connect(function() { if (w && !w.deleted) { w.__was_interacting = false; requestStateSync(); } });
+        }
     } catch(e) { print("[Raven] Error bindWindow: " + e); }
 }
 
-/**
- * Inicializa el puente conectando las señales globales del espacio de trabajo (workspace),
- * registrando las ventanas existentes e iniciando la escucha de comandos.
- */
 function init() {
-    print("[Raven Bridge] Inicializando v2.6 (Debounce 60ms)...");
+    print("[Raven Bridge] Inicializando v2.9 (Ruta A: Topología Multi-Monitor Atómica)...");
     
-    try {
-        var initialWindows = workspace.windowList();
-        for (var i=0; i<initialWindows.length; i++) {
-            try {
-                bindWindow(initialWindows[i]);
-            } catch (e) {
-                print("[Raven] Error en binding inicial de ventana: " + e);
-            }
+    var initialWindows = workspace.windowList();
+    for (var i=0; i<initialWindows.length; i++) { bindWindow(initialWindows[i]); }
+
+    workspace.windowAdded.connect(function(w) { 
+        if (!isManageable(w)) return;
+        var strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+        var needsQuarantine = false;
+        
+        for (var i = 0; i < _quarantine_classes.length; i++) {
+            if (strClass.indexOf(_quarantine_classes[i]) !== -1) { needsQuarantine = true; break; }
         }
-    } catch (e) {
-        print("[Raven] Error obteniendo lista inicial de ventanas: " + e);
-    }
 
-    try {
-        var _quarantine_classes = ["firefox", "electron", "zen-browser", "code", "spotify", "floorp"];
+        if (needsQuarantine) {
+            w.__raven_quarantined = true;
+            setKWinTimeout(function() {
+                if (w && !w.deleted) { w.__raven_quarantined = false; w.__raven_strict_birth = true; bindWindow(w); requestStateSync(); }
+            }, 180); 
+        } else { bindWindow(w); requestStateSync(); }
+    });
 
-        workspace.windowAdded.connect(function(w) { 
-            try {
-                if (!isManageable(w)) return;
+    workspace.windowRemoved.connect(function() { requestStateSync(); });
+    workspace.windowActivated.connect(function(w) {
+        if (w && isManageable(w)) {
+            var id = getSafeWindowId(w);
+            if (id) callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "windowActivated", id, function(){});
+        }
+    });
 
-                var strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
-                var needsQuarantine = false;
-                
-                for (var i = 0; i < _quarantine_classes.length; i++) {
-                    if (strClass.indexOf(_quarantine_classes[i]) !== -1) {
-                        needsQuarantine = true;
-                        break;
-                    }
-                }
-
-                if (needsQuarantine) {
-                    w.__raven_quarantined = true;
-                    setKWinTimeout(function() {
-                        try {
-                            if (w && !w.deleted) {
-                                w.__raven_quarantined = false;
-                                w.__raven_strict_birth = true;
-                                bindWindow(w); 
-                                requestStateSync(); 
-                            }
-                        } catch(errTimeout) {
-                            print("[Raven] Error en timeout de cuarentena: " + errTimeout);
-                        }
-                    }, 250);
-                } else {
-                    bindWindow(w); 
-                    requestStateSync(); 
-                }
-            } catch (errAdded) {
-                print("[Raven] Error en manejador de windowAdded: " + errAdded);
-            }
-        });
-    } catch (e) {
-        print("[Raven] Error conectando windowAdded: " + e);
-    }
-
-    try {
-        workspace.windowRemoved.connect(function() {
-            try {
-                requestStateSync();
-            } catch(e) {}
-        });
-    } catch (e) {
-        print("[Raven] Error conectando windowRemoved: " + e);
-    }
-
-    try {
-        workspace.windowActivated.connect(function(w) {
-            try {
-                if (w && isManageable(w)) {
-                    var id = getSafeWindowId(w);
-                    if (id) {
-                        callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "windowActivated", id, function(){});
-                    }
-                }
-            } catch (errActivated) {
-                print("[Raven] Error en manejador de windowActivated: " + errActivated);
-            }
-        });
-    } catch (e) {
-        print("[Raven] Error conectando windowActivated: " + e);
-    }
-
-    try {
-        callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "bridgeReady", function() {});
-    } catch (e) { 
-        print("[Raven] Error bridgeReady D-Bus: " + e); 
-    }
-
-    try {
-        listenForCommands();
-    } catch (e) {
-        print("[Raven] Error iniciando escucha de comandos: " + e);
-    }
+    try { callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "bridgeReady", function() {}); } catch (e) {}
+    listenForCommands();
 }
 
-try {
-    init();
-} catch (e) {
-    print("[Raven Bridge] Error crítico en inicialización global: " + e);
-}
+try { init(); } catch (e) { print("[Raven Bridge] Error crítico: " + e); }
