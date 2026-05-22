@@ -17,6 +17,12 @@ PlasmoidItem {
     property string queryMonitorsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getMonitorCount"
     property string queryDesktopsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getDesktopCount"
 
+    /**
+     * Ejecuta un comando en el bus de datos (D-Bus) dirigido al demonio (daemon) de Raven.
+     * 
+     * @param {string} method - Método de D-Bus a invocar.
+     * @param {var} args - Argumentos adicionales para el método.
+     */
     function execDbus(method, args) {
         let cmd = "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events." + method;
         if (args) { 
@@ -26,11 +32,17 @@ PlasmoidItem {
         executable.exec(cmd);
     }
 
+    /**
+     * Alterna de forma interactiva el estado del motor de mosaico (tiling engine).
+     */
     function toggleRaven() {
         execDbus("toggleTiling", "");
         root.isEngineEnabled = !root.isEngineEnabled;
     }
 
+    /**
+     * Consulta el estado del motor y de la topología del compositor.
+     */
     function queryState() { 
         executable.exec(queryCmd);
         executable.exec(queryMonitorsCmd);
@@ -38,13 +50,19 @@ PlasmoidItem {
     }
 
     onExpandedChanged: {
-        if (expanded) { queryState(); }
+        if (expanded) { 
+            queryState(); 
+        }
     }
 
     Plasma5Support.DataSource {
         id: executable
         engine: "executable"
         connectedSources: []
+        
+        /**
+         * Manejador de eventos (event handler) activado al recibir salida estándar (stdout) de un comando.
+         */
         onNewData: (sourceName, data) => {
             if (data["stdout"] !== undefined) {
                 let output = data["stdout"].trim();
@@ -62,7 +80,15 @@ PlasmoidItem {
             }
             disconnectSource(sourceName);
         }
-        function exec(cmd) { connectSource(cmd); }
+        
+        /**
+         * Ejecuta una instrucción del sistema de archivos en segundo plano.
+         * 
+         * @param {string} cmd - Comando shell a ejecutar.
+         */
+        function exec(cmd) { 
+            connectSource(cmd); 
+        }
     }
 
     compactRepresentation: MouseArea {
@@ -76,7 +102,11 @@ PlasmoidItem {
             source: "view-grid" 
             active: root.isEngineEnabled
             opacity: root.isEngineEnabled ? 1.0 : 0.4
-            Behavior on opacity { OpacityAnimator { duration: Kirigami.Units.longDuration } }
+            Behavior on opacity { 
+                OpacityAnimator { 
+                    duration: Kirigami.Units.longDuration 
+                } 
+            }
         }
         
         PlasmaComponents.ToolTip {
@@ -112,13 +142,15 @@ PlasmoidItem {
                         font.pixelSize: Kirigami.Units.gridUnit * 0.9
                     }
                     PlasmaComponents.Label {
-                        text: "v2.6 Native Rust"
+                        text: "v2.7 Dwindle BSP"
                         opacity: 0.6
                         font.pixelSize: Kirigami.Units.gridUnit * 0.7
                     }
                 }
 
-                Item { Layout.fillWidth: true }
+                Item { 
+                    Layout.fillWidth: true 
+                }
 
                 PlasmaComponents.Switch {
                     checked: root.isEngineEnabled
@@ -126,7 +158,9 @@ PlasmoidItem {
                 }
             }
 
-            Kirigami.Separator { Layout.fillWidth: true }
+            Kirigami.Separator { 
+                Layout.fillWidth: true 
+            }
 
             Kirigami.Heading {
                 text: "Gestión de Ventanas"
@@ -143,21 +177,47 @@ PlasmoidItem {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label { text: "Foco"; Layout.alignment: Qt.AlignHCenter; opacity: 0.8; font.pixelSize: Kirigami.Units.gridUnit * 0.7 }
+                    PlasmaComponents.Label { 
+                        text: "Foco"
+                        Layout.alignment: Qt.AlignHCenter
+                        opacity: 0.8
+                        font.pixelSize: Kirigami.Units.gridUnit * 0.7 
+                    }
                     RowLayout {
                         spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button { icon.name: "go-previous"; Layout.fillWidth: true; onClicked: root.execDbus("focusPrev", "") }
-                        PlasmaComponents.Button { icon.name: "go-next"; Layout.fillWidth: true; onClicked: root.execDbus("focusNext", "") }
+                        PlasmaComponents.Button { 
+                            icon.name: "go-previous"
+                            Layout.fillWidth: true
+                            onClicked: root.execDbus("focusPrev", "") 
+                        }
+                        PlasmaComponents.Button { 
+                            icon.name: "go-next"
+                            Layout.fillWidth: true
+                            onClicked: root.execDbus("focusNext", "") 
+                        }
                     }
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label { text: "Maestras"; Layout.alignment: Qt.AlignHCenter; opacity: 0.8; font.pixelSize: Kirigami.Units.gridUnit * 0.7 }
+                    PlasmaComponents.Label { 
+                        text: "Límite Ventanas"
+                        Layout.alignment: Qt.AlignHCenter
+                        opacity: 0.8
+                        font.pixelSize: Kirigami.Units.gridUnit * 0.7 
+                    }
                     RowLayout {
                         spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button { icon.name: "list-remove"; Layout.fillWidth: true; onClicked: root.execDbus("decrementMaster", "") }
-                        PlasmaComponents.Button { icon.name: "list-add"; Layout.fillWidth: true; onClicked: root.execDbus("incrementMaster", "") }
+                        PlasmaComponents.Button { 
+                            icon.name: "list-remove"
+                            Layout.fillWidth: true
+                            onClicked: root.execDbus("decrementMaster", "") 
+                        }
+                        PlasmaComponents.Button { 
+                            icon.name: "list-add"
+                            Layout.fillWidth: true
+                            onClicked: root.execDbus("incrementMaster", "") 
+                        }
                     }
                 }
             }
@@ -177,21 +237,47 @@ PlasmoidItem {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label { text: "Ratio Maestro"; Layout.alignment: Qt.AlignHCenter; opacity: 0.8; font.pixelSize: Kirigami.Units.gridUnit * 0.7 }
+                    PlasmaComponents.Label { 
+                        text: "Ratio División"
+                        Layout.alignment: Qt.AlignHCenter
+                        opacity: 0.8
+                        font.pixelSize: Kirigami.Units.gridUnit * 0.7 
+                    }
                     RowLayout {
                         spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button { icon.name: "go-previous"; Layout.fillWidth: true; onClicked: root.execDbus("decreaseRatio", "") }
-                        PlasmaComponents.Button { icon.name: "go-next"; Layout.fillWidth: true; onClicked: root.execDbus("increaseRatio", "") }
+                        PlasmaComponents.Button { 
+                            icon.name: "go-previous"
+                            Layout.fillWidth: true
+                            onClicked: root.execDbus("decreaseRatio", "") 
+                        }
+                        PlasmaComponents.Button { 
+                            icon.name: "go-next"
+                            Layout.fillWidth: true
+                            onClicked: root.execDbus("increaseRatio", "") 
+                        }
                     }
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label { text: "Márgenes"; Layout.alignment: Qt.AlignHCenter; opacity: 0.8; font.pixelSize: Kirigami.Units.gridUnit * 0.7 }
+                    PlasmaComponents.Label { 
+                        text: "Márgenes"
+                        Layout.alignment: Qt.AlignHCenter
+                        opacity: 0.8
+                        font.pixelSize: Kirigami.Units.gridUnit * 0.7 
+                    }
                     RowLayout {
                         spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button { icon.name: "zoom-out"; Layout.fillWidth: true; onClicked: root.execDbus("incrementGaps", "-2") }
-                        PlasmaComponents.Button { icon.name: "zoom-in"; Layout.fillWidth: true; onClicked: root.execDbus("incrementGaps", "2") }
+                        PlasmaComponents.Button { 
+                            icon.name: "zoom-out"
+                            Layout.fillWidth: true
+                            onClicked: root.execDbus("incrementGaps", "-2") 
+                        }
+                        PlasmaComponents.Button { 
+                            icon.name: "zoom-in"
+                            Layout.fillWidth: true
+                            onClicked: root.execDbus("incrementGaps", "2") 
+                        }
                     }
                 }
             }
@@ -260,7 +346,9 @@ PlasmoidItem {
                 }
             }
 
-            Item { Layout.fillHeight: true } 
+            Item { 
+                Layout.fillHeight: true 
+            } 
             
             PlasmaComponents.Label {
                 text: "© 2026 Vidruck"

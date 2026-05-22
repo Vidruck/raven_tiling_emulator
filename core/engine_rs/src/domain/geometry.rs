@@ -3,8 +3,6 @@
 //! Este submódulo define las estructuras de datos fundamentales utilizadas por el motor
 //! para representar dimensiones de pantalla y propiedades de las ventanas.
 
-
-
 /// Representa un rectángulo en el espacio 2D de la pantalla.
 ///
 /// Se utiliza para definir tanto el área total de la pantalla como el área
@@ -22,9 +20,14 @@ pub struct Rect {
 }
 
 impl Rect {
-    /// Crea una nueva instancia de Rect.
+    /// Crea una nueva instancia de un rectángulo (`Rect`).
     pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Rect { x, y, width, height }
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 }
 
@@ -39,9 +42,9 @@ pub struct WindowNode {
     pub output: String,
     /// Identificadores de todos los escritorios virtuales asociados a la ventana.
     pub desktops: Vec<String>,
-    /// Indica si la ventana está en modo flotante.
+    /// Indica si la ventana está en modo flotante (floating).
     pub is_floating: bool,
-    /// Indica si la ventana está minimizada.
+    /// Indica si la ventana está minimizada (minimized).
     pub is_minimized: bool,
     /// Indica si la ventana está en modo Picture-in-Picture (PiP).
     pub is_pip: bool,
@@ -51,12 +54,12 @@ pub struct WindowNode {
     pub min_w: i32,
     /// Alto mínimo innegociable reportado por KWin.
     pub min_h: i32,
-    /// Bandera que indica si la ventana es estricta y recién nacida (requiere feedback).
+    /// Bandera que indica si la ventana requiere retroalimentación (feedback) inmediata en su creación.
     pub strict_birth: bool,
 }
 
 impl WindowNode {
-    /// Crea una nueva instancia de WindowNode con sus propiedades iniciales.
+    /// Crea una nueva instancia de un nodo de ventana (`WindowNode`) con sus propiedades iniciales.
     pub fn new(
         window_id: String,
         workspace_id: String,
@@ -87,7 +90,7 @@ impl WindowNode {
 }
 
 /// Representa un escritorio o espacio de trabajo virtual.
-/// 
+///
 /// Vincula un identificador único con un área rectangular específica en la pantalla.
 #[derive(Clone, Debug)]
 pub struct Workspace {
@@ -98,7 +101,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    /// Crea una nueva instancia de Workspace.
+    /// Crea una nueva instancia de un espacio de trabajo (`Workspace`).
     pub fn new(id: String, rect: Rect) -> Self {
         Workspace { id, rect }
     }
