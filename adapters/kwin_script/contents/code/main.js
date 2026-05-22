@@ -1,5 +1,6 @@
+
 /**
- * @fileoverview Raven Bridge para KDE Plasma 6 (Wayland) - Versión 2.6
+ * @fileoverview Raven Bridge para KDE Plasma 6 (Wayland)
  * @author Alejandro González Hernández (Vidruck)
  */
 
@@ -97,10 +98,6 @@ function getRectGeometry(rect) {
     return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
 }
 
-/**
- * HÍBRIDO SEGURO: Extrae el área de colocación útil (PlacementArea = 0).
- * Descuenta paneles y docks fijos de forma pasiva, garantizando la inmunidad al bug de maximizado.
- */
 function getSafeScreenGeometry(output, desktop) {
     if (!output) return { x: 0, y: 0, w: 1920, h: 1080 };
     try {
@@ -128,6 +125,7 @@ function syncState() {
         for (var o = 0; o < outs.length; o++) {
             var output = outs[o];
             var outName = output ? output.name : "default";
+
             var placementUsableGeometry = getSafeScreenGeometry(output, currentDesk);
 
             if (desks && desks.length > 0) {
@@ -262,7 +260,17 @@ function applyCommands(commandsJson) {
                     }
                     else if (cmd.action === "focus") { workspace.activeWindow = w; }
                     else if (cmd.action === "request_feedback") {
-                        if (w.__raven_strict_birth) { w.__raven_strict_birth = false; syncWindowDelta(w); }
+                        if (w.__raven_strict_birth) {
+                            w.__raven_strict_birth = false;
+
+                            (function(cw) {
+                                setKWinTimeout(function() {
+                                    if (cw && !cw.deleted) {
+                                        requestStateSync();
+                                    }
+                                },320);
+                            })(w);
+                        }
                     }
                     else if (cmd.action === "minimize") {
                         w.__raven_mutating = true;
@@ -406,7 +414,7 @@ function init() {
             bindWindow(w);
 
             var stabTimer = new QTimer();
-            stabTimer.interval = 120;
+            stabTimer.interval = 220;
             stabTimer.singleShot = true;
             w.__raven_stab_timer = stabTimer;
 
