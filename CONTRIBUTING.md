@@ -1,25 +1,31 @@
 # Contribuyendo a Raven 🐦
 
-¡Gracias por el interés en mejorar Raven! Con el lanzamiento de la **v2.0**, el proyecto ha evolucionado hacia un ecosistema **100% nativo en Rust**. Estamos encantados de recibir colaboraciones que impulsen la estabilidad, el rendimiento y la eficiencia energética en KDE Plasma 6.
+¡Gracias por el interés en mejorar Raven! Con el lanzamiento de la **v2.7**, el proyecto ha evolucionado hacia una gestión de mosaico dinámica (Dwindle BSP) estilo Hyprland construida sobre un ecosistema **100% nativo en Rust**. Estamos encantados de recibir colaboraciones que impulsen la estabilidad, el rendimiento y la experiencia de usuario en KDE Plasma 6.
 
-## 🏗️ Filosofía de Diseño v2.0
-Para mantener la robustez y ligereza logradas, todas las contribuciones deben respetar estos pilares arquitectónicos:
+## 🏗️ Filosofía de Diseño v2.7
+Para mantener la robustez, fluidez y ligereza logradas, todas las contribuciones deben respetar estos pilares arquitectónicos:
 
 1. **Ecosistema Nativo en Rust:**
    - **Core Asíncrono (core/engine_rs):** Toda la lógica de cálculo y la comunicación IPC reside en Rust. Utilizamos `zbus` para una integración asíncrona y de ultra-baja latencia con el bus de datos del sistema.
    - **Interfaz Nativa (raven_gui):** La UI se construye con `egui/eframe`, garantizando un consumo mínimo de recursos y una integración fluida con el compositor.
 
-2. **Snapshot-Based Synchronization:**
+2. **Mosaico Dinámico (Dwindle BSP Paradigm):**
+   - El motor ha abandonado el concepto de master stack fijo. Todo nuevo cambio al layout debe alinearse con el árbol binario de partición de espacio (BSP) dwindle, donde las ventanas se dividen alternadamente según el aspecto del contenedor.
+   - El redimensionamiento asimétrico mediante `master_ratio` debe estar ligado estrictamente al foco activo, manteniendo las divisiones no enfocadas en una proporción simétrica de 0.5.
+   - Es mandatorio proteger al motor contra evicciones (desalojos) accidentales causadas por límites de tamaño mínimos sobredimensionados en Wayland. Se debe aplicar el acotamiento de seguridad a `300x250` px en las comprobaciones.
+   - La redistribución del espacio debe ocurrir a través de un bucle de recálculo recursivo que prevenga huecos negros y ocupe el 100% de la superficie disponible para las ventanas no desalojadas.
+
+3. **Snapshot-Based Synchronization:**
    - Mantenemos el modelo de **Consistencia Eventual.** El Bridge (JS) envía el estado estructural que el daemon de Rust procesa de forma atómica para generar los comandos de posicionamiento.
 
-3. **Debounced Sensing:**
+4. **Debounced Sensing:**
    - El Bridge no debe reaccionar instantáneamente a eventos de geometría intermedios (como durante un redimensionado manual). Debe esperar a que la interacción finalice para sincronizar el estado, protegiendo la CPU y la estabilidad de `kwin_wayland`.
 
-4. **Seguridad y Rendimiento Extremo:**
+5. **Seguridad y Rendimiento Extremo:**
    - **Cero Costo:** Buscamos abstracciones de costo cero. Evita clonaciones innecesarias de datos en el motor.
    - **Rust Idiomático:** Favorecemos el uso de tipos seguros y el manejo de errores robusto (Result/Option). El uso de `unsafe` está estrictamente prohibido a menos que se justifique por interoperabilidad crítica con APIs de bajo nivel del sistema.
 
-5. **Optimización de Peso (Binary Thinning):**
+6. **Optimización de Peso (Binary Thinning):**
    - El minimalismo en el binario final es un requisito de diseño. Se exige a los colaboradores buscar la reducción máxima del peso en ROM, evaluando críticamente la inclusión de dependencias y sus features. El objetivo es mantener el footprint lo más bajo posible para el usuario final.
 
 ## 🚀 Cómo colaborar

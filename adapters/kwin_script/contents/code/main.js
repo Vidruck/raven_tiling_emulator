@@ -114,7 +114,20 @@ function isFloating(w) {
         var strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
         var strCap = w.caption ? w.caption.toString().toLowerCase() : "";
 
-        var isPip = strCap.indexOf("picture-in-picture") !== -1 || strCap.indexOf("pip") !== -1 || w.keepAbove;
+        // Detecta patrones comunes de ventanas Picture-in-Picture (PiP) para múltiples navegadores y traducciones locales.
+        var isPip = strCap.indexOf("picture-in-picture") !== -1 ||
+                    strCap.indexOf("picture in picture") !== -1 ||
+                    strCap.indexOf("pictureinpicture") !== -1 ||
+                    strCap.indexOf("imagen en imagen") !== -1 ||
+                    strCap.indexOf("imagen-en-imagen") !== -1 ||
+                    strCap.indexOf("reproductor en miniatura") !== -1 ||
+                    strCap.indexOf("incrustation") !== -1 ||
+                    strCap.indexOf("bild-in-bild") !== -1 ||
+                    strCap.indexOf("bild in bild") !== -1 ||
+                    strCap.indexOf("imagem em imagem") !== -1 ||
+                    strCap.indexOf("immagine nell'immagine") !== -1 ||
+                    strCap.indexOf("pip") !== -1 ||
+                    w.keepAbove;
         if (isPip && !w.keepAbove) {
             w.keepAbove = true;
         }

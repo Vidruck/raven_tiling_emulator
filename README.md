@@ -11,10 +11,10 @@
 ![Wayland](https://img.shields.io/badge/Wayland-9999ff?style=for-the-badge&logo=wayland&logoColor=white)
 ![GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)
 
-Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.6**, Raven se reestructura y ajusta a los estándares de la **Arquitectura Hexagonal**, logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo, a la vez que introduce optimizaciones agresivas de estabilidad y contención de recursos.
+Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.7**, Raven reemplaza el stack maestro estático clásico por una gestión de ventanas completamente dinámica siguiendo un esquema de acomodo en espiral (Dwindle BSP), logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo mediante Arquitectura Hexagonal.
 
-## 🚀 El Salto a la Versión 2.6: Arquitectura Hexagonal y Micro-Optimización
-Esta versión se enfoca en la robustes estructural y la corrección de fallos críticos, garantizando una experiencia inquebrantable en entornos multi-monitor:
+## 🚀 El Salto a la Versión 2.7: Gestión Dinámica BSP y Evicción Ajustada
+Esta versión reimagina el motor de mosaico adoptando un esquema de partición binaria de espacio (BSP) e implementa nuevos filtros de detección de ventanas *"Picture in Picture"*.
 
 ### 📉 Eficiencia Energética y de Almacenamiento
 La optimización sigue siendo el pilar fundamental. El motor opera con recursos sumamente bajos y contenidos:
@@ -23,17 +23,21 @@ La optimización sigue siendo el pilar fundamental. El motor opera con recursos 
 |---|---|---|---|
 | **v1.0** | Python Puro | 55.0 MB | ~15 MB |
 | **v1.6** | Híbrida (Python + Rust FFI) | ~25.9 MB | ~18 MB |
-| **v2.6** | ***Asynchronous Native Rust** | **~4.3 MB** | **1.4 MB** |
+| **v2.6** | Asynchronous Native Rust (Fixed) | ~4.3 MB | 1.4 MB |
+| **v2.7** | ***Asynchronous Native Rust (Dwindle BSP)** | **~4.5 MB** | **1.4 MB** |
 
 *La eficiencia extrema ha sido una directriz arquitectónica fundamental desde el inicio del proyecto. Tras validaciones exhaustivas en hardware real, se logró consolidar un motor de alto rendimiento que minimiza el impacto en recursos. Gracias al uso de LTO, el pruning de dependencias y la eliminación de símbolos, entregamos un binario ultra-compacto sin comprometer la estabilidad.*
 
-## 🌟 Nuevas Funciones y Estabilidad (v2.6+)
+## 🌟 Nuevas Funciones y Estabilidad (v2.7+)
+- **Mosaico Dinámico Dwindle BSP:** La pantalla se divide de forma recursiva alternando la dirección del corte (horizontal/vertical) según el aspecto del contenedor disponible.
+- **Redimensionamiento Asimétrico por Foco:** El ajuste del ratio de división (`master_ratio`) se aplica únicamente al corte que involucra a la ventana en foco activo (focused window). El resto de las ventanas mantienen una proporción simétrica limpia de `0.5` (50-50).
+- **Protección y Acotamiento de Tamaño Mínimo:** Los tamaños mínimos reportados por KWin (`min_w` y `min_h`) se limitan a un tope máximo de `300x250` píxeles para verificar su acomodo. Esto evita que los navegadores o clientes de Wayland reporten dimensiones gigantes que provoquen su evicción inmediata de la pantalla.
+- **Bucle de Recálculo Dinámico sin Huecos:** Si una ventana no cabe en su celda calculada, el motor la desaloja y ejecuta una reconciliación iterativa redistribuyendo el 100% del área restante a las demás ventanas activas.
 - **Resiliencia y Comunicación Asíncrona:** El puente KWin-Raven ahora es completamente no bloqueante. El motor Rust utiliza offloading asíncrono con `tokio::spawn` para liberar el bus de datos instantáneamente.
-- **Estabilización de Ventanas Adaptativa:** Incorporación de un motor de detección por *Silencio Geométrico*. Las aplicaciones complejas (como Firefox, Floorp o Zen Browser) se mantienen en cuarentena dinámica hasta que cesan sus micro-redimensionamientos internos de Wayland, logrando un mosaico limpio y libre de parpadeos.
-- **Gestión de Desbordamiento Inteligente:** Raven detecta matemáticamente la saturación de pantallas y escritorios. En lugar de fallos de layout, minimiza automáticamente las ventanas excedentes y lanza una notificación al usuario.
-- **Robustez en el Adaptador JavaScript:** Refactorización del bridge con manejo defensivo de errores (`try/catch`) y filtrado atómico de señales (`__raven_ui_migrating`), garantizando que el entorno gráfico permanezca estable e inmune a efectos de rebote.
--**Envio de Ventanas mediante Toggle:** El toggle permite enviar la ultima ventana en foco a el monitor alterno para comodidad del usuario.
--**Soporte a traspaso de ventanas via arrastre:** Se incluye capacidad de arrastrar con el ratón la ventana a otro monitor o escritorio virtual disponible con reacomodo instantaneo de la composición. 
+- **Estabilización de Ventanas Adaptativa:** Incorporación de un motor de detección por *Silencio Geométrico*. Las aplicaciones complejas (como Firefox, Brave, Floorp o Zen Browser) se mantienen en cuarentena dinámica hasta que cesan sus micro-redimensionamientos internos de Wayland, logrando un mosaico limpio y libre de parpadeos.
+- **Mapeo Predictivo de PiP (Picture-in-Picture):** El script bridge detecta de manera inteligente ventanas PiP en múltiples idiomas (inglés, español, francés, alemán, portugués, italiano) y las fuerza a flotar en lugar de integrarlas al mosaico.
+- **Envío de Ventanas mediante Toggle:** El toggle permite enviar la última ventana en foco al monitor o escritorio virtual alterno para comodidad del usuario.
+- **Soporte a traspaso de ventanas vía arrastre:** Capacidad de arrastrar con el ratón la ventana a otro monitor o escritorio virtual disponible con reacomodo instantáneo de la composición. 
 
 ### 🏗️ Arquitectura de Comunicación (High-Performance Bridge)
 El sistema utiliza un puente de baja latencia altamente desacoplado entre el compositor KWin y el motor Raven, optimizado para los estándares de **Plasma 6 (Wayland)**:
@@ -51,7 +55,10 @@ El sistema utiliza un puente de baja latencia altamente desacoplado entre el com
 - `bin/`: Directorio de destino para los binarios optimizados una vez instalados.
 
 ## 🛠️ Instalación y Uso
-El nuevo instalador gestiona la descarga de crates de Rust y la compilación optimizada de los componentes nativos.
+El nuevo instalador gestiona la descarga de dependencias, crates de Rust y la compilación optimizada de los componentes nativos.
+
+> [!NOTE]
+> **Instalación automática de Rust/Cargo:** Si `cargo` no está presente en el sistema, `install.sh` intentará descargarlo e instalarlo de manera automatizada a través del instalador oficial `rustup.rs` (fuente segura por contrato social). Sin embargo, por seguridad y control del entorno, **se recomienda que el usuario gestione e instale el compilador de Rust por cuenta propia**. Esta opción automática está pensada solo para aquellos usuarios que buscan una automatización total; en tal caso, se requiere tener previamente instalado `curl` en el sistema para que el instalador actúe de forma autónoma.
 
 1. Clona el repositorio.
 2. Ejecuta `./install.sh`.
@@ -70,9 +77,9 @@ Si deseas eliminar Raven y todos sus binarios, ejecuta:
 ### Atajos Predeterminados
 | Tecla | Acción |
 |---|---|
-| `Meta + I / D` | Incrementar/Disminuir ventanas maestras |
-| `Meta + L / H` | Ajustar ratio del área maestra (Ancho) |
-| `Meta + J / K` | Cambiar foco entre ventanas del stack |
+| `Meta + I / D` | Incrementar/Disminuir el límite de ventanas en la espiral (nmaster) antes de desalojo |
+| `Meta + L / H` | Ajustar ratio del corte asimétrico en foco (master_ratio) |
+| `Meta + J / K` | Cambiar foco entre las ventanas del mosaico (Siguiente / Anterior) |
 | `Meta + G` | Alternar (Toggle) el motor de mosaico globalmente |
 
 ## ⚠️ Descargo de Responsabilidad (Disclaimer)

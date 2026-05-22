@@ -6,10 +6,30 @@ TARGET_DIR="$HOME/.local/share/raven"
 SOURCE_DIR=$(pwd)
 ICON_NAME="org.kde.raven.tiling"
 
-echo "🐦 Iniciando orquestación de Raven..."
+echo "🐦 Iniciando orquestación de Raven v2.7..."
 
 # Verificaciones de sanidad
-command -v cargo >/dev/null 2>&1 || { echo >&2 "❌ Error: Rust/Cargo no detectado. Requerido para la compilación nativa."; exit 1; }
+if [ -f "$HOME/.cargo/env" ]; then
+    source "$HOME/.cargo/env"
+fi
+
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "⚠️ Rust/Cargo no detectado. Descargando e instalando mediante rustup..."
+    if command -v curl >/dev/null 2>&1; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        if [ -f "$HOME/.cargo/env" ]; then
+            source "$HOME/.cargo/env"
+        else
+            export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+    else
+        echo >&2 "❌ Error: curl no está instalado. No se puede descargar Rust/Cargo automáticamente."
+        exit 1;
+    fi
+fi
+
+# Volver a comprobar por seguridad
+command -v cargo >/dev/null 2>&1 || { echo >&2 "❌ Error: Rust/Cargo no disponible para compilar."; exit 1; }
 command -v kpackagetool6 >/dev/null 2>&1 || { echo >&2 "❌ Error: kpackagetool6 no detectado. ¿Estás en Plasma 6?"; exit 1; }
 
 # [1/7] Despliegue de código y sincronización
@@ -102,4 +122,4 @@ echo "[7/7] Reiniciando servicios de Raven..."
 systemctl --user daemon-reload
 systemctl --user enable --now raven.service
 
-echo "✅ Raven v2.6 instalado y operando con éxito. ¡Huélum!"
+echo "✅ Raven v2.7 instalado y operando con éxito. ¡Huélum!"

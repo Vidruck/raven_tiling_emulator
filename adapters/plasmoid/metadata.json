@@ -7,7 +7,7 @@
         "Id": "org.kde.raven.toggle",
         "Name": "Raven Toggle",
         "Version": "2.6",
-        "Website": "https://github.com/Vidruck/raven"
+        "Website": "https://github.com/Vidruck/raven_tiling_emulator"
     },
     "KPackageStructure": "Plasma/Applet",
     "X-Plasma-API-Minimum-Version": "6.0"
