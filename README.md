@@ -11,10 +11,10 @@
 ![Wayland](https://img.shields.io/badge/Wayland-9999ff?style=for-the-badge&logo=wayland&logoColor=white)
 ![GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)
 
-Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.7**, Raven reemplaza el stack maestro estático clásico por una gestión de ventanas completamente dinámica siguiendo un esquema de acomodo en espiral (Dwindle BSP), logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo mediante Arquitectura Hexagonal.
+Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.8**, Raven reemplaza el master stack fijo por una gestión de ventanas completamente dinámica siguiendo un esquema de acomodo Master-Stack dinámico (diseño 1 x (C - 1) que evoluciona a 2 x 3 a partir de 5 ventanas, colocando la ventana enfocada y la más antigua en el área maestra), logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo mediante Arquitectura Hexagonal.
 
-## 🚀 El Salto a la Versión 2.7: Gestión Dinámica BSP y Evicción Ajustada
-Esta versión reimagina el motor de mosaico adoptando un esquema de partición binaria de espacio (BSP) e implementa nuevos filtros de detección de ventanas *"Picture in Picture"*.
+## 🚀 El Salto a la Versión 2.8: Master-Stack Dinámico, Evicción Ajustada e Intercambio de Ventanas
+Esta versión reimagina el motor de mosaico adoptando una disposición dinámica Master-Stack, añade la capacidad de intercambiar ventanas en la pila mediante D-Bus/Toggle, e implementa nuevos filtros de detección de ventanas *"Picture in Picture"*.
 
 ### 📉 Eficiencia Energética y de Almacenamiento
 La optimización sigue siendo el pilar fundamental. El motor opera con recursos sumamente bajos y contenidos:
@@ -24,12 +24,14 @@ La optimización sigue siendo el pilar fundamental. El motor opera con recursos 
 | **v1.0** | Python Puro | 55.0 MB | ~15 MB |
 | **v1.6** | Híbrida (Python + Rust FFI) | ~25.9 MB | ~18 MB |
 | **v2.6** | Asynchronous Native Rust (Fixed) | ~4.3 MB | 1.4 MB |
-| **v2.7** | ***Asynchronous Native Rust (Dwindle BSP)** | **~4.5 MB** | **1.4 MB** |
+| **v2.7** | Asynchronous Native Rust (Master-Stack Dinámico) | ~4.5 MB | 1.4 MB |
+| **v2.8** | ***Asynchronous Native Rust (Master-Stack Dinámico & Swapping)** | **~4.5 MB** | **1.4 MB** |
 
 *La eficiencia extrema ha sido una directriz arquitectónica fundamental desde el inicio del proyecto. Tras validaciones exhaustivas en hardware real, se logró consolidar un motor de alto rendimiento que minimiza el impacto en recursos. Gracias al uso de LTO, el pruning de dependencias y la eliminación de símbolos, entregamos un binario ultra-compacto sin comprometer la estabilidad.*
 
-## 🌟 Nuevas Funciones y Estabilidad (v2.7+)
-- **Mosaico Dinámico Dwindle BSP:** La pantalla se divide de forma recursiva alternando la dirección del corte (horizontal/vertical) según el aspecto del contenedor disponible.
+## 🌟 Nuevas Funciones y Estabilidad (v2.8+)
+- **Intercambio de Ventanas (Swapping):** Permite intercambiar la posición de la ventana en foco con la ventana anterior o posterior dentro de la pila activa a través de los nuevos controles del Plasmoid Toggle (botones con iconos) o por comandos D-Bus (`swapNext` y `swapPrev`). Esto le da al usuario un control total sobre el orden y colocación de sus ventanas sin alterar el layout dinámico subyacente.
+- **Mosaico Master-Stack Dinámico:** El motor organiza las ventanas en una composición Master (columna izquierda) y Stack (columna derecha). Con hasta 4 ventanas, la columna Master aloja 1 ventana principal y Stack aloja las restantes (diseño 1 x (C - 1)). A partir de la 5ª ventana (o al saturarse los límites físicos), el layout evoluciona automáticamente a un diseño 2 x 3, dividiendo verticalmente el área Master para contener 2 ventanas (la activa/enfocada y la más antigua del escritorio) y el Stack para contener las 3 restantes. Esto optimiza el espacio y retrasa el desalojo de ventanas.
 - **Redimensionamiento Asimétrico por Foco:** El ajuste del ratio de división (`master_ratio`) se aplica únicamente al corte que involucra a la ventana en foco activo (focused window). El resto de las ventanas mantienen una proporción simétrica limpia de `0.5` (50-50).
 - **Protección y Acotamiento de Tamaño Mínimo:** Los tamaños mínimos reportados por KWin (`min_w` y `min_h`) se limitan a un tope máximo de `300x250` píxeles para verificar su acomodo. Esto evita que los navegadores o clientes de Wayland reporten dimensiones gigantes que provoquen su evicción inmediata de la pantalla.
 - **Bucle de Recálculo Dinámico sin Huecos:** Si una ventana no cabe en su celda calculada, el motor la desaloja y ejecuta una reconciliación iterativa redistribuyendo el 100% del área restante a las demás ventanas activas.
@@ -77,7 +79,7 @@ Si deseas eliminar Raven y todos sus binarios, ejecuta:
 ### Atajos Predeterminados
 | Tecla | Acción |
 |---|---|
-| `Meta + I / D` | Incrementar/Disminuir el límite de ventanas en la espiral (nmaster) antes de desalojo |
+| `Meta + I / D` | (Obsoleto en v2.8) Sin efecto; el límite de áreas maestras se gestiona dinámicamente de forma automática (1 en <=4 ventanas, 2 en >=5 ventanas) |
 | `Meta + L / H` | Ajustar ratio del corte asimétrico en foco (master_ratio) |
 | `Meta + J / K` | Cambiar foco entre las ventanas del mosaico (Siguiente / Anterior) |
 | `Meta + G` | Alternar (Toggle) el motor de mosaico globalmente |

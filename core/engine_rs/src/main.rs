@@ -14,7 +14,7 @@ use raven_core::infrastructure::dbus::{KWinTopology, RavenDBusService};
 /// el servicio en el bus de sesión de D-Bus para comenzar la orquestación.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    println!("🐦 Iniciando Raven Tiling Emulator (Motor Nativo Rust v2.7)...");
+    println!("🐦 Iniciando Raven Tiling Emulator (Motor Nativo Rust v2.8)...");
 
     let app_config = RavenConfig::load();
     let engine = TilingEngine::new(app_config);

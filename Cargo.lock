@@ -2202,7 +2202,7 @@ dependencies = [
 
 [[package]]
 name = "raven_core"
-version = "2.6.0"
+version = "2.8.0"
 dependencies = [
  "futures",
  "serde",
@@ -2213,7 +2213,7 @@ dependencies = [
 
 [[package]]
 name = "raven_gui"
-version = "2.6.0"
+version = "2.8.0"
 dependencies = [
  "eframe",
  "serde",

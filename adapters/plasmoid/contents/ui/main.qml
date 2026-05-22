@@ -142,7 +142,7 @@ PlasmoidItem {
                         font.pixelSize: Kirigami.Units.gridUnit * 0.9
                     }
                     PlasmaComponents.Label {
-                        text: "v2.7 Dwindle BSP"
+                        text: "v2.8 Master-Stack"
                         opacity: 0.6
                         font.pixelSize: Kirigami.Units.gridUnit * 0.7
                     }
@@ -197,11 +197,12 @@ PlasmoidItem {
                         }
                     }
                 }
+
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
                     PlasmaComponents.Label { 
-                        text: "Límite Ventanas"
+                        text: "Intercambiar"
                         Layout.alignment: Qt.AlignHCenter
                         opacity: 0.8
                         font.pixelSize: Kirigami.Units.gridUnit * 0.7 
@@ -209,18 +210,19 @@ PlasmoidItem {
                     RowLayout {
                         spacing: Kirigami.Units.smallSpacing
                         PlasmaComponents.Button { 
-                            icon.name: "list-remove"
+                            icon.name: "go-previous"
                             Layout.fillWidth: true
-                            onClicked: root.execDbus("decrementMaster", "") 
+                            onClicked: root.execDbus("swapPrev", "") 
                         }
                         PlasmaComponents.Button { 
-                            icon.name: "list-add"
+                            icon.name: "go-next"
                             Layout.fillWidth: true
-                            onClicked: root.execDbus("incrementMaster", "") 
+                            onClicked: root.execDbus("swapNext", "") 
                         }
                     }
                 }
             }
+
 
             Kirigami.Heading {
                 text: "Ajustes de Espacio"

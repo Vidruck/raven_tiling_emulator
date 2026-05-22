@@ -6,7 +6,7 @@ TARGET_DIR="$HOME/.local/share/raven"
 SOURCE_DIR=$(pwd)
 ICON_NAME="org.kde.raven.tiling"
 
-echo "🐦 Iniciando orquestación de Raven v2.7..."
+echo "🐦 Iniciando orquestación de Raven v2.8..."
 
 # Verificaciones de sanidad
 if [ -f "$HOME/.cargo/env" ]; then
@@ -122,4 +122,4 @@ echo "[7/7] Reiniciando servicios de Raven..."
 systemctl --user daemon-reload
 systemctl --user enable --now raven.service
 
-echo "✅ Raven v2.7 instalado y operando con éxito. ¡Huélum!"
+echo "✅ Raven v2.8 instalado y operando con éxito. ¡Huélum!"

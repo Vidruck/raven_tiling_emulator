@@ -403,15 +403,11 @@ impl RavenDBusService {
 
     /// Incrementa el límite óptimo de ventanas en la espiral de Dwindle BSP.
     #[zbus(name = "incrementMaster")]
-    async fn increment_master(&self) {
-        self.dispatch_shortcut("increment_master", 0).await;
-    }
+    async fn increment_master(&self) {}
 
     /// Decrementa el límite óptimo de ventanas en la espiral de Dwindle BSP.
     #[zbus(name = "decrementMaster")]
-    async fn decrement_master(&self) {
-        self.dispatch_shortcut("decrement_master", 0).await;
-    }
+    async fn decrement_master(&self) {}
 
     /// Aumenta el ratio de división (split ratio) asimétrica de la espiral BSP.
     #[zbus(name = "increaseRatio")]
@@ -435,6 +431,18 @@ impl RavenDBusService {
     #[zbus(name = "focusPrev")]
     async fn focus_prev(&self) {
         self.dispatch_shortcut("focus_prev", 0).await;
+    }
+
+    /// Intercambia la ventana activa con la siguiente en la pila.
+    #[zbus(name = "swapNext")]
+    async fn swap_next(&self) {
+        self.dispatch_shortcut("swap_next", 0).await;
+    }
+
+    /// Intercambia la ventana activa con la anterior en la pila.
+    #[zbus(name = "swapPrev")]
+    async fn swap_prev(&self) {
+        self.dispatch_shortcut("swap_prev", 0).await;
     }
 
     /// Migra la ventana activa al monitor siguiente.

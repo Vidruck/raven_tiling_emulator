@@ -696,7 +696,7 @@ function bindWindow(w) {
  * Inicializa el script puente de Raven conectando los listeners de KWin y disparando la sincronización inicial.
  */
 function init() {
-    print("[Raven Bridge] Inicializando v2.7...");
+    print("[Raven Bridge] Inicializando v2.8...");
 
     var initialWindows = workspace.windowList();
     for (var i = 0; i < initialWindows.length; i++) {

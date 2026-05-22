@@ -4,7 +4,7 @@
         "Description": "Puente DBus para Raven Tiling Emulator",
         "Icon": "preferences-system-windows-script-test",
         "Id": "org.kde.raven.bridge",
-        "Version": "2.6",
+        "Version": "2.8",
         "License": "GPL-3",
         "Authors": [
             {
