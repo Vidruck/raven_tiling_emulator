@@ -29,7 +29,7 @@ struct CommandedGeometry {
     timestamp: u64,
 }
 
-/// Orquestador principal de la lógica de Raven - v2.7 Adaptado para Dwindle BSP.
+/// Orquestador principal de la lógica de Raven - v2.8 Master-Stack con soporte de intercambio de ventanas.
 ///
 /// Administra el ciclo de vida del motor de mosaico (tiling engine), coordina
 /// la sincronización de estados del compositor y detecta situaciones de inestabilidad.
@@ -180,9 +180,11 @@ impl RavenController {
             (!is_strict, std::cmp::Reverse(pos))
         });
 
-        let (new_layout, evicted_windows) = self
-            .engine
-            .calculate_from_payload(workspaces.clone(), windows.clone(), self.active_window_id.clone())?;
+        let (new_layout, evicted_windows) = self.engine.calculate_from_payload(
+            workspaces.clone(),
+            windows.clone(),
+            self.active_window_id.clone(),
+        )?;
         let mut commands = Vec::new();
 
         for (wid, rect) in &new_layout {
@@ -338,15 +340,6 @@ impl RavenController {
                     std::cmp::max(0, self.engine.config.default_gaps + payload);
                 needs_recalc = true;
             }
-            "increment_master" => {
-                self.engine.config.nmaster += 1;
-                needs_recalc = true;
-            }
-            "decrement_master" => {
-                self.engine.config.nmaster =
-                    std::cmp::max(1usize, self.engine.config.nmaster.saturating_sub(1));
-                needs_recalc = true;
-            }
             "increase_ratio" => {
                 self.engine.config.master_ratio =
                     f32::min(0.85, self.engine.config.master_ratio + 0.05);
@@ -356,6 +349,56 @@ impl RavenController {
                 self.engine.config.master_ratio =
                     f32::max(0.15, self.engine.config.master_ratio - 0.05);
                 needs_recalc = true;
+            }
+            "swap_next" | "swap_prev" => {
+                let mut active_windows: Vec<_> = windows
+                    .into_iter()
+                    .filter(|w| !w.is_floating && !w.is_minimized && !w.is_pip)
+                    .collect();
+
+                if active_windows.len() > 1 {
+                    active_windows.sort_by_key(|w| {
+                        let is_strict = w.min_w > 0 || w.min_h > 0;
+                        let pos = self
+                            .engine
+                            .window_history
+                            .iter()
+                            .position(|id| id == &w.window_id)
+                            .unwrap_or(usize::MAX);
+                        (!is_strict, std::cmp::Reverse(pos))
+                    });
+
+                    if let Some(ref active_id) = active_window_id {
+                        if let Some(current_idx) = active_windows
+                            .iter()
+                            .position(|w| &w.window_id == active_id)
+                        {
+                            let step = if action == "swap_next" {
+                                1
+                            } else {
+                                active_windows.len() - 1
+                            };
+                            let target_idx = (current_idx + step) % active_windows.len();
+                            let target_id = &active_windows[target_idx].window_id;
+
+                            let pos_active = self
+                                .engine
+                                .window_history
+                                .iter()
+                                .position(|id| id == active_id);
+                            let pos_target = self
+                                .engine
+                                .window_history
+                                .iter()
+                                .position(|id| id == target_id);
+
+                            if let (Some(p_act), Some(p_tar)) = (pos_active, pos_target) {
+                                self.engine.window_history.swap(p_act, p_tar);
+                                needs_recalc = true;
+                            }
+                        }
+                    }
+                }
             }
             "focus_next" | "focus_prev" => {
                 let active_windows: Vec<_> = windows

@@ -1,4 +1,4 @@
-//! # Algoritmos de Layout - Versión 2.7 (Dwindle BSP con Reutilización Semántica)
+//! # Algoritmos de Layout - Versión 2.8 (Dwindle BSP con Reutilización Semántica)
 //!
 //! Este submódulo contiene la lógica principal para el cálculo de la disposición
 //! de las ventanas en mosaico (tiling). Implementa un árbol de división binaria adaptativo (BSP)
@@ -35,17 +35,59 @@ fn apply_gaps(rect: &Rect, gap: i32) -> Rect {
     }
 }
 
-/// Calcula la disposición en espiral (dwindle) con partición binaria de espacio (BSP)
-/// reutilizando semánticamente las variables clásicas.
+/// Posiciona verticalmente las ventanas en una columna dividiendo la altura.
 ///
-/// # Argumentos Mapeados:
-/// * `nmaster` - Utilizado como el Techo Dinámico de Ventanas cómodas en pantalla antes de desalojar (eviction).
-/// * `master_ratio` - Utilizado como el ratio de división (split ratio) binario asimétrico.
-/// * `active_window_id` - Identificador opcional de la ventana en foco activo para aplicar el redimensionamiento asimétrico.
+/// Si la columna contiene la ventana enfocada, dicha ventana toma `safe_split_ratio` de la altura,
+/// y el resto de las ventanas de la columna se dividen equitativamente el espacio sobrante.
+fn lay_out_column(
+    x: i32,
+    width: i32,
+    container_y: i32,
+    container_height: i32,
+    num_windows: usize,
+    active_idx_in_col: Option<usize>,
+    safe_split_ratio: f32,
+    half_g: i32,
+) -> Vec<Rect> {
+    let mut rects = Vec::new();
+    let mut current_y = container_y;
+
+    for j in 0..num_windows {
+        let h = if num_windows == 1 {
+            container_height
+        } else if j == num_windows - 1 {
+            container_y + container_height - current_y
+        } else if let Some(active_idx) = active_idx_in_col {
+            if j == active_idx {
+                (container_height as f32 * safe_split_ratio) as i32
+            } else {
+                (container_height as f32 * (1.0 - safe_split_ratio) / (num_windows - 1) as f32)
+                    as i32
+            }
+        } else {
+            container_height / num_windows as i32
+        };
+
+        let tile_rect = Rect {
+            x,
+            y: current_y,
+            width,
+            height: h,
+        };
+        rects.push(apply_gaps(&tile_rect, half_g));
+        current_y += h;
+    }
+    rects
+}
+
+/// Calcula la disposición en Master-Stack dinámico con redimensionamiento asimétrico según foco.
+///
+/// Comienza con un diseño 1 x (C - 1). Si hay 5 o más ventanas, pasa a una composición 2 x 3,
+/// encajando la ventana más antigua en el área maestra junto con la ventana activa.
 pub fn calculate_master_stack(
     windows: Vec<WindowNode>,
     screen_rect: Rect,
-    nmaster: usize,
+    _nmaster: usize,
     master_ratio: f32,
     default_gaps: i32,
     active_window_id: Option<String>,
@@ -71,8 +113,6 @@ pub fn calculate_master_stack(
     let half_g = default_gaps / 2;
     let min_allowed_area = calculate_dynamic_min_area(screen_rect.width, screen_rect.height);
 
-    let max_comfortable_windows = if nmaster <= 1 { 5 } else { nmaster };
-
     let mut current_active = active_windows.clone();
 
     loop {
@@ -80,13 +120,117 @@ pub fn calculate_master_stack(
             break;
         }
 
-        let windows_to_place = std::cmp::min(current_active.len(), max_comfortable_windows);
+        let count = current_active.len();
         let mut temp_layout = HashMap::new();
         let mut failed_window_ids = Vec::new();
 
-        if windows_to_place == 1 {
-            let win = &current_active[0];
-            let final_rect = apply_gaps(&screen_rect, default_gaps);
+        // Si hay 5 o más ventanas, el diseño pasa de 1x3 a 2x3 para albergar más ventanas
+        let nmaster_temp = if count >= 5 { 2 } else { 1 };
+
+        let mut ordered_active = current_active.clone();
+        if count >= 5 {
+            let mut ordered = Vec::new();
+            ordered.push(current_active[0].clone()); // La más nueva/enfocada
+            ordered.push(current_active[count - 1].clone()); // La más antigua
+            for w in current_active.iter().skip(1).take(count - 2) {
+                ordered.push(w.clone());
+            }
+            ordered_active = ordered;
+        }
+
+        let container = Rect {
+            x: screen_rect.x + half_g,
+            y: screen_rect.y + half_g,
+            width: screen_rect.width - default_gaps,
+            height: screen_rect.height - default_gaps,
+        };
+
+        let safe_split_ratio = master_ratio.clamp(0.20, 0.80);
+
+        let active_idx = if let Some(ref active_id) = active_window_id {
+            ordered_active
+                .iter()
+                .position(|w| w.window_id == *active_id)
+        } else {
+            None
+        };
+
+        let mut rects = Vec::new();
+
+        if count <= nmaster_temp {
+            rects = lay_out_column(
+                container.x,
+                container.width,
+                container.y,
+                container.height,
+                count,
+                active_idx,
+                safe_split_ratio,
+                half_g,
+            );
+        } else {
+            // Dividir las columnas Master y Stack horizontalmente (ancho)
+            let (master_width, stack_width) = if let Some(idx) = active_idx {
+                if idx < nmaster_temp {
+                    let mw = (container.width as f32 * safe_split_ratio) as i32;
+                    (mw, container.width - mw)
+                } else {
+                    let sw = (container.width as f32 * safe_split_ratio) as i32;
+                    (container.width - sw, sw)
+                }
+            } else {
+                let mw = (container.width as f32 * 0.5) as i32;
+                (mw, container.width - mw)
+            };
+
+            let master_active_idx = if let Some(idx) = active_idx {
+                if idx < nmaster_temp {
+                    Some(idx)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let stack_active_idx = if let Some(idx) = active_idx {
+                if idx >= nmaster_temp {
+                    Some(idx - nmaster_temp)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let mut master_rects = lay_out_column(
+                container.x,
+                master_width,
+                container.y,
+                container.height,
+                nmaster_temp,
+                master_active_idx,
+                safe_split_ratio,
+                half_g,
+            );
+
+            let mut stack_rects = lay_out_column(
+                container.x + master_width,
+                stack_width,
+                container.y,
+                container.height,
+                count - nmaster_temp,
+                stack_active_idx,
+                safe_split_ratio,
+                half_g,
+            );
+
+            rects.append(&mut master_rects);
+            rects.append(&mut stack_rects);
+        }
+
+        for (i, win) in ordered_active.iter().enumerate() {
+            let final_rect = rects[i];
             let allowed_min_w = std::cmp::min(win.min_w, 300);
             let allowed_min_h = std::cmp::min(win.min_h, 250);
 
@@ -97,65 +241,6 @@ pub fn calculate_master_stack(
                 temp_layout.insert(win.window_id.clone(), final_rect);
             } else {
                 failed_window_ids.push(win.window_id.clone());
-            }
-        } else {
-            let mut current_container = Rect {
-                x: screen_rect.x + half_g,
-                y: screen_rect.y + half_g,
-                width: screen_rect.width - default_gaps,
-                height: screen_rect.height - default_gaps,
-            };
-
-            let safe_split_ratio = master_ratio.clamp(0.20, 0.80);
-
-            for (i, win) in current_active.iter().take(windows_to_place).enumerate() {
-                let final_rect = if i == windows_to_place - 1 {
-                    apply_gaps(&current_container, half_g)
-                } else {
-                    let mut tile_rect = current_container;
-
-                    let is_active_involved = if let Some(ref active_id) = active_window_id {
-                        win.window_id == *active_id
-                            || (i == windows_to_place - 2
-                                && current_active[i + 1].window_id == *active_id)
-                    } else {
-                        false
-                    };
-
-                    let split_ratio = if is_active_involved {
-                        safe_split_ratio
-                    } else {
-                        0.5
-                    };
-
-                    if current_container.width > current_container.height {
-                        let split_width = (current_container.width as f32 * split_ratio) as i32;
-                        tile_rect.width = split_width;
-
-                        current_container.x += split_width;
-                        current_container.width -= split_width;
-                    } else {
-                        let split_height = (current_container.height as f32 * split_ratio) as i32;
-                        tile_rect.height = split_height;
-
-                        current_container.y += split_height;
-                        current_container.height -= split_height;
-                    }
-
-                    apply_gaps(&tile_rect, half_g)
-                };
-
-                let allowed_min_w = std::cmp::min(win.min_w, 300);
-                let allowed_min_h = std::cmp::min(win.min_h, 250);
-
-                if final_rect.width * final_rect.height >= min_allowed_area
-                    && final_rect.width >= allowed_min_w
-                    && final_rect.height >= allowed_min_h
-                {
-                    temp_layout.insert(win.window_id.clone(), final_rect);
-                } else {
-                    failed_window_ids.push(win.window_id.clone());
-                }
             }
         }
 
@@ -308,35 +393,52 @@ mod tests {
         let windows = vec![mock_window("win_1"), mock_window("win_2")];
 
         // Caso sin foco: división simétrica 50/50 (gaps = 0 para facilitar matemáticas)
-        let (layout_no_focus, _) =
-            calculate_master_stack(windows.clone(), Rect::new(0, 0, 1200, 1000), 2, 0.6, 0, None);
+        let (layout_no_focus, _) = calculate_master_stack(
+            windows.clone(),
+            Rect::new(0, 0, 1200, 1000),
+            2,
+            0.6,
+            0,
+            None,
+        );
         let r1_nf = layout_no_focus.get("win_1").unwrap();
         let r2_nf = layout_no_focus.get("win_2").unwrap();
         assert_eq!(r1_nf.width, 600);
         assert_eq!(r2_nf.width, 600);
 
         // Caso con foco en win_1: usa ratio 0.6 (60%)
-        let (layout_focus_1, _) =
-            calculate_master_stack(windows.clone(), Rect::new(0, 0, 1200, 1000), 2, 0.6, 0, Some("win_1".to_string()));
+        let (layout_focus_1, _) = calculate_master_stack(
+            windows.clone(),
+            Rect::new(0, 0, 1200, 1000),
+            2,
+            0.6,
+            0,
+            Some("win_1".to_string()),
+        );
         let r1_f1 = layout_focus_1.get("win_1").unwrap();
         let r2_f1 = layout_focus_1.get("win_2").unwrap();
         assert_eq!(r1_f1.width, 720);
         assert_eq!(r2_f1.width, 480);
 
-        // Caso con foco en win_2: usa ratio 0.6 (por implicar a la última ventana)
-        let (layout_focus_2, _) =
-            calculate_master_stack(windows.clone(), Rect::new(0, 0, 1200, 1000), 2, 0.6, 0, Some("win_2".to_string()));
+        // Caso con foco en win_2: usa ratio 0.6 (el área de pila donde está win_2 se expande al 60%)
+        let (layout_focus_2, _) = calculate_master_stack(
+            windows.clone(),
+            Rect::new(0, 0, 1200, 1000),
+            2,
+            0.6,
+            0,
+            Some("win_2".to_string()),
+        );
         let r1_f2 = layout_focus_2.get("win_2").unwrap();
         let r2_f2 = layout_focus_2.get("win_1").unwrap();
-        assert_eq!(r1_f2.width, 480); // win_2 toma el resto (1 - 0.6 = 0.4)
-        assert_eq!(r2_f2.width, 720); // win_1 toma la división principal (0.6)
+        assert_eq!(r1_f2.width, 720); // win_2 toma la división principal (0.6)
+        assert_eq!(r2_f2.width, 480); // win_1 toma el resto (1 - 0.6 = 0.4)
     }
 
     #[test]
     fn test_eviccion_recalculo_sin_huecos() {
         // En pantalla de 500x500, con 3 ventanas, win_2 tiene un tamaño mínimo de 400 (se acota a 300)
-        // Pero al repartirse en 3 ventanas, win_2 obtendría un slot de 250 de ancho.
-        // Dado que 250 < 300, win_2 no cabrá y será desalojada.
+        // Dado que 250 < 300, win_2 no cabrá en la división horizontal 50/50 y será desalojada.
         let windows = vec![
             mock_window("win_1"),
             mock_window_with_min("win_2", 400, 0),
@@ -355,20 +457,17 @@ mod tests {
 
         let r1 = layout.get("win_1").unwrap();
         let r3 = layout.get("win_3").unwrap();
-        // Se recalculó la composición para 2 ventanas (cada una toma el 100% del ancho y 50% del alto = 250 de alto)
-        assert_eq!(r1.width, 500);
-        assert_eq!(r1.height, 250);
-        assert_eq!(r3.width, 500);
-        assert_eq!(r3.height, 250);
+        // Se recalculó la composición para 2 ventanas (Master y Stack con ancho de 250 cada uno y altura completa 500)
+        assert_eq!(r1.width, 250);
+        assert_eq!(r1.height, 500);
+        assert_eq!(r3.width, 250);
+        assert_eq!(r3.height, 500);
     }
 
     #[test]
     fn test_acotamiento_tamano_minimo() {
         // win_1 tiene un min_w de 500, pero como se acota a 300, debería caber en un slot de 400
-        let windows = vec![
-            mock_window_with_min("win_1", 500, 0),
-            mock_window("win_2"),
-        ];
+        let windows = vec![mock_window_with_min("win_1", 500, 0), mock_window("win_2")];
 
         // Pantalla de 800 de ancho, split simétrico da slots de 400
         let (layout, evicted) =
@@ -380,5 +479,48 @@ mod tests {
         assert_eq!(layout.len(), 2);
         assert!(layout.contains_key("win_1"));
         assert!(layout.contains_key("win_2"));
+    }
+
+    #[test]
+    fn test_dynamic_master_stack_2x3() {
+        let windows = vec![
+            mock_window("win_1"),
+            mock_window("win_2"),
+            mock_window("win_3"),
+            mock_window("win_4"),
+            mock_window("win_5"),
+        ];
+
+        // Pantalla de 1000 de ancho y 600 de alto (gaps = 0)
+        let (layout, evicted) =
+            calculate_master_stack(windows, Rect::new(0, 0, 1000, 600), 1, 0.5, 0, None);
+
+        assert!(evicted.is_empty());
+        assert_eq!(layout.len(), 5);
+
+        let r1 = layout.get("win_1").unwrap();
+        let r5 = layout.get("win_5").unwrap();
+        let r2 = layout.get("win_2").unwrap();
+        let r3 = layout.get("win_3").unwrap();
+        let r4 = layout.get("win_4").unwrap();
+
+        // Área maestra (izquierda, x = 0, ancho = 500): contiene win_1 y win_5 (la más antigua)
+        assert_eq!(r1.x, 0);
+        assert_eq!(r1.width, 500);
+        assert_eq!(r1.height, 300);
+        assert_eq!(r5.x, 0);
+        assert_eq!(r5.width, 500);
+        assert_eq!(r5.height, 300);
+
+        // Área de pila (derecha, x = 500, ancho = 500): contiene win_2, win_3, win_4
+        assert_eq!(r2.x, 500);
+        assert_eq!(r2.width, 500);
+        assert_eq!(r2.height, 200);
+        assert_eq!(r3.x, 500);
+        assert_eq!(r3.width, 500);
+        assert_eq!(r3.height, 200);
+        assert_eq!(r4.x, 500);
+        assert_eq!(r4.width, 500);
+        assert_eq!(r4.height, 200);
     }
 }

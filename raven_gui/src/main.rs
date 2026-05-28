@@ -142,11 +142,6 @@ impl eframe::App for RavenGuiApp {
                         ui.add_space(2.0);
 
                         ui.horizontal(|ui| {
-                            ui.label("Ventanas en el área principal:");
-                            ui.add(egui::Slider::new(&mut self.config.nmaster, 1..=10));
-                        });
-
-                        ui.horizontal(|ui| {
                             ui.label("Proporción del área maestra:");
                             ui.add(
                                 egui::Slider::new(&mut self.config.master_ratio, 0.1..=0.9)
