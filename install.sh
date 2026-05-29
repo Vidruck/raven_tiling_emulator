@@ -122,4 +122,9 @@ echo "[7/7] Reiniciando servicios de Raven..."
 systemctl --user daemon-reload
 systemctl --user enable --now raven.service
 
+# Lanzar el Centro de Bienvenida de Raven en segundo plano
+if [ -x "$TARGET_DIR/bin/raven_gui" ]; then
+    "$TARGET_DIR/bin/raven_gui" &
+fi
+
 echo "✅ Raven v2.7 instalado y operando con éxito. ¡Huélum!"

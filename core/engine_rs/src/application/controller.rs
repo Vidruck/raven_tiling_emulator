@@ -11,12 +11,16 @@ use crate::domain::geometry::{Rect, WindowNode};
 /// Evita que ventanas problemáticas entren en bucles infinitos de actualización
 /// debido a conflictos entre su tamaño mínimo y el algoritmo de mosaico (tiling).
 struct FlapTracker {
-    /// Marca de tiempo de la última actualización detectada.
+    /// Marca de tiempo del último cambio detectado (last toggle time).
     last_toggle_time: u64,
-    /// Conteo acumulado de eventos de oscilación detectados en cascada.
+    /// Conteo acumulado de eventos de oscilación detectados en cascada (toggle count).
     toggle_count: u64,
-    /// Indica si la ventana está bajo penalización (en cuarentena de eventos).
+    /// Indica si la ventana está bajo penalización o en cuarentena (penalized).
     is_penalized: bool,
+    /// Última geometría rectangular (rect) conocida para comparar cambios reales.
+    last_rect: Option<Rect>,
+    /// Último estado de minimización conocido (minimized).
+    last_minimized: bool,
 }
 
 /// Registra una geometría de ventana que fue ordenada aplicar de forma explícita.
@@ -24,7 +28,7 @@ struct CommandedGeometry {
     /// Rectángulo de geometría de la ventana ordenado.
     #[allow(dead_code)]
     rect: Rect,
-    /// Marca de tiempo del momento en que se emitió el comando.
+    /// Marca de tiempo del momento en que se emitió el comando (timestamp).
     #[allow(dead_code)]
     timestamp: u64,
 }
@@ -48,8 +52,10 @@ pub struct RavenController {
     /// Ordenamiento de visibilidad de las ventanas de mosaico activas.
     #[allow(dead_code)]
     visible_windows_order: Vec<String>,
-    /// Identificador de la ventana activa enfocada.
+    /// Identificador de la ventana activa enfocada (focused window).
     pub active_window_id: Option<String>,
+    /// Cantidad de ventanas activas en el último cambio de estado.
+    last_active_window_count: usize,
 }
 
 impl RavenController {
@@ -66,6 +72,7 @@ impl RavenController {
             pending_migrations: HashMap::new(),
             visible_windows_order: Vec::new(),
             active_window_id: None,
+            last_active_window_count: 0,
         }
     }
 
@@ -79,6 +86,7 @@ impl RavenController {
         self.engine.current_workspaces.clear();
         self.engine.current_windows.clear();
         self.active_window_id = None;
+        self.last_active_window_count = 0;
     }
 
     /// Determina si el motor de mosaico (tiling engine) está operativo.
@@ -89,11 +97,11 @@ impl RavenController {
     /// Comprueba si una ventana está oscilando rápidamente (flapping) y aplica penalizaciones.
     ///
     /// # Parámetros
-    /// * `window_id` - Identificador único de la ventana a evaluar.
+    /// * `win` - Nodo de ventana (window node) a evaluar.
     ///
     /// # Retorno
-    /// Verdadero si la ventana está penalizada u oscilando; falso de lo contrario.
-    fn is_window_flapping(&mut self, window_id: &str) -> bool {
+    /// Verdadero (true) si la ventana está penalizada u oscilando; falso (false) de lo contrario.
+    fn is_window_flapping(&mut self, win: &WindowNode) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -101,12 +109,24 @@ impl RavenController {
 
         let tracker = self
             .flap_registry
-            .entry(window_id.to_string())
+            .entry(win.window_id.clone())
             .or_insert(FlapTracker {
                 last_toggle_time: now,
                 toggle_count: 0,
                 is_penalized: false,
+                last_rect: None,
+                last_minimized: win.is_minimized,
             });
+
+        // Comprobamos si la ventana cambió verdaderamente de geometría (geometry) o de estado de minimización (minimized)
+        let has_changed = match tracker.last_rect {
+            Some(r) => r != win.geometry || tracker.last_minimized != win.is_minimized,
+            None => true,
+        };
+
+        // Guardamos el estado para futuras comparaciones
+        tracker.last_rect = Some(win.geometry);
+        tracker.last_minimized = win.is_minimized;
 
         if tracker.is_penalized {
             if now - tracker.last_toggle_time > 400 {
@@ -117,22 +137,25 @@ impl RavenController {
             }
         }
 
-        if now - tracker.last_toggle_time < 400 {
-            tracker.toggle_count += 1;
-            if tracker.toggle_count > 8 {
-                println!(
-                    "[DEFENSA] Cortocircuito de flapping activo para: {}.",
-                    window_id
-                );
-                tracker.is_penalized = true;
-                tracker.last_toggle_time = now;
-                return true;
+        // Solo incrementamos el contador de oscilación (toggle count) si hubo un cambio real
+        if has_changed {
+            if now - tracker.last_toggle_time < 400 {
+                tracker.toggle_count += 1;
+                if tracker.toggle_count > 8 {
+                    println!(
+                        "[DEFENSA] Cortocircuito de oscilación rápida (flapping) activo para: {}.",
+                        win.window_id
+                    );
+                    tracker.is_penalized = true;
+                    tracker.last_toggle_time = now;
+                    return true;
+                }
+            } else {
+                tracker.toggle_count = 1;
             }
-        } else {
-            tracker.toggle_count = 1;
+            tracker.last_toggle_time = now;
         }
 
-        tracker.last_toggle_time = now;
         false
     }
 
@@ -163,11 +186,23 @@ impl RavenController {
 
         let mut healthy_windows = Vec::new();
         for win in windows {
-            if !self.is_window_flapping(&win.window_id) {
+            if !self.is_window_flapping(&win) {
                 healthy_windows.push(win);
             }
         }
         let mut windows = healthy_windows;
+
+        // Determinamos la cantidad de ventanas activas (que no floten ni estén minimizadas)
+        let active_count = windows
+            .iter()
+            .filter(|w| !w.is_floating && !w.is_minimized)
+            .count();
+        // Si el número de ventanas cambia (se agregó o eliminó de la composición),
+        // reiniciamos el ratio maestro (master ratio) a 0.5 (50-50) para evitar desorden.
+        if active_count != self.last_active_window_count {
+            self.engine.config.master_ratio = 0.5;
+            self.last_active_window_count = active_count;
+        }
 
         windows.sort_by_key(|w| {
             let is_strict = w.min_w > 0 || w.min_h > 0;
