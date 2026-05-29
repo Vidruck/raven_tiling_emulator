@@ -11,10 +11,10 @@
 ![Wayland](https://img.shields.io/badge/Wayland-9999ff?style=for-the-badge&logo=wayland&logoColor=white)
 ![GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)
 
-Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.7**, Raven reemplaza el stack maestro estático clásico por una gestión de ventanas completamente dinámica siguiendo un esquema de acomodo en espiral (Dwindle BSP), logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo mediante Arquitectura Hexagonal.
+Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.7**, Raven evoluciona hacia una arquitectura de **Composición Foveal Dinámica (Dynamic Foveal Composition)**, logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo mediante Arquitectura Hexagonal.
 
-## 🚀 El Salto a la Versión 2.7: Gestión Dinámica BSP y Evicción Ajustada
-Esta versión reimagina el motor de mosaico adoptando un esquema de partición binaria de espacio (BSP) e implementa nuevos filtros de detección de ventanas *"Picture in Picture"*.
+## 🚀 El Salto a la Versión 2.7: Composición Foveal Dinámica y Reconciliación Orgánica
+Esta versión reimagina el motor de mosaico adoptando un esquema de diseño de foco centrado y paneles de utilidad distribuidos en base a una jerarquía foveal adaptativa, e implementa nuevos filtros de detección de ventanas *"Picture in Picture"*.
 
 ### 📉 Eficiencia Energética y de Almacenamiento
 La optimización sigue siendo el pilar fundamental. El motor opera con recursos sumamente bajos y contenidos:
@@ -24,13 +24,14 @@ La optimización sigue siendo el pilar fundamental. El motor opera con recursos 
 | **v1.0** | Python Puro | 55.0 MB | ~15 MB |
 | **v1.6** | Híbrida (Python + Rust FFI) | ~25.9 MB | ~18 MB |
 | **v2.6** | Asynchronous Native Rust (Fixed) | ~4.3 MB | 1.4 MB |
-| **v2.7** | ***Asynchronous Native Rust (Dwindle BSP)** | **~4.5 MB** | **1.4 MB** |
+| **v2.7** | **Asynchronous Native Rust (Foveal Layout)** | **~4.5 MB** | **1.4 MB** |
 
 *La eficiencia extrema ha sido una directriz arquitectónica fundamental desde el inicio del proyecto. Tras validaciones exhaustivas en hardware real, se logró consolidar un motor de alto rendimiento que minimiza el impacto en recursos. Gracias al uso de LTO, el pruning de dependencias y la eliminación de símbolos, entregamos un binario ultra-compacto sin comprometer la estabilidad.*
 
 ## 🌟 Nuevas Funciones y Estabilidad (v2.7+)
-- **Mosaico Dinámico Dwindle BSP:** La pantalla se divide de forma recursiva alternando la dirección del corte (horizontal/vertical) según el aspecto del contenedor disponible.
-- **Redimensionamiento Asimétrico por Foco:** El ajuste del ratio de división (`master_ratio`) se aplica únicamente al corte que involucra a la ventana en foco activo (focused window). El resto de las ventanas mantienen una proporción simétrica limpia de `0.5` (50-50).
+- **Composición Foveal Dinámica (Dynamic Foveal Composition):** La pantalla se organiza de forma inteligente situando la ventana en foco activo en un *Centro Foveal* preponderante, flanqueado por ranuras de contexto lateral simétricas e inferiores de utilidad. Al superarse la cantidad base de ventanas, el motor aplica subdivisiones jerárquicas recursivas (empezando por los laterales) para preservar la legibilidad y área de trabajo central.
+- **Redimensionamiento Asimétrico Focalizado:** El ajuste del ratio de división (`master_ratio`) se aplica únicamente al corte que involucra a la ventana en foco activo (focused window). El resto de las ventanas mantienen una proporción simétrica limpia de `0.5` (50-50).
+- **Reinicio Automático de Proporción:** Para evitar deformaciones acumulativas, cualquier adición o remoción de ventanas en la composición restablece de manera atómica el ratio maestro a `0.5`, garantizando una transición visualmente limpia y simétrica de forma inmediata.
 - **Protección y Acotamiento de Tamaño Mínimo:** Los tamaños mínimos reportados por KWin (`min_w` y `min_h`) se limitan a un tope máximo de `300x250` píxeles para verificar su acomodo. Esto evita que los navegadores o clientes de Wayland reporten dimensiones gigantes que provoquen su evicción inmediata de la pantalla.
 - **Bucle de Recálculo Dinámico sin Huecos:** Si una ventana no cabe en su celda calculada, el motor la desaloja y ejecuta una reconciliación iterativa redistribuyendo el 100% del área restante a las demás ventanas activas.
 - **Resiliencia y Comunicación Asíncrona:** El puente KWin-Raven ahora es completamente no bloqueante. El motor Rust utiliza offloading asíncrono con `tokio::spawn` para liberar el bus de datos instantáneamente.

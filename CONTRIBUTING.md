@@ -1,6 +1,6 @@
 # Contribuyendo a Raven 🐦
 
-¡Gracias por el interés en mejorar Raven! Con el lanzamiento de la **v2.7**, el proyecto ha evolucionado hacia una gestión de mosaico dinámica (Dwindle BSP) estilo Hyprland construida sobre un ecosistema **100% nativo en Rust**. Estamos encantados de recibir colaboraciones que impulsen la estabilidad, el rendimiento y la experiencia de usuario en KDE Plasma 6.
+¡Gracias por el interés en mejorar Raven! Con el lanzamiento de la **v2.7**, el proyecto ha evolucionado hacia una gestión de **Composición Foveal Dinámica (Dynamic Foveal Composition)** construida sobre un ecosistema **100% nativo en Rust**. Estamos encantados de recibir colaboraciones que impulsen la estabilidad, el rendimiento y la experiencia de usuario en KDE Plasma 6.
 
 ## 🏗️ Filosofía de Diseño v2.7
 Para mantener la robustez, fluidez y ligereza logradas, todas las contribuciones deben respetar estos pilares arquitectónicos:
@@ -9,8 +9,9 @@ Para mantener la robustez, fluidez y ligereza logradas, todas las contribuciones
    - **Core Asíncrono (core/engine_rs):** Toda la lógica de cálculo y la comunicación IPC reside en Rust. Utilizamos `zbus` para una integración asíncrona y de ultra-baja latencia con el bus de datos del sistema.
    - **Interfaz Nativa (raven_gui):** La UI se construye con `egui/eframe`, garantizando un consumo mínimo de recursos y una integración fluida con el compositor.
 
-2. **Mosaico Dinámico (Dwindle BSP Paradigm):**
-   - El motor ha abandonado el concepto de master stack fijo. Todo nuevo cambio al layout debe alinearse con el árbol binario de partición de espacio (BSP) dwindle, donde las ventanas se dividen alternadamente según el aspecto del contenedor.
+2. **Paradigma de Composición Foveal Dinámica (Dynamic Foveal Composition Paradigm):**
+   - El motor organiza el espacio situando el foco activo en un *Centro Foveal* principal, flanqueado por paneles laterales de contexto simétricos y consolas inferiores de utilidad.
+   - Toda modificación al layout debe respetar las subdivisiones jerárquicas recursivas (fraccionando los paneles laterales antes del Centro Foveal) y el reinicio automático del ratio a `0.5` en cuanto la composición sufre adiciones o supresiones.
    - El redimensionamiento asimétrico mediante `master_ratio` debe estar ligado estrictamente al foco activo, manteniendo las divisiones no enfocadas en una proporción simétrica de 0.5.
    - Es mandatorio proteger al motor contra evicciones (desalojos) accidentales causadas por límites de tamaño mínimos sobredimensionados en Wayland. Se debe aplicar el acotamiento de seguridad a `300x250` px en las comprobaciones.
    - La redistribución del espacio debe ocurrir a través de un bucle de recálculo recursivo que prevenga huecos negros y ocupe el 100% de la superficie disponible para las ventanas no desalojadas.
