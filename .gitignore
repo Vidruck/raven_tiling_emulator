@@ -1,9 +1,7 @@
 # === Rust ===
 target/
 **/target/
-# Cargo.lock se incluye habitualmente en binarios para garantizar reproducibilidad
-# pero se ignora en librerías. Aquí lo mantenemos rastreable si se desea.
-# Cargo.lock 
+Cargo.lock
 
 # === Archivos de Sistema Operativo ===
 .DS_Store
@@ -15,6 +13,7 @@ Thumbs.db
 # === Configuración de IDEs ===
 .vscode/
 .idea/
+.zed/
 *.sublime-project
 *.sublime-workspace
 

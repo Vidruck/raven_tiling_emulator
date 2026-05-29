@@ -692,6 +692,18 @@ function bindWindow(w) {
       }
     });
 
+    w.maximizedChanged.connect(function () {
+      if (
+        w &&
+        !w.deleted &&
+        !w.__raven_mutating &&
+        !w.interactiveMove &&
+        !w.interactiveResize
+      ) {
+        requestStateSync();
+      }
+    });
+
     w.outputChanged.connect(function () {
       if (!w || w.deleted || w.__raven_mutating) {
         return;
@@ -827,6 +839,10 @@ function init() {
   });
 
   workspace.windowRemoved.connect(function () {
+    requestStateSync();
+  });
+
+  workspace.currentDesktopChanged.connect(function () {
     requestStateSync();
   });
 
