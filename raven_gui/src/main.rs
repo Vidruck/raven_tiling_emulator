@@ -161,6 +161,23 @@ impl eframe::App for RavenGuiApp {
         visuals.window_rounding = 12.0.into();
         ctx.set_visuals(visuals);
 
+        egui::TopBottomPanel::bottom("footer_panel").show(ctx, |ui| {
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let button = ui.add_sized(
+                    [160.0, 32.0],
+                    egui::Button::new(egui::RichText::new("Guardar Cambios").strong()),
+                );
+                if button.clicked() {
+                    self.save_and_restart();
+                }
+
+                ui.add_space(12.0);
+                ui.label(egui::RichText::new(&self.status_msg).size(13.0));
+            });
+            ui.add_space(8.0);
+        });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(12.0, 14.0);
 
@@ -324,23 +341,6 @@ impl eframe::App for RavenGuiApp {
                 });
             });
 
-            ui.add_space(6.0);
-            ui.separator();
-            ui.add_space(4.0);
-
-            // Botón de guardado inferior y mensaje de estado
-            ui.horizontal(|ui| {
-                let button = ui.add_sized(
-                    [160.0, 32.0],
-                    egui::Button::new(egui::RichText::new("Guardar Cambios").strong()),
-                );
-                if button.clicked() {
-                    self.save_and_restart();
-                }
-
-                ui.add_space(12.0);
-                ui.label(egui::RichText::new(&self.status_msg).size(13.0));
-            });
         });
     }
 }

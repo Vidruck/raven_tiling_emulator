@@ -835,7 +835,7 @@ function init() {
         bindWindow(w);
         requestStateSync();
       }
-    }, 30);
+    }, 60);
   });
 
   workspace.windowRemoved.connect(function () {

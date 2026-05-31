@@ -28,7 +28,7 @@ pub fn calculate_master_stack(
     _nmaster: usize,
     master_ratio: f32,
     default_gaps: i32,
-    active_window_id: Option<String>,
+    _active_window_id: Option<String>,
 ) -> (HashMap<String, Rect>, Vec<String>) {
     let mut layout_map = HashMap::new();
     let mut evicted_windows = Vec::new();
@@ -47,21 +47,8 @@ pub fn calculate_master_stack(
         return (layout_map, evicted_windows);
     }
 
-    // Ordenar de modo que la ventana activa/enfocada esté primero (Centro)
-    let mut ordered_windows = Vec::new();
-    if let Some(ref active_id) = active_window_id {
-        if let Some(pos) = active_windows.iter().position(|w| &w.window_id == active_id) {
-            ordered_windows.push(active_windows[pos].clone());
-            for (idx, w) in active_windows.iter().enumerate() {
-                if idx != pos {
-                    ordered_windows.push(w.clone());
-                }
-            }
-        }
-    }
-    if ordered_windows.is_empty() {
-        ordered_windows = active_windows.clone();
-    }
+    // Mantener un orden espacial estable e inalterado por cambios de foco.
+    let ordered_windows = active_windows.clone();
 
     let half_g = default_gaps / 2;
 
@@ -389,7 +376,7 @@ mod tests {
         assert_eq!(r2_nf.x, 0);
         assert_eq!(r2_nf.width, 480);
 
-        // Caso con foco en win_2: win_2 se vuelve Central (derecha) y win_1 Sidebar Izq (izquierda)
+        // Caso con foco en win_2: win_2 NO debe moverse del lateral ni hacer swap automático
         let (layout_focus_2, _) = calculate_master_stack(
             windows.clone(),
             Rect::new(0, 0, 1200, 1000),
@@ -400,10 +387,11 @@ mod tests {
         );
         let r1_f2 = layout_focus_2.get("win_2").unwrap();
         let r2_f2 = layout_focus_2.get("win_1").unwrap();
-        assert_eq!(r1_f2.x, 480);
-        assert_eq!(r1_f2.width, 720);
-        assert_eq!(r2_f2.x, 0);
-        assert_eq!(r2_f2.width, 480);
+        // win_2 debe seguir estando en la columna izquierda (sidebar) y win_1 en la derecha (centro)
+        assert_eq!(r1_f2.x, 0);
+        assert_eq!(r1_f2.width, 480);
+        assert_eq!(r2_f2.x, 480);
+        assert_eq!(r2_f2.width, 720);
     }
 
     #[test]

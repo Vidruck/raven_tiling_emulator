@@ -281,33 +281,7 @@ impl RavenController {
                     }
                 }
 
-                let mut desktops = Vec::new();
-                for key in workspaces.keys() {
-                    let mut parts = key.split("||");
-                    if let (Some(out), Some(desk)) = (parts.next(), parts.next()) {
-                        if out == win_node.output {
-                            let desk_str = desk.to_string();
-                            if !desktops.contains(&desk_str) {
-                                desktops.push(desk_str);
-                            }
-                        }
-                    }
-                }
 
-                let current_desk = win_node.desktops.first().cloned().unwrap_or_default();
-                if desktops.len() > 1 && desktops.iter().any(|d| d != &current_desk) {
-                    if let Some(target_desk) = desktops.iter().find(|&d| d != &current_desk) {
-                        println!(
-                            "[TOPOLOGY] Desalojo BSP: Enviando {} al escritorio {}",
-                            evicted_id, target_desk
-                        );
-                        commands.push(RavenAction::MigrateToDesktop {
-                            window_id: evicted_id.clone(),
-                            target_desktop: target_desk.clone(),
-                        });
-                        continue;
-                    }
-                }
 
                 println!(
                     "[TOPOLOGY] Desalojo BSP sin escape para {}. Minimizando.",
