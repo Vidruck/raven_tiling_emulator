@@ -42,7 +42,15 @@ function initTimerPool() {
     for (var i = 0; i < TIMER_POOL_SIZE; i++) {
       var t = new QTimer();
       t.singleShot = true;
-      _timer_pool.push({ timer: t, busy: false, callback: null });
+      var slot = { timer: t, busy: false, callback: null };
+      (function(s) {
+        s.timer.timeout.connect(function() {
+          s.busy = false;
+          try { if (s.callback) s.callback(); } catch(e) {}
+          s.callback = null;
+        });
+      })(slot);
+      _timer_pool.push(slot);
     }
     _timer_pool_ready = true;
   } catch (e) {
@@ -652,18 +660,10 @@ function setKWinTimeout(callback, ms) {
     for (var i = 0; i < _timer_pool.length; i++) {
       var slot = _timer_pool[i];
       if (!slot.busy) {
+        // La señal timeout ya fue conectada permanentemente en initTimerPool
         slot.busy = true;
         slot.callback = callback;
         slot.timer.interval = ms;
-        // Reconectar el timeout con una función estática que referencia el slot por índice
-        (function(s) {
-          slot.timer.timeout.disconnect();
-          slot.timer.timeout.connect(function () {
-            s.busy = false;
-            try { s.callback(); } catch(e) {}
-            s.callback = null;
-          });
-        })(slot);
         slot.timer.start();
         return slot;
       }
