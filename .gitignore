@@ -22,3 +22,7 @@ Thumbs.db
 .directory
 adapters/kwin_script/*.kpackagetool6
 adapters/plasmoid/*.plasmoid
+
+# === Documentación y Reportes (Uso Interno) ===
+KWin_ Construyendo Shell Alternativa.md
+reporte_raven.md

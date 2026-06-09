@@ -38,7 +38,9 @@ La optimización sigue siendo el pilar fundamental. El motor opera con recursos 
 - **Estabilización de Ventanas Adaptativa:** Incorporación de un motor de detección por *Silencio Geométrico*. Las aplicaciones complejas (como Firefox, Brave, Floorp o Zen Browser) se mantienen en cuarentena dinámica hasta que cesan sus micro-redimensionamientos internos de Wayland, logrando un mosaico limpio y libre de parpadeos.
 - **Mapeo Predictivo de PiP (Picture-in-Picture):** El script bridge detecta de manera inteligente ventanas PiP en múltiples idiomas (inglés, español, francés, alemán, portugués, italiano) y las fuerza a flotar en lugar de integrarlas al mosaico.
 - **Envío de Ventanas mediante Toggle:** El toggle permite enviar la última ventana en foco al monitor o escritorio virtual alterno para comodidad del usuario.
-- **Soporte a traspaso de ventanas vía arrastre:** Capacidad de arrastrar con el ratón la ventana a otro monitor o escritorio virtual disponible con reacomodo instantáneo de la composición. 
+- **Soporte a traspaso de ventanas vía arrastre:** Capacidad de arrastrar con el ratón la ventana a otro monitor o escritorio virtual disponible con reacomodo instantáneo de la composición.
+- **Persistencia Topológica de Sesión (v2.8):** El motor ahora guarda en segundo plano tu historial topológico. Al reiniciar el motor o KWin, el layout se restaura con tu orden previo exacto, evitando un reacomodo de ventanas no deseado.
+- **Reglas Dinámicas y Cuarentenas Integradas (v2.8):** Puedes definir desde la interfaz gráfica (GUI) qué clases de ventanas forzar como flotantes, PiP o cuáles poner en cuarentena, inyectándose en el compositor Wayland en tiempo real sin reiniciar.
 
 ### 🏗️ Arquitectura de Comunicación (High-Performance Bridge)
 El sistema utiliza un puente de baja latencia altamente desacoplado entre el compositor KWin y el motor Raven, optimizado para los estándares de **Plasma 6 (Wayland)**:

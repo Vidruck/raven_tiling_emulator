@@ -49,4 +49,11 @@ pub enum RavenAction {
         /// Identificador de la ventana.
         window_id: String,
     },
+    /// Notifica al bridge que la pantalla está próxima o en estado de saturación.
+    SaturationWarning {
+        /// Número máximo calculado de ventanas estables en la pantalla activa.
+        cmax: usize,
+        /// Número actual de ventanas activas.
+        active: usize,
+    },
 }

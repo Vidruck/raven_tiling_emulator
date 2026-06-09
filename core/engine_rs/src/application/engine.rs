@@ -87,7 +87,10 @@ impl TilingEngine {
     ///
     /// # Parámetros
     /// * `current_windows` - Estado actual de ventanas activas reportadas por el compositor.
-    pub fn update_history(&mut self, current_windows: &[WindowNode]) {
+    pub fn update_history(&mut self, current_windows: &[WindowNode]) -> bool {
+        let initial_len = self.window_history.len();
+        let initial_order = self.window_history.clone();
+
         self.window_history
             .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
 
@@ -95,6 +98,12 @@ impl TilingEngine {
             if !self.window_history.contains(&win.window_id) && !win.is_floating {
                 self.window_history.push_back(win.window_id.clone());
             }
+        }
+
+        if initial_len != self.window_history.len() || initial_order != self.window_history {
+            true
+        } else {
+            false
         }
     }
 }

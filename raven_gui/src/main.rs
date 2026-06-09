@@ -9,6 +9,17 @@ use std::process::Command;
 ///
 /// Contiene parámetros serializables (serializable parameters) para su persistencia en disco.
 #[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct WindowRule {
+    pub class: String,
+    pub action: String,
+    #[serde(default)]
+    pub pip: bool,
+}
+
+/// Estructura de configuración (configuration structure) del motor Raven.
+///
+/// Contiene parámetros serializables (serializable parameters) para su persistencia en disco.
+#[derive(Debug, Deserialize, Serialize, Clone)]
 struct RavenConfig {
     /// Espacio (gaps) por defecto entre ventanas en píxeles.
     pub default_gaps: i32,
@@ -20,10 +31,34 @@ struct RavenConfig {
     pub master_ratio: f32,
     /// Posición por defecto para ventanas Picture-in-Picture (PiP).
     pub pip_position: String,
+    /// Altura del panel persistente del shell en píxeles (para cálculo de saturación).
+    #[serde(default = "default_panel_height")]
+    pub panel_height: i32,
+    /// Preset de layout activo: dense, aesthetic, functional, balanced, simple.
+    #[serde(default = "default_preset")]
+    pub layout_preset: String,
+    #[serde(default = "default_quarantine")]
+    pub quarantine_classes: Vec<String>,
+    #[serde(default)]
+    pub window_rules: Vec<WindowRule>,
 }
 
+fn default_quarantine() -> Vec<String> {
+    vec![
+        "firefox".into(),
+        "electron".into(),
+        "zen-browser".into(),
+        "code".into(),
+        "spotify".into(),
+        "floorp".into(),
+        "chrome".into(),
+    ]
+}
+
+fn default_panel_height() -> i32 { 30 }
+fn default_preset() -> String { "balanced".to_string() }
+
 impl Default for RavenConfig {
-    /// Inicializa la configuración con los valores predeterminados (default values).
     fn default() -> Self {
         Self {
             default_gaps: 8,
@@ -31,22 +66,39 @@ impl Default for RavenConfig {
             nmaster: 1,
             master_ratio: 0.5,
             pip_position: "bottom-right".to_string(),
+            panel_height: 30,
+            layout_preset: "balanced".to_string(),
+            quarantine_classes: default_quarantine(),
+            window_rules: vec![],
         }
     }
 }
 
+/// Preset de layout para la UI (espejo del dominio Rust).
+struct PresetDef {
+    name: &'static str,
+    display: &'static str,
+    desc: &'static str,
+    gaps: i32,
+    ratio: f32,
+}
+
+const PRESETS: &[PresetDef] = &[
+    PresetDef { name: "dense",      display: "Cargada y Comprimida", desc: "Sin gaps. Máxima densidad de ventanas.", gaps: 0, ratio: 0.5 },
+    PresetDef { name: "aesthetic",  display: "Estética Raven",        desc: "Proporción áurea con gaps amplios.",    gaps: 16, ratio: 0.618 },
+    PresetDef { name: "functional", display: "Funcional",             desc: "Panel maestro amplio, secundarias en stack.", gaps: 8, ratio: 0.7 },
+    PresetDef { name: "balanced",   display: "Punto Medio",           desc: "Distribución igualitaria entre todas.", gaps: 8, ratio: 0.5 },
+    PresetDef { name: "simple",     display: "Pues Sirve",            desc: "Lineal y simple. Ideal para laptops 14\".", gaps: 4, ratio: 0.5 },
+];
+
 /// Aplicación gráfica del Centro de Bienvenida (Welcome Center) de Raven.
 struct RavenGuiApp {
-    /// Estado de configuración en memoria (in-memory config).
     config: RavenConfig,
-    /// Ruta del archivo de configuración (config file path) JSON.
     config_path: PathBuf,
-    /// Mensaje de estado (status message) para retroalimentación visual.
     status_msg: String,
 }
 
 impl RavenGuiApp {
-    /// Crea una nueva instancia de `RavenGuiApp` cargando datos del disco.
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let home = env::var("HOME").unwrap_or_else(|_| "~".to_string());
         let config_path = PathBuf::from(format!("{}/.config/raven/raven.json", home));
@@ -57,74 +109,57 @@ impl RavenGuiApp {
             RavenConfig::default()
         };
 
-        Self {
-            config,
-            config_path,
-            status_msg: String::new(),
-        }
+        Self { config, config_path, status_msg: String::new() }
     }
 
-    /// Comprueba si el demonio (daemon) de Raven está activo mediante systemd.
     fn is_service_active(&self) -> bool {
         Command::new("systemctl")
-            .arg("--user")
-            .arg("is-active")
-            .arg("raven.service")
+            .args(["--user", "is-active", "raven.service"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "active")
             .unwrap_or(false)
     }
 
-    /// Lanza (start) el servicio de Raven.
     fn start_service(&mut self) {
-        let status = Command::new("systemctl")
-            .arg("--user")
-            .arg("start")
-            .arg("raven.service")
-            .status();
-
-        if status.is_ok() {
-            self.status_msg = "✅ Motor Raven iniciado con éxito.".to_string();
+        let ok = Command::new("systemctl")
+            .args(["--user", "start", "raven.service"])
+            .status()
+            .is_ok();
+        self.status_msg = if ok {
+            "✅ Motor Raven iniciado con éxito.".to_string()
         } else {
-            self.status_msg = "❌ Error al iniciar el servicio.".to_string();
-        }
+            "❌ Error al iniciar el servicio.".to_string()
+        };
     }
 
-    /// Detiene (stop) el servicio de Raven.
     fn stop_service(&mut self) {
-        let status = Command::new("systemctl")
-            .arg("--user")
-            .arg("stop")
-            .arg("raven.service")
-            .status();
-
-        if status.is_ok() {
-            self.status_msg = "🛑 Motor Raven apagado con éxito.".to_string();
+        let ok = Command::new("systemctl")
+            .args(["--user", "stop", "raven.service"])
+            .status()
+            .is_ok();
+        self.status_msg = if ok {
+            "🛑 Motor Raven apagado con éxito.".to_string()
         } else {
-            self.status_msg = "❌ Error al detener el servicio.".to_string();
-        }
+            "❌ Error al detener el servicio.".to_string()
+        };
     }
 
-    /// Guarda la configuración en disco y reinicia (restart) el motor de mosaico si está activo.
     fn save_and_restart(&mut self) {
         if let Some(parent) = self.config_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-
         if let Ok(json) = serde_json::to_string_pretty(&self.config) {
             if fs::write(&self.config_path, json).is_ok() {
                 if self.is_service_active() {
-                    let status = Command::new("systemctl")
-                        .arg("--user")
-                        .arg("restart")
-                        .arg("raven.service")
-                        .status();
-
-                    if status.is_ok() {
-                        self.status_msg = "✅ Configuración guardada y servicio reiniciado.".to_string();
+                    let ok = Command::new("systemctl")
+                        .args(["--user", "restart", "raven.service"])
+                        .status()
+                        .is_ok();
+                    self.status_msg = if ok {
+                        "✅ Configuración guardada y servicio reiniciado.".to_string()
                     } else {
-                        self.status_msg = "❌ Error al reiniciar el servicio.".to_string();
-                    }
+                        "❌ Error al reiniciar el servicio.".to_string()
+                    };
                 } else {
                     self.status_msg = "✅ Configuración guardada correctamente.".to_string();
                 }
@@ -133,33 +168,100 @@ impl RavenGuiApp {
             }
         }
     }
+
+    /// Dibuja un preview esquemático del layout foveal con egui::Painter.
+    fn draw_layout_preview(ui: &mut egui::Ui, ratio: f32, gaps: i32, is_dark: bool) {
+        let desired_size = egui::vec2(ui.available_width().min(320.0), 120.0);
+        let (rect, _) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
+
+        let painter = ui.painter_at(rect);
+        let bg = if is_dark {
+            egui::Color32::from_rgb(15, 23, 42)
+        } else {
+            egui::Color32::from_rgb(226, 232, 240)
+        };
+        painter.rect_filled(rect, 6.0, bg);
+
+        let gap_f = gaps as f32 * 0.5;
+        let w = rect.width();
+        let h = rect.height();
+
+        // Colores de paneles
+        let center_color = egui::Color32::from_rgb(0, 180, 216);
+        let side_color   = if is_dark { egui::Color32::from_rgb(30, 80, 120) } else { egui::Color32::from_rgb(100, 160, 200) };
+        let bot_color    = if is_dark { egui::Color32::from_rgb(20, 60, 100) } else { egui::Color32::from_rgb(130, 180, 210) };
+
+        let sidebar_w = w * (1.0 - ratio.clamp(0.35, 0.85)) / 2.0;
+        let center_w  = w - 2.0 * sidebar_w;
+        let bot_h     = h * 0.28;
+        let top_h     = h - bot_h;
+
+        // Panel Izquierdo
+        let left = egui::Rect::from_min_size(
+            rect.min + egui::vec2(gap_f, gap_f),
+            egui::vec2(sidebar_w - gap_f * 2.0, h - gap_f * 2.0),
+        );
+        painter.rect_filled(left, 4.0, side_color);
+        painter.text(left.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+
+        // Panel Central
+        let center = egui::Rect::from_min_size(
+            rect.min + egui::vec2(sidebar_w + gap_f, gap_f),
+            egui::vec2(center_w - gap_f * 2.0, top_h - gap_f * 2.0),
+        );
+        painter.rect_filled(center, 4.0, center_color);
+        painter.text(center.center(), egui::Align2::CENTER_CENTER, "1 (foco)", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+
+        // Panel Derecho
+        let right = egui::Rect::from_min_size(
+            rect.min + egui::vec2(sidebar_w + center_w + gap_f, gap_f),
+            egui::vec2(sidebar_w - gap_f * 2.0, h - gap_f * 2.0),
+        );
+        painter.rect_filled(right, 4.0, side_color);
+        painter.text(right.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+
+        // Panel Inferior Izq
+        let bot_left = egui::Rect::from_min_size(
+            rect.min + egui::vec2(sidebar_w + gap_f, top_h + gap_f),
+            egui::vec2(center_w / 2.0 - gap_f * 1.5, bot_h - gap_f * 2.0),
+        );
+        painter.rect_filled(bot_left, 4.0, bot_color);
+        painter.text(bot_left.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+
+        // Panel Inferior Der
+        let bot_right = egui::Rect::from_min_size(
+            rect.min + egui::vec2(sidebar_w + center_w / 2.0 + gap_f * 0.5, top_h + gap_f),
+            egui::vec2(center_w / 2.0 - gap_f * 1.5, bot_h - gap_f * 2.0),
+        );
+        painter.rect_filled(bot_right, 4.0, bot_color);
+        painter.text(bot_right.center(), egui::Align2::CENTER_CENTER, "5", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+    }
 }
 
 impl eframe::App for RavenGuiApp {
-    /// Renderiza y procesa los eventos del Centro de Bienvenida en tiempo de ejecución.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Paleta de colores dinámica (dynamic color palette) basada en el modo claro/oscuro del usuario (light/dark mode)
         let is_dark = ctx.style().visuals.dark_mode;
-        let mut visuals = if is_dark {
-            egui::Visuals::dark()
-        } else {
-            egui::Visuals::light()
-        };
+        let mut visuals = if is_dark { egui::Visuals::dark() } else { egui::Visuals::light() };
 
-        // Personalización de colores de acento y fondos de paneles
         if is_dark {
-            visuals.widgets.active.bg_fill = egui::Color32::from_rgb(0, 180, 216); // Cian brillante
-            visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(0, 119, 182); // Azul hover
-            visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(30, 41, 59); // Slate-800 (pizarra oscura)
-            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(15, 23, 42); // Slate-900 (fondo profundo)
+            visuals.widgets.active.bg_fill        = egui::Color32::from_rgb(0, 180, 216);
+            visuals.widgets.hovered.bg_fill       = egui::Color32::from_rgb(0, 119, 182);
+            visuals.widgets.inactive.bg_fill      = egui::Color32::from_rgb(30, 41, 59);
+            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(15, 23, 42);
         } else {
-            visuals.widgets.active.bg_fill = egui::Color32::from_rgb(0, 119, 182); // Azul
-            visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(3, 4, 94); // Azul oscuro hover
-            visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(226, 232, 240); // Slate-200 (gris claro)
-            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(241, 245, 249); // Slate-100 (fondo claro)
+            visuals.widgets.active.bg_fill        = egui::Color32::from_rgb(0, 119, 182);
+            visuals.widgets.hovered.bg_fill       = egui::Color32::from_rgb(3, 4, 94);
+            visuals.widgets.inactive.bg_fill      = egui::Color32::from_rgb(226, 232, 240);
+            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(241, 245, 249);
         }
         visuals.window_rounding = 12.0.into();
         ctx.set_visuals(visuals);
+
+        let accent = if is_dark {
+            egui::Color32::from_rgb(0, 180, 216)
+        } else {
+            egui::Color32::from_rgb(0, 119, 182)
+        };
 
         egui::TopBottomPanel::bottom("footer_panel").show(ctx, |ui| {
             ui.add_space(8.0);
@@ -171,7 +273,6 @@ impl eframe::App for RavenGuiApp {
                 if button.clicked() {
                     self.save_and_restart();
                 }
-
                 ui.add_space(12.0);
                 ui.label(egui::RichText::new(&self.status_msg).size(13.0));
             });
@@ -181,17 +282,16 @@ impl eframe::App for RavenGuiApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.spacing_mut().item_spacing = egui::vec2(12.0, 14.0);
 
-            // Cabecera / Banner del Centro de Bienvenida
             ui.vertical_centered(|ui| {
                 ui.add_space(8.0);
                 ui.heading(
-                    egui::RichText::new("🐦 Raven - Centro de Bienvenida")
+                    egui::RichText::new("🐦 Raven — Centro de Bienvenida")
                         .size(24.0)
                         .strong()
-                        .color(if is_dark { egui::Color32::from_rgb(0, 180, 216) } else { egui::Color32::from_rgb(0, 119, 182) }),
+                        .color(accent),
                 );
                 ui.label(
-                    egui::RichText::new("¡Bienvenido al motor nativo de mosaico para KDE Plasma 6!")
+                    egui::RichText::new("Motor nativo de mosaico para KDE Plasma 6 — v2.8")
                         .weak()
                         .size(13.0),
                 );
@@ -201,14 +301,14 @@ impl eframe::App for RavenGuiApp {
             ui.separator();
 
             egui::ScrollArea::vertical().show(ui, |ui| {
-                // Sección 1: Control del Motor
+
+                // ── Sección 1: Control del Motor ──
                 ui.group(|ui| {
                     ui.set_width(ui.available_width());
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new("⚙️ Control del Motor Raven").strong().size(15.0));
                             ui.add_space(10.0);
-
                             let active = self.is_service_active();
                             if active {
                                 ui.colored_label(egui::Color32::from_rgb(76, 201, 240), "● Activo");
@@ -216,25 +316,18 @@ impl eframe::App for RavenGuiApp {
                                 ui.colored_label(egui::Color32::from_rgb(247, 37, 133), "● Inactivo");
                             }
                         });
-
                         ui.add_space(4.0);
                         ui.label("Administra el demonio en segundo plano que gestiona tus ventanas.");
                         ui.add_space(6.0);
-
                         ui.horizontal(|ui| {
-                            let btn_start = ui.add_sized([130.0, 28.0], egui::Button::new("▶ Arrancar Motor"));
-                            if btn_start.clicked() {
+                            if ui.add_sized([130.0, 28.0], egui::Button::new("▶ Arrancar Motor")).clicked() {
                                 self.start_service();
                             }
-
                             ui.add_space(10.0);
-
-                            let btn_stop = ui.add_sized([130.0, 28.0], egui::Button::new("⏹ Apagar Motor"));
-                            if btn_stop.clicked() {
+                            if ui.add_sized([130.0, 28.0], egui::Button::new("⏹ Apagar Motor")).clicked() {
                                 self.stop_service();
                             }
                         });
-
                         ui.add_space(8.0);
                         ui.checkbox(
                             &mut self.config.tiling_enabled_on_startup,
@@ -245,7 +338,53 @@ impl eframe::App for RavenGuiApp {
 
                 ui.add_space(4.0);
 
-                // Sección 2: Ajustes Rápidos (Quick Settings)
+                // ── Sección 2: Presets de Layout ──
+                ui.group(|ui| {
+                    ui.set_width(ui.available_width());
+                    ui.vertical(|ui| {
+                        ui.label(egui::RichText::new("🎨 Preset de Composición Foveal").strong().size(15.0));
+                        ui.add_space(4.0);
+                        ui.label("Selecciona un perfil de distribución. Los valores de gaps y ratio se ajustarán automáticamente.");
+                        ui.add_space(8.0);
+
+                        let current_preset = self.config.layout_preset.clone();
+                        let mut selected_preset = current_preset.clone();
+
+                        for preset in PRESETS {
+                            let is_sel = preset.name == selected_preset;
+                            ui.horizontal(|ui| {
+                                if ui.radio(is_sel, egui::RichText::new(preset.display).strong()).clicked() {
+                                    selected_preset = preset.name.to_string();
+                                }
+                                ui.add_space(4.0);
+                                ui.label(egui::RichText::new(preset.desc).weak().size(12.0));
+                            });
+                        }
+
+                        // Aplicar preset si cambió
+                        if selected_preset != current_preset {
+                            if let Some(p) = PRESETS.iter().find(|p| p.name == selected_preset) {
+                                self.config.layout_preset = p.name.to_string();
+                                self.config.default_gaps  = p.gaps;
+                                self.config.master_ratio  = p.ratio;
+                            }
+                        }
+
+                        ui.add_space(10.0);
+                        ui.label(egui::RichText::new("Preview del Layout (5 ventanas):").size(12.0).weak());
+                        ui.add_space(4.0);
+                        Self::draw_layout_preview(
+                            ui,
+                            self.config.master_ratio,
+                            self.config.default_gaps,
+                            is_dark,
+                        );
+                    });
+                });
+
+                ui.add_space(4.0);
+
+                // ── Sección 3: Ajustes de Composición ──
                 ui.group(|ui| {
                     ui.set_width(ui.available_width());
                     ui.vertical(|ui| {
@@ -254,10 +393,24 @@ impl eframe::App for RavenGuiApp {
 
                         ui.horizontal(|ui| {
                             ui.label("Márgenes entre ventanas (Gaps):");
+                            ui.add(egui::Slider::new(&mut self.config.default_gaps, 0..=40).suffix(" px"));
+                        });
+
+                        ui.add_space(4.0);
+
+                        ui.horizontal(|ui| {
+                            ui.label("Ratio de ventana central:");
                             ui.add(
-                                egui::Slider::new(&mut self.config.default_gaps, 0..=40)
-                                    .suffix(" px"),
+                                egui::Slider::new(&mut self.config.master_ratio, 0.35..=0.85)
+                                    .fixed_decimals(2),
                             );
+                        });
+
+                        ui.add_space(4.0);
+
+                        ui.horizontal(|ui| {
+                            ui.label("Altura del panel del sistema (px):");
+                            ui.add(egui::Slider::new(&mut self.config.panel_height, 20..=80).suffix(" px"));
                         });
 
                         ui.add_space(4.0);
@@ -266,91 +419,128 @@ impl eframe::App for RavenGuiApp {
                             ui.label("Posición preferida de Picture-in-Picture (PiP):");
                             egui::ComboBox::from_id_source("pip_pos")
                                 .selected_text(match self.config.pip_position.as_str() {
-                                    "top-left" => "Superior Izquierda",
-                                    "top-right" => "Superior Derecha",
+                                    "top-left"    => "Superior Izquierda",
+                                    "top-right"   => "Superior Derecha",
                                     "bottom-left" => "Inferior Izquierda",
-                                    "bottom-right" => "Inferior Derecha",
-                                    _ => &self.config.pip_position,
+                                    "bottom-right"=> "Inferior Derecha",
+                                    other         => other,
                                 })
                                 .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut self.config.pip_position,
-                                        "top-left".to_string(),
-                                        "Superior Izquierda",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.config.pip_position,
-                                        "top-right".to_string(),
-                                        "Superior Derecha",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.config.pip_position,
-                                        "bottom-left".to_string(),
-                                        "Inferior Izquierda",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.config.pip_position,
-                                        "bottom-right".to_string(),
-                                        "Inferior Derecha",
-                                    );
+                                    ui.selectable_value(&mut self.config.pip_position, "top-left".to_string(),    "Superior Izquierda");
+                                    ui.selectable_value(&mut self.config.pip_position, "top-right".to_string(),   "Superior Derecha");
+                                    ui.selectable_value(&mut self.config.pip_position, "bottom-left".to_string(), "Inferior Izquierda");
+                                    ui.selectable_value(&mut self.config.pip_position, "bottom-right".to_string(),"Inferior Derecha");
                                 });
                         });
                     });
                 });
 
+                // ── Sección 4: Reglas y Cuarentenas ──
+                ui.group(|ui| {
+                    ui.set_width(ui.available_width());
+                    ui.vertical(|ui| {
+                        ui.label(egui::RichText::new("🛡️ Reglas y Excepciones").strong().size(15.0));
+                        ui.add_space(4.0);
+                        ui.label(egui::RichText::new("Clases en cuarentena (separadas por coma):").weak());
+                        
+                        let mut quarantine_str = self.config.quarantine_classes.join(", ");
+                        if ui.text_edit_singleline(&mut quarantine_str).changed() {
+                            self.config.quarantine_classes = quarantine_str
+                                .split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                        }
+
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new("Reglas específicas por clase de ventana:").weak());
+                        
+                        let mut rules_to_remove = Vec::new();
+                        for (i, rule) in self.config.window_rules.iter_mut().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.label("Clase:");
+                                ui.add(egui::TextEdit::singleline(&mut rule.class).desired_width(100.0));
+                                
+                                egui::ComboBox::from_id_source(format!("action_{}", i))
+                                    .selected_text(&rule.action)
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut rule.action, "float".to_string(), "Flotante (Float)");
+                                    });
+                                
+                                ui.checkbox(&mut rule.pip, "PiP");
+                                
+                                if ui.button("❌").clicked() {
+                                    rules_to_remove.push(i);
+                                }
+                            });
+                        }
+                        
+                        for idx in rules_to_remove.into_iter().rev() {
+                            self.config.window_rules.remove(idx);
+                        }
+
+                        if ui.button("➕ Agregar Regla").clicked() {
+                            self.config.window_rules.push(WindowRule {
+                                class: "".to_string(),
+                                action: "float".to_string(),
+                                pip: false,
+                            });
+                        }
+                    });
+                });
+
                 ui.add_space(4.0);
 
-                // Sección 3: Manual de Usuario Expandido
+                // ── Sección 5: Guía Rápida ──
                 ui.group(|ui| {
                     ui.set_width(ui.available_width());
                     ui.vertical(|ui| {
                         ui.label(egui::RichText::new("📖 Guía Rápida de Comportamiento").strong().size(15.0));
                         ui.add_space(4.0);
 
-                        ui.label(egui::RichText::new("🔄 Habilitar / Deshabilitar el Mosaico (Tiling Toggle):").strong());
-                        ui.label("• Puedes alternar el mosaico global haciendo clic sobre el icono en tu panel del sistema  o presionando 'Meta + Backspace'. Al apagarlo, las ventanas recuperarán su comportamiento flotante ordinario.");
+                        ui.label(egui::RichText::new("🔄 Habilitar / Deshabilitar el Mosaico:").strong());
+                        ui.label("• Alterna el mosaico global con 'Meta + Backspace' o desde el Plasmoid.");
 
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("📊 Ajuste de Proporción (Ratio) & Reinicio Automático:").strong());
-                        ui.label("• Modifica el tamaño de la ventana activa con 'Meta + H / L'. Las demás se ajustarán.");
-                        ui.colored_label(
-                            if is_dark { egui::Color32::from_rgb(76, 201, 240) } else { egui::Color32::from_rgb(0, 119, 182) },
-                            "• ¡Orden Garantizado!: Al abrir o cerrar cualquier ventana, el ratio se restablece a 0.5 (50-50) para evitar geometrías deformes.",
-                        );
+                        ui.label(egui::RichText::new("📊 Ajuste de Proporción & Reinicio Automático:").strong());
+                        ui.label("• Modifica el ratio con 'Meta + H / L'. Al abrir o cerrar ventanas, el ratio se restablece a 0.5.");
 
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("🚚 Intercambio (Swap) & Migración de Ventanas (Migration):").strong());
-                        ui.label("• Usa los botones del Plasmoide o presiona 'Meta + Shift + J / K' para alternar la posición física de dos ventanas en el mosaico.");
-                        ui.label("• Envía la ventana activa a otro monitor físico o escritorio virtual con 'Meta + Alt + [Flechas]'. El mosaico restante se reorganizará de manera limpia.");
+                        ui.label(egui::RichText::new("🗂️ Control de Capacidad (nmaster):").strong());
+                        ui.colored_label(accent, "• Meta + I / D: Incrementa/Decrementa el nº de ventanas en el área central.");
+
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new("🚚 Intercambio & Migración:").strong());
+                        ui.label("• 'Meta + Shift + J / K': Intercambia posición de ventanas.");
+                        ui.label("• 'Meta + Alt + Flechas': Migra la ventana activa a otro monitor/escritorio.");
 
                         ui.add_space(8.0);
-                        ui.label(egui::RichText::new("⌨️ Atajos de Teclado Rápidos (Shortcuts):").strong());
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("Meta + H / L").strong().color(egui::Color32::LIGHT_GRAY));
-                            ui.label("→ Ajustar proporción (Ratio) de la ventana");
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("Meta + Shift + J / K").strong().color(egui::Color32::LIGHT_GRAY));
-                            ui.label("→ Intercambiar (Swap) posición de ventanas");
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("Meta + Alt + Flechas").strong().color(egui::Color32::LIGHT_GRAY));
-                            ui.label("→ Migrar ventana en foco a otro escritorio / monitor");
-                        });
+                        ui.label(egui::RichText::new("⌨️ Atajos de Teclado:").strong());
+                        for (key, desc) in [
+                            ("Meta + H / L",         "Ajustar ratio de la ventana"),
+                            ("Meta + I / D",         "Incrementar/Decrementar nmaster"),
+                            ("Meta + Shift + J / K", "Intercambiar posición de ventanas"),
+                            ("Meta + Alt + Flechas", "Migrar ventana a otro escritorio/monitor"),
+                            ("Meta + G",             "Toggle global del mosaico"),
+                        ] {
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new(key).strong().color(egui::Color32::LIGHT_GRAY));
+                                ui.label(format!("→ {}", desc));
+                            });
+                        }
                     });
                 });
             });
-
         });
     }
 }
 
-/// Punto de entrada principal (main entrypoint) para el Centro de Bienvenida de Raven.
+/// Punto de entrada principal del Centro de Bienvenida de Raven v2.8.
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([650.0, 720.0])
-            .with_title("Raven - Centro de Bienvenida"),
+            .with_inner_size([700.0, 800.0])
+            .with_title("Raven — Centro de Bienvenida v2.8"),
         ..Default::default()
     };
 

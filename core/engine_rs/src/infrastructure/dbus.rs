@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
+use tracing::debug;
 use zbus::interface;
 
 use crate::application::controller::RavenController;
@@ -246,6 +247,16 @@ impl From<RavenAction> for TilingCommand {
                 target_ws: None,
                 direction: None,
             },
+            RavenAction::SaturationWarning { cmax, active } => TilingCommand {
+                action: "saturation_warning".to_string(),
+                window_id: None,
+                x: Some(cmax as i32),
+                y: Some(active as i32),
+                width: None,
+                height: None,
+                target_ws: None,
+                direction: None,
+            },
         }
     }
 }
@@ -320,7 +331,43 @@ impl RavenDBusService {
                 }
                 let dbus_commands: Vec<TilingCommand> =
                     commands.into_iter().map(Into::into).collect();
-                queue.extend(dbus_commands);
+
+                // --- Canal Push-Based (v2.8) ---
+                // Intentar invocar receiveCommands() directamente en el bridge JS.
+                // Si el método está disponible en org.kde.kwin, el bridge lo recibe
+                // de forma inmediata sin esperar el próximo ciclo de polling.
+                // Si falla (bridge no expuesto o script no cargado), los comandos
+                // se encolan en pending_commands para ser recogidos por el fallback.
+                let push_ok = if !dbus_commands.is_empty() {
+                    if let Ok(json) = serde_json::to_string(&dbus_commands) {
+                        // La llamada se hace fire-and-forget; un error no es fatal.
+                        match zbus::Connection::session().await {
+                            Ok(conn) => {
+                                let result = conn
+                                    .call_method(
+                                        Some("org.kde.kwin.Script"),
+                                        "/Scripting",
+                                        Some("org.kde.kwin.Script"),
+                                        "receiveCommands",
+                                        &json,
+                                    )
+                                    .await;
+                                result.is_ok()
+                            }
+                            Err(_) => false,
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    true // sin comandos que empujar, no necesita fallback
+                };
+
+                if !push_ok {
+                    // Fallback: encolar para que getPendingCommands() los entregue
+                    debug!("[PUSH] Canal push no disponible, usando cola de fallback.");
+                    queue.extend(dbus_commands);
+                }
             }
         });
     }
@@ -401,13 +448,17 @@ impl RavenDBusService {
         self.dispatch_shortcut("increment_gaps", amount).await;
     }
 
-    /// Incrementa el límite óptimo de ventanas en la espiral de Dwindle BSP.
+    /// Incrementa el límite óptimo de ventanas activas en la composición foveal.
     #[zbus(name = "incrementMaster")]
-    async fn increment_master(&self) {}
+    async fn increment_master(&self) {
+        self.dispatch_shortcut("increment_nmaster", 1).await;
+    }
 
-    /// Decrementa el límite óptimo de ventanas en la espiral de Dwindle BSP.
+    /// Decrementa el límite óptimo de ventanas activas en la composición foveal.
     #[zbus(name = "decrementMaster")]
-    async fn decrement_master(&self) {}
+    async fn decrement_master(&self) {
+        self.dispatch_shortcut("decrement_nmaster", 1).await;
+    }
 
     /// Aumenta el ratio de división (split ratio) asimétrica de la espiral BSP.
     #[zbus(name = "increaseRatio")]
@@ -425,6 +476,22 @@ impl RavenDBusService {
     #[zbus(name = "focusNext")]
     async fn focus_next(&self) {
         self.dispatch_shortcut("focus_next", 0).await;
+    }
+
+    /// Retorna la lista de clases en cuarentena configuradas.
+    #[zbus(name = "getQuarantineClasses")]
+    async fn get_quarantine_classes(&self) -> String {
+        let controller = self.controller.lock().await;
+        serde_json::to_string(&controller.get_config().quarantine_classes)
+            .unwrap_or_else(|_| String::from("[]"))
+    }
+
+    /// Retorna la lista de reglas de ventanas configuradas.
+    #[zbus(name = "getWindowRules")]
+    async fn get_window_rules(&self) -> String {
+        let controller = self.controller.lock().await;
+        serde_json::to_string(&controller.get_config().window_rules)
+            .unwrap_or_else(|_| String::from("[]"))
     }
 
     /// Envía el foco a la ventana anterior del mosaico.

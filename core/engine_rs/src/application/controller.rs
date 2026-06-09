@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::{info, warn};
 
 use crate::application::engine::TilingEngine;
 use crate::domain::action::RavenAction;
 use crate::domain::error::RavenError;
 use crate::domain::geometry::{Rect, WindowNode};
+use crate::domain::saturation::{calculate_screen_capacity, SaturationState};
 
 /// Rastreador de oscilación rápida (flapping) de ventana.
 ///
@@ -46,12 +48,6 @@ pub struct RavenController {
     flap_registry: HashMap<String, FlapTracker>,
     /// Historial de geometrías explícitamente ordenadas por el motor.
     commanded_geometries: HashMap<String, CommandedGeometry>,
-    /// Migraciones de ventanas que se encuentran en tránsito asíncrono.
-    #[allow(dead_code)]
-    pending_migrations: HashMap<String, String>,
-    /// Ordenamiento de visibilidad de las ventanas de mosaico activas.
-    #[allow(dead_code)]
-    visible_windows_order: Vec<String>,
     /// Identificador de la ventana activa enfocada (focused window).
     pub active_window_id: Option<String>,
     /// Cantidad de ventanas activas en el último cambio de estado.
@@ -63,17 +59,21 @@ impl RavenController {
     ///
     /// # Parámetros
     /// * `engine` - Instancia del motor de mosaico (tiling engine) a utilizar.
-    pub fn new(engine: TilingEngine) -> Self {
+    pub fn new(mut engine: TilingEngine) -> Self {
+        engine.window_history = Self::load_window_history();
         RavenController {
             engine,
             last_known_layout: HashMap::new(),
             flap_registry: HashMap::new(),
             commanded_geometries: HashMap::new(),
-            pending_migrations: HashMap::new(),
-            visible_windows_order: Vec::new(),
             active_window_id: None,
             last_active_window_count: 0,
         }
+    }
+
+    /// Retorna una referencia a la configuración actual del motor.
+    pub fn get_config(&self) -> &crate::infrastructure::config::RavenConfig {
+        &self.engine.config
     }
 
     /// Restablece todo el estado interno y registros temporales del controlador.
@@ -81,12 +81,40 @@ impl RavenController {
         self.last_known_layout.clear();
         self.flap_registry.clear();
         self.commanded_geometries.clear();
-        self.pending_migrations.clear();
-        self.visible_windows_order.clear();
         self.engine.current_workspaces.clear();
         self.engine.current_windows.clear();
         self.active_window_id = None;
         self.last_active_window_count = 0;
+    }
+
+    fn load_window_history() -> std::collections::VecDeque<String> {
+        let home = std::env::var("HOME").unwrap_or_else(|_| String::from("~"));
+        let mut path = std::path::PathBuf::from(home);
+        path.push(".cache");
+        path.push("raven");
+        path.push("history.json");
+
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(history) = serde_json::from_str(&content) {
+                return history;
+            }
+        }
+        std::collections::VecDeque::new()
+    }
+
+    fn persist_window_history(history: std::collections::VecDeque<String>) {
+        tokio::spawn(async move {
+            let home = std::env::var("HOME").unwrap_or_else(|_| String::from("~"));
+            let mut path = std::path::PathBuf::from(home);
+            path.push(".cache");
+            path.push("raven");
+            let _ = tokio::fs::create_dir_all(&path).await;
+            path.push("history.json");
+            
+            if let Ok(json) = serde_json::to_string(&history) {
+                let _ = tokio::fs::write(path, json).await;
+            }
+        });
     }
 
     /// Determina si el motor de mosaico (tiling engine) está operativo.
@@ -118,36 +146,47 @@ impl RavenController {
                 last_minimized: win.is_minimized,
             });
 
-        // Comprobamos si la ventana cambió verdaderamente de geometría (geometry) o de estado de minimización (minimized)
-        let has_changed = match tracker.last_rect {
-            Some(r) => r != win.geometry || tracker.last_minimized != win.is_minimized,
-            None => true,
-        };
-
-        // Guardamos el estado para futuras comparaciones
-        tracker.last_rect = Some(win.geometry);
-        tracker.last_minimized = win.is_minimized;
+        if win.is_minimized != tracker.last_minimized {
+            tracker.last_minimized = win.is_minimized;
+            tracker.toggle_count = 0;
+            return false;
+        }
 
         if tracker.is_penalized {
-            if now - tracker.last_toggle_time > 400 {
+            if now - tracker.last_toggle_time > 8000 {
                 tracker.is_penalized = false;
                 tracker.toggle_count = 0;
+                warn!(
+                    "[Controller] Ventana {} liberada de penalización.",
+                    win.window_id
+                );
             } else {
                 return true;
             }
         }
 
-        // Solo incrementamos el contador de oscilación (toggle count) si hubo un cambio real
-        if has_changed {
-            if now - tracker.last_toggle_time < 400 {
+        let is_jumping = match tracker.last_rect {
+            Some(old_r) => {
+                let dx = (old_r.x - win.geometry.x).abs();
+                let dy = (old_r.y - win.geometry.y).abs();
+                let dw = (old_r.width - win.geometry.width).abs();
+                let dh = (old_r.height - win.geometry.height).abs();
+                dx > 10 || dy > 10 || dw > 10 || dh > 10
+            }
+            None => false,
+        };
+
+        tracker.last_rect = Some(win.geometry);
+
+        if is_jumping {
+            if now - tracker.last_toggle_time < 300 {
                 tracker.toggle_count += 1;
-                if tracker.toggle_count > 8 {
-                    println!(
-                        "[DEFENSA] Cortocircuito de oscilación rápida (flapping) activo para: {}.",
+                if tracker.toggle_count >= 5 {
+                    tracker.is_penalized = true;
+                    warn!(
+                        "[Controller] Ventana {} penalizada por oscilación (flap detectado).",
                         win.window_id
                     );
-                    tracker.is_penalized = true;
-                    tracker.last_toggle_time = now;
                     return true;
                 }
             } else {
@@ -182,7 +221,11 @@ impl RavenController {
             .iter()
             .map(|w| (w.window_id.clone(), w.clone()))
             .collect();
-        self.engine.update_history(&windows);
+        
+        let history_changed = self.engine.update_history(&windows);
+        if history_changed {
+            Self::persist_window_history(self.engine.window_history.clone());
+        }
 
         let mut healthy_windows = Vec::new();
         for win in windows {
@@ -221,6 +264,12 @@ impl RavenController {
             self.active_window_id.clone(),
         )?;
         let mut commands = Vec::new();
+
+        // BUG-06: Purgar commanded_geometries de ventanas que ya no existen
+        let active_ids: std::collections::HashSet<&String> =
+            windows.iter().map(|w| &w.window_id).collect();
+        self.commanded_geometries
+            .retain(|id, _| active_ids.contains(id));
 
         for (wid, rect) in &new_layout {
             let needs_move = match self.last_known_layout.get(wid) {
@@ -269,7 +318,7 @@ impl RavenController {
 
                 if outputs.len() > 1 && outputs.iter().any(|o| o != &win_node.output) {
                     if let Some(target_out) = outputs.iter().find(|&o| o != &win_node.output) {
-                        println!(
+                        info!(
                             "[TOPOLOGY] Desalojo BSP: Enviando {} al monitor {}",
                             evicted_id, target_out
                         );
@@ -283,13 +332,53 @@ impl RavenController {
 
 
 
-                println!(
+                info!(
                     "[TOPOLOGY] Desalojo BSP sin escape para {}. Minimizando.",
                     evicted_id
                 );
                 commands.push(RavenAction::MinimizeWindow {
                     window_id: evicted_id.clone(),
                 });
+            }
+        }
+
+        // --- Motor de Composición Predictiva ---
+        // Calcular el estado de saturación por cada workspace activo
+        for (ws_id, ws_rect) in &workspaces {
+            let ws_active = windows
+                .iter()
+                .filter(|w| !w.is_floating && !w.is_minimized && w.workspace_id == *ws_id)
+                .count();
+
+            if ws_active == 0 {
+                continue;
+            }
+
+            let cap = calculate_screen_capacity(
+                ws_rect.width,
+                ws_rect.height,
+                self.engine.config.default_gaps,
+                self.engine.config.panel_height,
+                300, // min_w funcional
+                250, // min_h funcional
+                ws_active,
+            );
+
+            match cap.state {
+                SaturationState::PreSaturation | SaturationState::Saturated => {
+                    commands.push(RavenAction::SaturationWarning {
+                        cmax: cap.cmax,
+                        active: ws_active,
+                    });
+                }
+                SaturationState::Overloaded => {
+                    // Ya manejado por evicted_windows arriba
+                    tracing::warn!(
+                        "[SATURACIÓN] Pantalla {} sobrecargada: {} ventanas / Cmax={}",
+                        ws_id, ws_active, cap.cmax
+                    );
+                }
+                SaturationState::Fluid => {}
             }
         }
 
@@ -347,6 +436,17 @@ impl RavenController {
             "increment_gaps" => {
                 self.engine.config.default_gaps =
                     std::cmp::max(0, self.engine.config.default_gaps + payload);
+                needs_recalc = true;
+            }
+            // BUG-01: handlers de nmaster ahora implementados correctamente
+            "increment_nmaster" => {
+                self.engine.config.nmaster =
+                    (self.engine.config.nmaster + 1).min(8);
+                needs_recalc = true;
+            }
+            "decrement_nmaster" => {
+                self.engine.config.nmaster =
+                    self.engine.config.nmaster.saturating_sub(1).max(1);
                 needs_recalc = true;
             }
             "increase_ratio" => {

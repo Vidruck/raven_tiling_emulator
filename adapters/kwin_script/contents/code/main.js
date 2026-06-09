@@ -1,24 +1,55 @@
 /**
- * @fileoverview Puente de Raven (Raven Bridge) para KDE Plasma 6 (Wayland).
+ * @fileoverview Puente de Raven (Raven Bridge) para KDE Plasma 6 (Wayland) — v2.8
  * Proporciona la integración entre el compositor de ventanas KWin y el
  * motor de mosaico (tiling engine) nativo en Rust a través de D-Bus.
+ *
+ * Arquitectura Push-Based (v2.8):
+ *   - El daemon Rust invoca receiveCommands() directamente cuando calcula un layout.
+ *   - Si el push falla o el bridge no está listo, listenForCommands() actúa como fallback
+ *     con un intervalo extendido de 500ms para minimizar carga.
  *
  * @author Alejandro González Hernández (Vidruck)
  */
 
+// --- Globals de estado ---
 var _debounceTimer = null;
 var _is_listening = false;
 var _watchdog_timer = null;
-var _active_timers = [];
-var _quarantine_classes = [
-  "firefox",
-  "electron",
-  "zen-browser",
-  "code",
-  "spotify",
-  "floorp",
-  "chrome",
-];
+var _push_mode_active = false;  // true cuando el canal push D-Bus está funcionando
+
+// Diccionario global de estado de ventanas indexado por internalId (UUID string).
+// Evita crear objetos temporales en los manejadores de eventos.
+var _window_state = {};
+
+// Lista de clases de ventana que requieren cuarentena de estabilización geométrica.
+var _quarantine_classes = [];
+
+// Lista de reglas de ventanas.
+var _window_rules = [];
+
+// --- Pool estático de timers reutilizables ---
+// Evita la creación/destrucción dinámica de QTimer que presiona al GC de QJSEngine.
+var TIMER_POOL_SIZE = 10;
+var _timer_pool = [];
+var _timer_pool_ready = false;
+
+/**
+ * Inicializa el pool de timers estáticos preasignados.
+ * Debe llamarse una sola vez durante init().
+ */
+function initTimerPool() {
+  try {
+    for (var i = 0; i < TIMER_POOL_SIZE; i++) {
+      var t = new QTimer();
+      t.singleShot = true;
+      _timer_pool.push({ timer: t, busy: false, callback: null });
+    }
+    _timer_pool_ready = true;
+  } catch (e) {
+    print("[Raven] Error inicializando pool de timers: " + e);
+    _timer_pool_ready = false;
+  }
+}
 
 try {
   _debounceTimer = new QTimer();
@@ -26,7 +57,7 @@ try {
   _debounceTimer.singleShot = true;
   _debounceTimer.timeout.connect(syncState);
 } catch (e) {
-  print("[Raven Bridge] Error inicializando timer global: " + e);
+  print("[Raven Bridge] Error inicializando timer de debounce: " + e);
 }
 
 /**
@@ -126,7 +157,7 @@ function isFloating(w) {
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) {
       return true;
     }
-    if (w.maximizeMode == 3 || w.fullScreen) {
+    if (w.fullScreen) {
       return true;
     }
 
@@ -149,6 +180,23 @@ function isFloating(w) {
       strCap.indexOf("immagine nell'immagine") !== -1 ||
       strCap.indexOf("pip") !== -1 ||
       w.keepAbove;
+      
+    // Evaluamos reglas dinámicas
+    if (_window_rules && _window_rules.length > 0) {
+      for (var i = 0; i < _window_rules.length; i++) {
+        var rule = _window_rules[i];
+        if (rule && rule.class && strClass.indexOf(rule.class.toLowerCase()) !== -1) {
+          if (rule.pip) {
+            isPip = true;
+          }
+          if (rule.action === "float") {
+            if (isPip && !w.keepAbove) w.keepAbove = true;
+            return true;
+          }
+        }
+      }
+    }
+
     if (isPip && !w.keepAbove) {
       w.keepAbove = true;
     }
@@ -493,13 +541,19 @@ function applyCommands(commandsJson) {
           if (cmd.action === "move") {
             try {
               if (
-                w.maximizeMode === 3 ||
                 w.interactiveMove ||
                 w.interactiveResize ||
                 w.__raven_ui_migrating
               ) {
                 break;
               }
+              
+              // Forzar desmaximización antes de aplicar frameGeometry
+              // Si la ventana está maximizada (interna de KWin), ignorará los gaps o el frameGeometry dictado
+              if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
+                w.setMaximize(false, false);
+              }
+
               w.__raven_mutating = true;
               w.frameGeometry = {
                 x: Math.round(cmd.x),
@@ -585,45 +639,79 @@ function applyCommands(commandsJson) {
 }
 
 /**
- * Crea y registra un temporizador (timer) de disparo único (single shot) para ejecutar una retrollamada (callback).
+ * Ejecuta una función después de un retardo usando el pool estático de timers.
+ * Evita crear/destruir QTimer dinámicamente (reduce presión sobre el GC de QJSEngine).
  *
- * @param {function} callback - Función de retrollamada a ejecutar al completarse el tiempo.
+ * @param {function} callback - Función a ejecutar al completarse el tiempo.
  * @param {number} ms - Tiempo de espera en milisegundos.
- * @returns {QTimer|null} Instancia del temporizador creado o null si falló la inicialización.
+ * @returns {object|null} Entrada del pool usada, o null si no hay disponibles.
  */
 function setKWinTimeout(callback, ms) {
-  try {
-    var timer = new QTimer();
-    timer.interval = ms;
-    timer.singleShot = true;
-    _active_timers.push(timer);
-    timer.timeout.connect(function () {
-      try {
-        callback();
-      } catch (e) {
-      } finally {
-        try {
-          timer.stop();
-        } catch (err) {}
-        var idx = _active_timers.indexOf(timer);
-        if (idx !== -1) {
-          _active_timers.splice(idx, 1);
-        }
+  // Intentar usar un slot disponible del pool estático
+  if (_timer_pool_ready) {
+    for (var i = 0; i < _timer_pool.length; i++) {
+      var slot = _timer_pool[i];
+      if (!slot.busy) {
+        slot.busy = true;
+        slot.callback = callback;
+        slot.timer.interval = ms;
+        // Reconectar el timeout con una función estática que referencia el slot por índice
+        (function(s) {
+          slot.timer.timeout.disconnect();
+          slot.timer.timeout.connect(function () {
+            s.busy = false;
+            try { s.callback(); } catch(e) {}
+            s.callback = null;
+          });
+        })(slot);
+        slot.timer.start();
+        return slot;
       }
+    }
+  }
+  // Fallback: crear timer efímero si el pool está lleno
+  try {
+    var t = new QTimer();
+    t.interval = ms;
+    t.singleShot = true;
+    t.timeout.connect(function () {
+      try { callback(); } catch(e) {}
+      try { t.stop(); } catch(err) {}
     });
-    timer.start();
-    return timer;
+    t.start();
+    return t;
   } catch (e) {
-    try {
-      callback();
-    } catch (err) {}
+    try { callback(); } catch (err) {}
     return null;
   }
 }
 
 /**
- * Inicia el proceso de escucha asíncrona de comandos pendientes desde el demonio (daemon) mediante D-Bus.
- * Cuenta con un temporizador supervisor (watchdog timer) para recuperarse de posibles bloqueos.
+ * CANAL PUSH (v2.8): Método público invocado directamente por el daemon Rust via D-Bus.
+ * Cuando el daemon calcula un nuevo layout, llama a este método en lugar de esperar
+ * a que el bridge lo solicite (eliminando la latencia del long-polling).
+ *
+ * Al recibir comandos por push, activa _push_mode_active para que el fallback
+ * (listenForCommands) se duerma y no consuma CPU innecesariamente.
+ *
+ * @param {string} commandsJson - Carga de comandos serializada en JSON desde el daemon.
+ */
+function receiveCommands(commandsJson) {
+  // Activar modo push: el fallback pollér pausará su frecuencia
+  if (!_push_mode_active) {
+    _push_mode_active = true;
+    print("[Raven Bridge] ✅ Canal Push D-Bus activo. Reduciendo frecuencia de fallback.");
+  }
+  if (commandsJson && commandsJson !== "[]") {
+    applyCommands(commandsJson);
+  }
+}
+
+/**
+ * CANAL FALLBACK: Escucha comandos pendientes mediante polling cuando el canal push
+ * no está disponible. Intervalo base: 500ms en reposo, 30ms cuando hay actividad.
+ * Si _push_mode_active está activado, el intervalo se extiende a 2000ms para
+ * minimizar el impacto en CPU mientras el canal push opera.
  */
 function listenForCommands() {
   if (_is_listening) {
@@ -656,9 +744,11 @@ function listenForCommands() {
 
         if (response && response !== "[]") {
           applyCommands(response);
-          setKWinTimeout(listenForCommands, 30);
+          // Hay actividad: sondear rápido, pero si push está activo, es un extra
+          setKWinTimeout(listenForCommands, _push_mode_active ? 2000 : 30);
         } else {
-          setKWinTimeout(listenForCommands, 350);
+          // Reposo: 500ms en modo normal, 2000ms si el push está cubriendo el trabajo
+          setKWinTimeout(listenForCommands, _push_mode_active ? 2000 : 500);
         }
       },
     );
@@ -780,87 +870,21 @@ function bindWindow(w) {
  * Inicializa el script puente de Raven conectando los listeners de KWin y disparando la sincronización inicial.
  */
 function init() {
-  print("[Raven Bridge] Inicializando v2.7.1...");
+  print("[Raven Bridge] Inicializando v2.8 (Push-Based con Fallback)...");
+
+  // Inicializar pool de timers estáticos (debe ser lo primero)
+  initTimerPool();
 
   var initialWindows = workspace.windowList();
   for (var i = 0; i < initialWindows.length; i++) {
     bindWindow(initialWindows[i]);
   }
 
-  workspace.windowAdded.connect(function (w) {
-    if (!isManageable(w)) {
-      return;
-    }
-    setKWinTimeout(function () {
-      if (!w || w.deleted) {
-        return;
-      }
-
-      var strClass = w.resourceClass
-        ? w.resourceClass.toString().toLowerCase()
-        : "";
-      var needsQuarantine = false;
-
-      if (strClass === "") {
-        needsQuarantine = true;
-      } else {
-        for (var i = 0; i < _quarantine_classes.length; i++) {
-          if (strClass.indexOf(_quarantine_classes[i]) !== -1) {
-            needsQuarantine = true;
-            break;
-          }
-        }
-      }
-
-      if (needsQuarantine) {
-        w.__raven_quarantined = true;
-        bindWindow(w);
-
-        var stabTimer = new QTimer();
-        stabTimer.interval = 250;
-        stabTimer.singleShot = true;
-        w.__raven_stab_timer = stabTimer;
-
-        stabTimer.timeout.connect(function () {
-          if (w && !w.deleted) {
-            w.__raven_quarantined = false;
-            w.__raven_strict_birth = true;
-            w.__raven_stab_timer = null;
-            requestStateSync();
-          }
-          stabTimer.destroy();
-        });
-        stabTimer.start();
-      } else {
-        bindWindow(w);
-        requestStateSync();
-      }
-    }, 60);
-  });
-
-  workspace.windowRemoved.connect(function () {
-    requestStateSync();
-  });
-
-  workspace.currentDesktopChanged.connect(function () {
-    requestStateSync();
-  });
-
-  workspace.windowActivated.connect(function (w) {
-    if (w && isManageable(w)) {
-      var id = getSafeWindowId(w);
-      if (id) {
-        callDBus(
-          "org.kde.raven.Daemon",
-          "/Events",
-          "org.kde.raven.Events",
-          "windowActivated",
-          id,
-          function () {},
-        );
-      }
-    }
-  });
+  // Conectar con funciones estáticas nombradas (no closures anónimas)
+  workspace.windowAdded.connect(onWindowAdded);
+  workspace.windowRemoved.connect(onWindowRemoved);
+  workspace.currentDesktopChanged.connect(onDesktopChanged);
+  workspace.windowActivated.connect(onWindowActivated);
 
   try {
     callDBus(
@@ -868,12 +892,129 @@ function init() {
       "/Events",
       "org.kde.raven.Events",
       "bridgeReady",
-      function () {},
+      function () {
+        // Al estar listo, pedimos las configuraciones dinámicas
+        try {
+          callDBus(
+            "org.kde.raven.Daemon",
+            "/Events",
+            "org.kde.raven.Events",
+            "getQuarantineClasses",
+            function (res) {
+              if (res) _quarantine_classes = JSON.parse(res);
+            }
+          );
+        } catch (e) {}
+        try {
+          callDBus(
+            "org.kde.raven.Daemon",
+            "/Events",
+            "org.kde.raven.Events",
+            "getWindowRules",
+            function (res) {
+              if (res) _window_rules = JSON.parse(res);
+            }
+          );
+        } catch (e) {}
+      },
     );
   } catch (e) {}
 
   requestStateSync();
+  // Arrancar el canal fallback (se auto-suprime cuando push está activo)
   listenForCommands();
+}
+
+// ---- Manejadores de eventos globales (funciones estáticas, sin closures) ----
+
+function onWindowAdded(w) {
+  if (!isManageable(w)) {
+    return;
+  }
+  
+  // Forzar desmaximización al nacer para evitar que navegadores/Electron 
+  // restauren su estado maximizado previo y floten sobre los gaps.
+  try {
+    if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
+      w.setMaximize(false, false);
+    }
+  } catch(e) {}
+
+  setKWinTimeout(function () {
+    if (!w || w.deleted) {
+      return;
+    }
+
+    var strClass = w.resourceClass
+      ? w.resourceClass.toString().toLowerCase()
+      : "";
+    var needsQuarantine = false;
+
+    if (strClass === "") {
+      needsQuarantine = true;
+    } else {
+      for (var i = 0; i < _quarantine_classes.length; i++) {
+        if (strClass.indexOf(_quarantine_classes[i]) !== -1) {
+          needsQuarantine = true;
+          break;
+        }
+      }
+    }
+
+    if (needsQuarantine) {
+      w.__raven_quarantined = true;
+      bindWindow(w);
+      // Usar pool de timers para la cuarentena de 250ms
+      setKWinTimeout(function() {
+        if (w && !w.deleted) {
+          // Re-asegurar que no se maximizó durante la cuarentena
+          try {
+            if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
+              w.setMaximize(false, false);
+            }
+          } catch(e) {}
+          
+          w.__raven_quarantined = false;
+          w.__raven_strict_birth = true;
+          w.__raven_stab_timer = null;
+          requestStateSync();
+        }
+      }, 250);
+    } else {
+      bindWindow(w);
+      requestStateSync();
+    }
+  }, 60);
+}
+
+/** Manejador estático de evento 'windowRemoved'. */
+function onWindowRemoved() {
+  requestStateSync();
+}
+
+/** Manejador estático de evento 'currentDesktopChanged'. */
+function onDesktopChanged() {
+  requestStateSync();
+}
+
+/**
+ * Manejador estático de evento 'windowActivated'.
+ * @param {KWin::Window} w - Ventana activada.
+ */
+function onWindowActivated(w) {
+  if (w && isManageable(w)) {
+    var id = getSafeWindowId(w);
+    if (id) {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "windowActivated",
+        id,
+        function () {},
+      );
+    }
+  }
 }
 
 try {
