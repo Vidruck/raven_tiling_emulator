@@ -5,6 +5,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 /// Preset de layout para la UI (espejo del dominio Rust).
 struct PresetDef {
@@ -28,6 +29,8 @@ struct RavenGuiApp {
     config: RavenConfig,
     config_path: PathBuf,
     status_msg: String,
+    is_active_cache: bool,
+    last_active_check: Option<Instant>,
 }
 
 impl RavenGuiApp {
@@ -41,15 +44,32 @@ impl RavenGuiApp {
             RavenConfig::default()
         };
 
-        Self { config, config_path, status_msg: String::new() }
+        Self { 
+            config, 
+            config_path, 
+            status_msg: String::new(),
+            is_active_cache: false,
+            last_active_check: None,
+        }
     }
 
-    fn is_service_active(&self) -> bool {
-        Command::new("systemctl")
+    fn is_service_active(&mut self) -> bool {
+        let now = Instant::now();
+        if let Some(last) = self.last_active_check {
+            if now.duration_since(last) < Duration::from_secs(2) {
+                return self.is_active_cache;
+            }
+        }
+        
+        let active = Command::new("systemctl")
             .args(["--user", "is-active", "raven.service"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "active")
-            .unwrap_or(false)
+            .unwrap_or(false);
+            
+        self.is_active_cache = active;
+        self.last_active_check = Some(now);
+        active
     }
 
     fn start_service(&mut self) {
@@ -62,6 +82,7 @@ impl RavenGuiApp {
         } else {
             "❌ Error al iniciar el servicio.".to_string()
         };
+        self.last_active_check = None; // Forzar rechequeo
     }
 
     fn stop_service(&mut self) {
@@ -74,6 +95,7 @@ impl RavenGuiApp {
         } else {
             "❌ Error al detener el servicio.".to_string()
         };
+        self.last_active_check = None; // Forzar rechequeo
     }
 
     fn save_and_restart(&mut self) {
