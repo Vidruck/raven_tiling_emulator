@@ -1,0 +1,13 @@
+[Unit]
+Description=Raven Tiling Emulator Daemon
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.kde.raven.Daemon
+ExecStart=/usr/bin/env raven_engine
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

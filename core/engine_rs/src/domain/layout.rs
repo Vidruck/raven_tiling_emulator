@@ -508,8 +508,9 @@ mod tests {
 
     #[test]
     fn test_calculo_vacio_retorna_limpio() {
+        let strategy = DwindleBSPStrategy;
         let (layout, evicted) =
-            calculate_master_stack(vec![], Rect::new(0, 0, 1920, 1080), 1, 0.5, 10, None);
+            strategy.calculate(&[], Rect::new(0, 0, 1920, 1080), 1, 0.5, 10, None);
         assert!(layout.is_empty());
         assert!(evicted.is_empty());
     }
@@ -517,8 +518,9 @@ mod tests {
     #[test]
     fn test_ventana_unica_respeta_gaps() {
         let windows = vec![mock_window("win_1")];
+        let strategy = DwindleBSPStrategy;
         let (layout, evicted) =
-            calculate_master_stack(windows, Rect::new(0, 0, 1920, 1080), 1, 0.5, 20, None);
+            strategy.calculate(&windows, Rect::new(0, 0, 1920, 1080), 1, 0.5, 20, None);
         assert!(evicted.is_empty());
         let rect = layout.get("win_1").unwrap();
         assert_eq!(rect.x, 20);
@@ -528,14 +530,15 @@ mod tests {
     #[test]
     fn test_redimensionamiento_por_foco() {
         let windows = vec![mock_window("win_1"), mock_window("win_2")];
+        let strategy = DwindleBSPStrategy;
 
         // Caso sin foco: win_1 es Central (derecha) y win_2 es Sidebar Izq (izquierda)
         // gaps = 0, master_ratio = 0.6 (central_ratio = 0.6, sidebar_ratio = 0.4)
         // sidebar_width = 1200 * 0.4 = 480.
         // Central: x = 480, width = 720.
         // Sidebar: x = 0, width = 480.
-        let (layout_no_focus, _) = calculate_master_stack(
-            windows.clone(),
+        let (layout_no_focus, _) = strategy.calculate(
+            &windows,
             Rect::new(0, 0, 1200, 1000),
             2,
             0.6,
@@ -550,8 +553,8 @@ mod tests {
         assert_eq!(r2_nf.width, 480);
 
         // Caso con foco en win_2: win_2 NO debe moverse del lateral ni hacer swap automático
-        let (layout_focus_2, _) = calculate_master_stack(
-            windows.clone(),
+        let (layout_focus_2, _) = strategy.calculate(
+            &windows,
             Rect::new(0, 0, 1200, 1000),
             2,
             0.6,
@@ -578,8 +581,9 @@ mod tests {
             mock_window("win_6"),
         ];
 
+        let strategy = DwindleBSPStrategy;
         let (layout, evicted) =
-            calculate_master_stack(windows, Rect::new(0, 0, 1000, 1000), 5, 0.6, 0, None);
+            strategy.calculate(&windows, Rect::new(0, 0, 1000, 1000), 5, 0.6, 0, None);
 
         // Con 6 ventanas, win_6 debe acomodarse subdividiendo el lateral izquierdo verticalmente. No hay evicción.
         assert!(evicted.is_empty());
@@ -611,8 +615,9 @@ mod tests {
         // Pantalla de 1000 de ancho y 600 de alto (gaps = 0, master_ratio = 0.6)
         // sidebar_width = (1000 * 0.4) / 2 = 200
         // bottom_height = 600 * 0.3 = 180
+        let strategy = DwindleBSPStrategy;
         let (layout, evicted) =
-            calculate_master_stack(windows, Rect::new(0, 0, 1000, 600), 1, 0.6, 0, None);
+            strategy.calculate(&windows, Rect::new(0, 0, 1000, 600), 1, 0.6, 0, None);
 
         assert!(evicted.is_empty());
         assert_eq!(layout.len(), 5);

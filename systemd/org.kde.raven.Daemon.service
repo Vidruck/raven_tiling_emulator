@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.kde.raven.Daemon
+Exec=/usr/bin/systemctl --user start raven.service
+SystemdService=raven.service
