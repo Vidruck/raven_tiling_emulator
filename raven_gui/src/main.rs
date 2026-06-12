@@ -12,16 +12,16 @@ struct PresetDef {
     name: &'static str,
     display: &'static str,
     desc: &'static str,
+    layout_type: &'static str,
     gaps: i32,
     ratio: f32,
 }
 
 const PRESETS: &[PresetDef] = &[
-    PresetDef { name: "dense",      display: "Cargada y Comprimida", desc: "Sin gaps. Máxima densidad de ventanas.", gaps: 0, ratio: 0.5 },
-    PresetDef { name: "aesthetic",  display: "Estética Raven",        desc: "Proporción áurea con gaps amplios.",    gaps: 16, ratio: 0.618 },
-    PresetDef { name: "functional", display: "Funcional",             desc: "Panel maestro amplio, secundarias en stack.", gaps: 8, ratio: 0.7 },
-    PresetDef { name: "balanced",   display: "Punto Medio",           desc: "Distribución igualitaria entre todas.", gaps: 8, ratio: 0.5 },
-    PresetDef { name: "simple",     display: "Pues Sirve",            desc: "Lineal y simple. Ideal para laptops 14\".", gaps: 4, ratio: 0.5 },
+    PresetDef { name: "raven",      display: "Raven (Base)",     desc: "Esquema Dwindle BSP dinámico.", layout_type: "dwindle", gaps: 6, ratio: 0.5 },
+    PresetDef { name: "clasico",    display: "Clásico",          desc: "Esquema Master Stack tradicional.", layout_type: "tall", gaps: 8, ratio: 0.55 },
+    PresetDef { name: "monoculo",   display: "Monóculo",         desc: "Modo maximizado de una sola ventana.", layout_type: "monocle", gaps: 0, ratio: 1.0 },
+    PresetDef { name: "hyprland",   display: "Hyprland",         desc: "Dwindle simétrico y estético a lo Hyprland.", layout_type: "dwindle", gaps: 8, ratio: 0.5 },
 ];
 
 /// Aplicación gráfica del Centro de Bienvenida (Welcome Center) de Raven.
@@ -319,6 +319,7 @@ impl eframe::App for RavenGuiApp {
                         if selected_preset != current_preset {
                             if let Some(p) = PRESETS.iter().find(|p| p.name == selected_preset) {
                                 self.config.layout_preset = p.name.to_string();
+                                self.config.layout_type   = p.layout_type.to_string();
                                 self.config.default_gaps  = p.gaps;
                                 self.config.master_ratio  = p.ratio;
                             }
