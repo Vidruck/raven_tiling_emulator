@@ -53,7 +53,7 @@ cargo build --release --workspace
 
 # Asegurar persistencia de binarios
 mkdir -p "$TARGET_DIR/bin"
-cp target/release/raven_core "$TARGET_DIR/bin/"
+cp target/release/raven_engine "$TARGET_DIR/bin/"
 cp target/release/raven_gui "$TARGET_DIR/bin/"
 
 # Limpieza profunda de archivos residuales para reducir peso de instalación
@@ -104,7 +104,7 @@ Description=Raven Tiling Emulator Daemon (Native Rust)
 After=graphical-session.target
 
 [Service]
-ExecStart=$TARGET_DIR/bin/raven_core
+ExecStart=$TARGET_DIR/bin/raven_engine
 WorkingDirectory=$TARGET_DIR
 Restart=always
 RestartSec=3
@@ -115,6 +115,14 @@ OOMScoreAdjust=-200
 
 [Install]
 WantedBy=graphical-session.target
+EOF
+
+mkdir -p ~/.local/share/dbus-1/services/
+cat <<EOF > ~/.local/share/dbus-1/services/org.kde.raven.Daemon.service
+[D-BUS Service]
+Name=org.kde.raven.Daemon
+Exec=/usr/bin/systemctl --user start raven.service
+SystemdService=raven.service
 EOF
 
 # [7/7] Activación del Ecosistema
