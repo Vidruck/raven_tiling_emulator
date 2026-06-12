@@ -2235,9 +2235,19 @@ dependencies = [
 
 [[package]]
 name = "raven_core"
+version = "2.8.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "raven_engine"
 version = "2.7.0"
 dependencies = [
  "futures",
+ "raven_core",
  "serde",
  "serde_json",
  "tokio",
@@ -2251,6 +2261,7 @@ name = "raven_gui"
 version = "2.7.0"
 dependencies = [
  "eframe",
+ "raven_core",
  "serde",
  "serde_json",
 ]

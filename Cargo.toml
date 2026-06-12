@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/raven_core",
     "core/engine_rs",
     "raven_gui"
 ]

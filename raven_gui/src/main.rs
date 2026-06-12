@@ -1,78 +1,10 @@
 use eframe::egui;
+use raven_core::config::{RavenConfig, WindowRule};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-
-/// Estructura de configuración (configuration structure) del motor Raven.
-///
-/// Contiene parámetros serializables (serializable parameters) para su persistencia en disco.
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct WindowRule {
-    pub class: String,
-    pub action: String,
-    #[serde(default)]
-    pub pip: bool,
-}
-
-/// Estructura de configuración (configuration structure) del motor Raven.
-///
-/// Contiene parámetros serializables (serializable parameters) para su persistencia en disco.
-#[derive(Debug, Deserialize, Serialize, Clone)]
-struct RavenConfig {
-    /// Espacio (gaps) por defecto entre ventanas en píxeles.
-    pub default_gaps: i32,
-    /// Indica si el motor de mosaico (tiling engine) debe activarse al iniciar sesión.
-    pub tiling_enabled_on_startup: bool,
-    /// Número óptimo de ventanas en el área de mosaico Dwindle BSP antes de desalojar.
-    pub nmaster: usize,
-    /// Proporción del área de corte asimétrico (master ratio).
-    pub master_ratio: f32,
-    /// Posición por defecto para ventanas Picture-in-Picture (PiP).
-    pub pip_position: String,
-    /// Altura del panel persistente del shell en píxeles (para cálculo de saturación).
-    #[serde(default = "default_panel_height")]
-    pub panel_height: i32,
-    /// Preset de layout activo: dense, aesthetic, functional, balanced, simple.
-    #[serde(default = "default_preset")]
-    pub layout_preset: String,
-    #[serde(default = "default_quarantine")]
-    pub quarantine_classes: Vec<String>,
-    #[serde(default)]
-    pub window_rules: Vec<WindowRule>,
-}
-
-fn default_quarantine() -> Vec<String> {
-    vec![
-        "firefox".into(),
-        "electron".into(),
-        "zen-browser".into(),
-        "code".into(),
-        "spotify".into(),
-        "floorp".into(),
-        "chrome".into(),
-    ]
-}
-
-fn default_panel_height() -> i32 { 30 }
-fn default_preset() -> String { "balanced".to_string() }
-
-impl Default for RavenConfig {
-    fn default() -> Self {
-        Self {
-            default_gaps: 8,
-            tiling_enabled_on_startup: true,
-            nmaster: 1,
-            master_ratio: 0.5,
-            pip_position: "bottom-right".to_string(),
-            panel_height: 30,
-            layout_preset: "balanced".to_string(),
-            quarantine_classes: default_quarantine(),
-            window_rules: vec![],
-        }
-    }
-}
 
 /// Preset de layout para la UI (espejo del dominio Rust).
 struct PresetDef {

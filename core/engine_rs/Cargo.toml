@@ -1,5 +1,5 @@
 [package]
-name = "raven_core"
+name = "raven_engine"
 version = "2.7.0"
 edition = "2021"
 
@@ -11,3 +11,4 @@ zbus = { version = "4.1", default-features = false, features = ["tokio"] }
 futures = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+raven_core = { path = "../../crates/raven_core" }

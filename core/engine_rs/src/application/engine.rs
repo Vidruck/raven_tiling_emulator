@@ -59,8 +59,8 @@ impl TilingEngine {
     /// Un `Result` con una tupla que contiene el mapa de geometrías calculadas y la lista de ventanas desalojadas (evicted), o un error de dominio.
     pub fn calculate_from_payload(
         &self,
-        workspaces: HashMap<String, Rect>,
-        windows: Vec<WindowNode>,
+        workspaces: &HashMap<String, Rect>,
+        windows: &[WindowNode],
         active_window_id: Option<String>,
     ) -> Result<(HashMap<String, Rect>, Vec<String>), RavenError> {
         if !self.is_tiling_enabled || windows.is_empty() {
@@ -75,6 +75,7 @@ impl TilingEngine {
             config_clone.master_ratio,
             config_clone.default_gaps,
             &config_clone.pip_position,
+            &config_clone.layout_type,
             active_window_id,
         );
         Ok((layout_map, evicted_windows))

@@ -260,35 +260,20 @@ function getRectGeometry(rect) {
   if (!rect) {
     return { x: 0, y: 0, w: 1920, h: 1080 };
   }
-  var x =
-    typeof rect.x === "function" ? rect.x() : rect.x !== undefined ? rect.x : 0;
-  var y =
-    typeof rect.y === "function" ? rect.y() : rect.y !== undefined ? rect.y : 0;
-  var w =
-    typeof rect.width === "function"
-      ? rect.width()
-      : rect.width !== undefined
-        ? rect.width
-        : typeof rect.w === "function"
-          ? rect.w()
-          : rect.w !== undefined
-            ? rect.w
-            : 1920;
-  var h =
-    typeof rect.height === "function"
-      ? rect.height()
-      : rect.height !== undefined
-        ? rect.height
-        : typeof rect.h === "function"
-          ? rect.h()
-          : rect.h !== undefined
-            ? rect.h
-            : 1080;
+  
+  function getProp(obj, p1, p2, def) {
+    if (typeof obj[p1] === "function") return obj[p1]();
+    if (obj[p1] !== undefined) return obj[p1];
+    if (typeof obj[p2] === "function") return obj[p2]();
+    if (obj[p2] !== undefined) return obj[p2];
+    return def;
+  }
+
   return {
-    x: Math.round(x),
-    y: Math.round(y),
-    w: Math.round(w),
-    h: Math.round(h),
+    x: Math.round(getProp(rect, "x", "x", 0)),
+    y: Math.round(getProp(rect, "y", "y", 0)),
+    w: Math.round(getProp(rect, "width", "w", 1920)),
+    h: Math.round(getProp(rect, "height", "h", 1080)),
   };
 }
 /**
@@ -333,19 +318,17 @@ function syncState() {
       var output = outs[o];
       var outName = output ? output.name : "default";
 
-      var placementUsableGeometry = getSafeScreenGeometry(output, currentDesk);
-
       if (desks && desks.length > 0) {
         for (var d = 0; d < desks.length; d++) {
           var desktop = desks[d];
           var deskId = desktop ? desktop.id.toString() : "default_desk";
           var wsId = outName + "||" + deskId;
-          screens[wsId] = placementUsableGeometry;
+          screens[wsId] = getSafeScreenGeometry(output, desktop);
         }
       } else {
         var deskId = currentDesk ? currentDesk.id.toString() : "default_desk";
         var wsId = outName + "||" + deskId;
-        screens[wsId] = placementUsableGeometry;
+        screens[wsId] = getSafeScreenGeometry(output, currentDesk);
       }
     }
   } catch (e) {

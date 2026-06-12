@@ -22,14 +22,30 @@ fn apply_gaps(rect: &Rect, gap: i32) -> Rect {
 ///
 /// Comienza con un diseño 1 x (C - 1). Si hay 5 o más ventanas, pasa a una composición 2 x 3,
 /// encajando la ventana más antigua en el área maestra junto con la ventana activa.
-pub fn calculate_master_stack(
-    windows: Vec<WindowNode>,
-    screen_rect: Rect,
-    _nmaster: usize,
-    master_ratio: f32,
-    default_gaps: i32,
-    _active_window_id: Option<String>,
-) -> (HashMap<String, Rect>, Vec<String>) {
+pub trait LayoutStrategy: Send + Sync {
+    fn calculate(
+        &self,
+        windows: &[WindowNode],
+        screen_rect: Rect,
+        nmaster: usize,
+        master_ratio: f32,
+        default_gaps: i32,
+        active_window_id: Option<String>,
+    ) -> (HashMap<String, Rect>, Vec<String>);
+}
+
+pub struct DwindleBSPStrategy;
+
+impl LayoutStrategy for DwindleBSPStrategy {
+    fn calculate(
+        &self,
+        windows: &[WindowNode],
+        screen_rect: Rect,
+        _nmaster: usize,
+        master_ratio: f32,
+        default_gaps: i32,
+        _active_window_id: Option<String>,
+    ) -> (HashMap<String, Rect>, Vec<String>) {
     let mut layout_map = HashMap::new();
     let mut evicted_windows = Vec::new();
 
@@ -39,8 +55,9 @@ pub fn calculate_master_stack(
     }
 
     let active_windows: Vec<WindowNode> = windows
-        .into_iter()
+        .iter()
         .filter(|w| !w.is_floating && !w.is_minimized)
+        .cloned()
         .collect();
 
     if active_windows.is_empty() {
@@ -146,8 +163,17 @@ pub fn calculate_master_stack(
                 sidebar_width = needed_for_sidebars / (if !right_group.is_empty() { 2 } else { 1 });
                 center_width = container.width - (if !right_group.is_empty() { 2 * sidebar_width } else { sidebar_width });
             } else {
-                // Si la pantalla es físicamente muy pequeña para el centro, desalojamos la última ventana y recalculamos
-                let evicted_win = current_ordered.pop().unwrap();
+                // Si la pantalla es físicamente muy pequeña para el centro, desalojamos la ventana con mayor restricción o la última
+                let mut victim_idx = current_ordered.len() - 1;
+                let mut max_constraint = 0;
+                for (i, w) in current_ordered.iter().enumerate() {
+                    let constraint = std::cmp::max(w.min_w, w.min_h);
+                    if constraint > max_constraint && constraint > 300 {
+                        max_constraint = constraint;
+                        victim_idx = i;
+                    }
+                }
+                let evicted_win = current_ordered.remove(victim_idx);
                 evicted_windows.push(evicted_win.window_id);
                 continue;
             }
@@ -157,7 +183,16 @@ pub fn calculate_master_stack(
         if (!left_group.is_empty() && sidebar_width < left_min_w)
             || (!right_group.is_empty() && sidebar_width < right_min_w)
         {
-            let evicted_win = current_ordered.pop().unwrap();
+            let mut victim_idx = current_ordered.len() - 1;
+            let mut max_constraint = 0;
+            for (i, w) in current_ordered.iter().enumerate() {
+                let constraint = std::cmp::max(w.min_w, w.min_h);
+                if constraint > max_constraint && constraint > 300 {
+                    max_constraint = constraint;
+                    victim_idx = i;
+                }
+            }
+            let evicted_win = current_ordered.remove(victim_idx);
             evicted_windows.push(evicted_win.window_id);
             continue;
         }
@@ -172,7 +207,16 @@ pub fn calculate_master_stack(
             || (!right_group.is_empty() && right_slot_h < right_min_h)
             || (!center_group.is_empty() && center_slot_h < center_min_h)
         {
-            let evicted_win = current_ordered.pop().unwrap();
+            let mut victim_idx = current_ordered.len() - 1;
+            let mut max_constraint = 0;
+            for (i, w) in current_ordered.iter().enumerate() {
+                let constraint = std::cmp::max(w.min_w, w.min_h);
+                if constraint > max_constraint && constraint > 300 {
+                    max_constraint = constraint;
+                    victim_idx = i;
+                }
+            }
+            let evicted_win = current_ordered.remove(victim_idx);
             evicted_windows.push(evicted_win.window_id);
             continue;
         }
@@ -238,6 +282,133 @@ pub fn calculate_master_stack(
     }
 
     (layout_map, evicted_windows)
+    }
+}
+
+pub struct TallStrategy;
+
+impl LayoutStrategy for TallStrategy {
+    fn calculate(
+        &self,
+        windows: &[WindowNode],
+        screen_rect: Rect,
+        nmaster: usize,
+        master_ratio: f32,
+        default_gaps: i32,
+        _active_window_id: Option<String>,
+    ) -> (HashMap<String, Rect>, Vec<String>) {
+        let mut layout_map = HashMap::new();
+        let evicted_windows = Vec::new();
+
+        let active_windows: Vec<WindowNode> = windows
+            .iter()
+            .filter(|w| !w.is_floating && !w.is_minimized)
+            .cloned()
+            .collect();
+
+        if active_windows.is_empty() {
+            return (layout_map, evicted_windows);
+        }
+
+        let half_g = default_gaps / 2;
+        let container = Rect {
+            x: screen_rect.x + half_g,
+            y: screen_rect.y + half_g,
+            width: std::cmp::max(1, screen_rect.width - default_gaps),
+            height: std::cmp::max(1, screen_rect.height - default_gaps),
+        };
+
+        if active_windows.len() <= nmaster {
+            let w_slot = container.width / active_windows.len() as i32;
+            for (i, win) in active_windows.iter().enumerate() {
+                let rect = Rect {
+                    x: container.x + (i as i32 * w_slot),
+                    y: container.y,
+                    width: if i == active_windows.len() - 1 { container.width - (i as i32 * w_slot) } else { w_slot },
+                    height: container.height,
+                };
+                layout_map.insert(win.window_id.clone(), apply_gaps(&rect, half_g));
+            }
+        } else {
+            let master_w = (container.width as f32 * master_ratio) as i32;
+            let stack_w = container.width - master_w;
+
+            let master_h_slot = container.height / nmaster as i32;
+            for i in 0..nmaster {
+                let rect = Rect {
+                    x: container.x,
+                    y: container.y + (i as i32 * master_h_slot),
+                    width: master_w,
+                    height: if i == nmaster - 1 { container.height - (i as i32 * master_h_slot) } else { master_h_slot },
+                };
+                layout_map.insert(active_windows[i].window_id.clone(), apply_gaps(&rect, half_g));
+            }
+
+            let stack_count = active_windows.len() - nmaster;
+            let stack_h_slot = container.height / stack_count as i32;
+            for i in 0..stack_count {
+                let win = &active_windows[nmaster + i];
+                let rect = Rect {
+                    x: container.x + master_w,
+                    y: container.y + (i as i32 * stack_h_slot),
+                    width: stack_w,
+                    height: if i == stack_count - 1 { container.height - (i as i32 * stack_h_slot) } else { stack_h_slot },
+                };
+                layout_map.insert(win.window_id.clone(), apply_gaps(&rect, half_g));
+            }
+        }
+
+        (layout_map, evicted_windows)
+    }
+}
+
+pub struct MonocleStrategy;
+
+impl LayoutStrategy for MonocleStrategy {
+    fn calculate(
+        &self,
+        windows: &[WindowNode],
+        screen_rect: Rect,
+        _nmaster: usize,
+        _master_ratio: f32,
+        default_gaps: i32,
+        _active_window_id: Option<String>,
+    ) -> (HashMap<String, Rect>, Vec<String>) {
+        let mut layout_map = HashMap::new();
+        let mut evicted_windows = Vec::new();
+
+        let active_windows: Vec<WindowNode> = windows
+            .iter()
+            .filter(|w| !w.is_floating && !w.is_minimized)
+            .cloned()
+            .collect();
+
+        if active_windows.is_empty() {
+            return (layout_map, evicted_windows);
+        }
+
+        let half_g = default_gaps / 2;
+        let container = Rect {
+            x: screen_rect.x + half_g,
+            y: screen_rect.y + half_g,
+            width: std::cmp::max(1, screen_rect.width - default_gaps),
+            height: std::cmp::max(1, screen_rect.height - default_gaps),
+        };
+
+        for win in active_windows {
+            layout_map.insert(win.window_id.clone(), apply_gaps(&container, half_g));
+        }
+
+        (layout_map, evicted_windows)
+    }
+}
+
+pub fn get_strategy(layout_type: &str) -> Box<dyn LayoutStrategy> {
+    match layout_type {
+        "tall" => Box::new(TallStrategy),
+        "monocle" => Box::new(MonocleStrategy),
+        "dwindle" | _ => Box::new(DwindleBSPStrategy),
+    }
 }
 
 /// Calcula la topología global para todas las áreas de trabajo (workspaces) activas.
@@ -246,12 +417,13 @@ pub fn calculate_master_stack(
 /// utilizando particiones binarias de espacio (BSP) y calcula las posiciones exactas de
 /// las ventanas flotantes con Picture-in-Picture (PiP).
 pub fn calculate_global_topology(
-    windows: Vec<WindowNode>,
-    workspaces: HashMap<String, Rect>,
+    windows: &[WindowNode],
+    workspaces: &HashMap<String, Rect>,
     nmaster: usize,
     master_ratio: f32,
     default_gaps: i32,
     pip_position: &str,
+    layout_type: &str,
     active_window_id: Option<String>,
 ) -> (HashMap<String, Rect>, Vec<String>) {
     let mut global_layout = HashMap::new();
@@ -263,14 +435,15 @@ pub fn calculate_global_topology(
             windows_by_ws
                 .entry(win.workspace_id.clone())
                 .or_insert_with(Vec::new)
-                .push(win);
+                .push(win.clone());
         }
     }
 
     for (ws_id, ws_windows) in windows_by_ws {
         if let Some(screen_rect) = workspaces.get(&ws_id) {
-            let (ws_layout, ws_evicted) = calculate_master_stack(
-                ws_windows.clone(),
+            let strategy = get_strategy(layout_type);
+            let (ws_layout, ws_evicted) = strategy.calculate(
+                &ws_windows,
                 *screen_rect,
                 nmaster,
                 master_ratio,

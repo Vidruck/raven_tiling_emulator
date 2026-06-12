@@ -216,19 +216,13 @@ impl RavenController {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
 
-        self.engine.current_workspaces = workspaces.clone();
-        self.engine.current_windows = windows
-            .iter()
-            .map(|w| (w.window_id.clone(), w.clone()))
-            .collect();
-        
         let history_changed = self.engine.update_history(&windows);
         if history_changed {
             Self::persist_window_history(self.engine.window_history.clone());
         }
 
         let mut healthy_windows = Vec::new();
-        for win in windows {
+        for win in windows.into_iter() {
             if !self.is_window_flapping(&win) {
                 healthy_windows.push(win);
             }
@@ -259,8 +253,8 @@ impl RavenController {
         });
 
         let (new_layout, evicted_windows) = self.engine.calculate_from_payload(
-            workspaces.clone(),
-            windows.clone(),
+            &workspaces,
+            &windows,
             self.active_window_id.clone(),
         )?;
         let mut commands = Vec::new();
@@ -383,6 +377,11 @@ impl RavenController {
         }
 
         self.last_known_layout = new_layout;
+        self.engine.current_workspaces = workspaces;
+        self.engine.current_windows = windows
+            .into_iter()
+            .map(|w| (w.window_id.clone(), w))
+            .collect();
         Ok(commands)
     }
 
@@ -431,6 +430,16 @@ impl RavenController {
         match action.as_str() {
             "toggle_tiling" => {
                 self.engine.toggle_tiling();
+                needs_recalc = true;
+            }
+            "cycle_layout" => {
+                self.engine.config.layout_type = match self.engine.config.layout_type.as_str() {
+                    "dwindle" => "tall".to_string(),
+                    "tall" => "monocle".to_string(),
+                    "monocle" => "dwindle".to_string(),
+                    _ => "dwindle".to_string(),
+                };
+                info!("[CONTROLLER] Layout cambiado a: {}", self.engine.config.layout_type);
                 needs_recalc = true;
             }
             "increment_gaps" => {

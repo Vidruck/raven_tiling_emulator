@@ -4,10 +4,11 @@ use tokio::sync::Mutex;
 use tracing::info;
 use zbus::ConnectionBuilder;
 
-use raven_core::application::controller::RavenController;
-use raven_core::application::engine::TilingEngine;
-use raven_core::infrastructure::config::RavenConfig;
-use raven_core::infrastructure::dbus::{KWinTopology, RavenDBusService};
+use raven_engine::application::controller::RavenController;
+use raven_engine::application::engine::TilingEngine;
+use raven_core::config::RavenConfig;
+use raven_engine::infrastructure::config::RavenConfigExt;
+use raven_engine::infrastructure::dbus::{KWinTopology, RavenDBusService};
 
 /// Punto de entrada principal del demonio (daemon) Raven Tiling Emulator.
 ///
