@@ -24,5 +24,11 @@ adapters/kwin_script/*.kpackagetool6
 adapters/plasmoid/*.plasmoid
 
 # === Documentación y Reportes (Uso Interno) ===
-KWin_ Construyendo Shell Alternativa.md
-reporte_raven.md
+*.md
+*.MD
+!README.md
+!Readme.md
+!readme.md
+!CONTRIBUTING.md
+!Contributing.md
+!contributing.md
