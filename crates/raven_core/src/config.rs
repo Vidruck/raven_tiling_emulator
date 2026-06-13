@@ -59,7 +59,7 @@ pub fn default_quarantine() -> Vec<String> {
 
 pub fn default_panel_height() -> i32 { 30 }
 pub fn default_preset() -> String { "balanced".to_string() }
-pub fn default_layout_type() -> String { "dwindle".to_string() }
+pub fn default_layout_type() -> String { "raven".to_string() }
 
 impl Default for RavenConfig {
     fn default() -> Self {
@@ -78,7 +78,7 @@ impl RavenConfig {
             pip_position: String::from("bottom-right"),
             panel_height: 30,
             layout_preset: String::from("balanced"),
-            layout_type: String::from("dwindle"),
+            layout_type: String::from("raven"),
             quarantine_classes: default_quarantine(),
             window_rules: vec![],
         }

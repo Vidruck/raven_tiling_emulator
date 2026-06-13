@@ -18,10 +18,11 @@ struct PresetDef {
 }
 
 const PRESETS: &[PresetDef] = &[
-    PresetDef { name: "raven",      display: "Raven (Base)",     desc: "Esquema Dwindle BSP dinámico.", layout_type: "dwindle", gaps: 6, ratio: 0.5 },
-    PresetDef { name: "clasico",    display: "Clásico",          desc: "Esquema Master Stack tradicional.", layout_type: "tall", gaps: 8, ratio: 0.55 },
+    PresetDef { name: "raven",      display: "Raven (Base)",     desc: "Esquema dinámico y asimétrico para pantallas panorámicas.", layout_type: "raven", gaps: 6, ratio: 0.5 },
+    PresetDef { name: "clasico",    display: "Clásico",          desc: "Esquema de panel maestro con pila secundaria.", layout_type: "tall", gaps: 8, ratio: 0.55 },
     PresetDef { name: "monoculo",   display: "Monóculo",         desc: "Modo maximizado de una sola ventana.", layout_type: "monocle", gaps: 0, ratio: 1.0 },
-    PresetDef { name: "hyprland",   display: "Hyprland",         desc: "Dwindle simétrico y estético a lo Hyprland.", layout_type: "dwindle", gaps: 8, ratio: 0.5 },
+    PresetDef { name: "hyper",      display: "Flujo Avanzado",   desc: "Mosaico fractal estrictamente simétrico en espiral.", layout_type: "strict_dwindle", gaps: 8, ratio: 0.5 },
+    PresetDef { name: "divisor",    display: "Divisor",          desc: "Disposición equitativa en columnas proporcionales.", layout_type: "divisor", gaps: 8, ratio: 0.5 },
 ];
 
 /// Aplicación gráfica del Centro de Bienvenida (Welcome Center) de Raven.
