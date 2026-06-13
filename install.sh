@@ -53,6 +53,8 @@ cargo build --release --workspace
 
 # Asegurar persistencia de binarios
 mkdir -p "$TARGET_DIR/bin"
+# Detener el servicio activo para evitar error de archivo ocupado ("Text file busy")
+systemctl --user stop raven.service 2>/dev/null || true
 cp target/release/raven_engine "$TARGET_DIR/bin/"
 cp target/release/raven_gui "$TARGET_DIR/bin/"
 
