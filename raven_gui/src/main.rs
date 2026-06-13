@@ -124,8 +124,7 @@ impl RavenGuiApp {
         }
     }
 
-    /// Dibuja un preview esquemático del layout foveal con egui::Painter.
-    fn draw_layout_preview(ui: &mut egui::Ui, ratio: f32, gaps: i32, is_dark: bool) {
+    fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gaps: i32, is_dark: bool) {
         let desired_size = egui::vec2(ui.available_width().min(320.0), 120.0);
         let (rect, _) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
 
@@ -141,55 +140,153 @@ impl RavenGuiApp {
         let w = rect.width();
         let h = rect.height();
 
-        // Colores de paneles
         let center_color = egui::Color32::from_rgb(0, 180, 216);
         let side_color   = if is_dark { egui::Color32::from_rgb(30, 80, 120) } else { egui::Color32::from_rgb(100, 160, 200) };
         let bot_color    = if is_dark { egui::Color32::from_rgb(20, 60, 100) } else { egui::Color32::from_rgb(130, 180, 210) };
 
-        let sidebar_w = w * (1.0 - ratio.clamp(0.35, 0.85)) / 2.0;
-        let center_w  = w - 2.0 * sidebar_w;
-        let bot_h     = h * 0.28;
-        let top_h     = h - bot_h;
+        match layout_type {
+            "tall" => {
+                let master_w = w * ratio;
+                let stack_w = w - master_w;
+                let stack_h = h / 4.0;
 
-        // Panel Izquierdo
-        let left = egui::Rect::from_min_size(
-            rect.min + egui::vec2(gap_f, gap_f),
-            egui::vec2(sidebar_w - gap_f * 2.0, h - gap_f * 2.0),
-        );
-        painter.rect_filled(left, 4.0, side_color);
-        painter.text(left.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+                let master = egui::Rect::from_min_size(
+                    rect.min + egui::vec2(gap_f, gap_f),
+                    egui::vec2(master_w - gap_f * 2.0, h - gap_f * 2.0),
+                );
+                painter.rect_filled(master, 4.0, center_color);
+                painter.text(master.center(), egui::Align2::CENTER_CENTER, "1 (foco)", egui::FontId::monospace(11.0), egui::Color32::WHITE);
 
-        // Panel Central
-        let center = egui::Rect::from_min_size(
-            rect.min + egui::vec2(sidebar_w + gap_f, gap_f),
-            egui::vec2(center_w - gap_f * 2.0, top_h - gap_f * 2.0),
-        );
-        painter.rect_filled(center, 4.0, center_color);
-        painter.text(center.center(), egui::Align2::CENTER_CENTER, "1 (foco)", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+                for i in 0..4 {
+                    let r = egui::Rect::from_min_size(
+                        rect.min + egui::vec2(master_w + gap_f, i as f32 * stack_h + gap_f),
+                        egui::vec2(stack_w - gap_f * 2.0, stack_h - gap_f * 2.0),
+                    );
+                    painter.rect_filled(r, 4.0, side_color);
+                    painter.text(r.center(), egui::Align2::CENTER_CENTER, &(i + 2).to_string(), egui::FontId::monospace(10.0), egui::Color32::WHITE);
+                }
+            }
+            "monocle" => {
+                let r = egui::Rect::from_min_size(
+                    rect.min + egui::vec2(gap_f, gap_f),
+                    egui::vec2(w - gap_f * 2.0, h - gap_f * 2.0),
+                );
+                painter.rect_filled(r, 4.0, center_color);
+                painter.text(r.center(), egui::Align2::CENTER_CENTER, "1 (maximizado)", egui::FontId::monospace(12.0), egui::Color32::WHITE);
+            }
+            "strict_dwindle" => {
+                // Dibujamos espiral: 1 izquierda, 2 der-arriba, 3 der-abajo-izq, 4 der-abajo-der-arriba, 5 der-abajo-der-abajo
+                let curr_x = rect.min.x;
+                let curr_y = rect.min.y;
+                
+                // Win 1
+                let w1_w = w * ratio;
+                let r1 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + gap_f, curr_y + gap_f),
+                    egui::vec2(w1_w - gap_f * 2.0, h - gap_f * 2.0),
+                );
+                painter.rect_filled(r1, 4.0, center_color);
+                painter.text(r1.center(), egui::Align2::CENTER_CENTER, "1 (foco)", egui::FontId::monospace(11.0), egui::Color32::WHITE);
 
-        // Panel Derecho
-        let right = egui::Rect::from_min_size(
-            rect.min + egui::vec2(sidebar_w + center_w + gap_f, gap_f),
-            egui::vec2(sidebar_w - gap_f * 2.0, h - gap_f * 2.0),
-        );
-        painter.rect_filled(right, 4.0, side_color);
-        painter.text(right.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+                // Win 2
+                let rem_w = w - w1_w;
+                let w2_h = h * ratio;
+                let r2 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + w1_w + gap_f, curr_y + gap_f),
+                    egui::vec2(rem_w - gap_f * 2.0, w2_h - gap_f * 2.0),
+                );
+                painter.rect_filled(r2, 4.0, side_color);
+                painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), egui::Color32::WHITE);
 
-        // Panel Inferior Izq
-        let bot_left = egui::Rect::from_min_size(
-            rect.min + egui::vec2(sidebar_w + gap_f, top_h + gap_f),
-            egui::vec2(center_w / 2.0 - gap_f * 1.5, bot_h - gap_f * 2.0),
-        );
-        painter.rect_filled(bot_left, 4.0, bot_color);
-        painter.text(bot_left.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+                // Win 3
+                let rem_h = h - w2_h;
+                let w3_w = rem_w * ratio;
+                let r3 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + w1_w + gap_f, curr_y + w2_h + gap_f),
+                    egui::vec2(w3_w - gap_f * 2.0, rem_h - gap_f * 2.0),
+                );
+                painter.rect_filled(r3, 4.0, bot_color);
+                painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
 
-        // Panel Inferior Der
-        let bot_right = egui::Rect::from_min_size(
-            rect.min + egui::vec2(sidebar_w + center_w / 2.0 + gap_f * 0.5, top_h + gap_f),
-            egui::vec2(center_w / 2.0 - gap_f * 1.5, bot_h - gap_f * 2.0),
-        );
-        painter.rect_filled(bot_right, 4.0, bot_color);
-        painter.text(bot_right.center(), egui::Align2::CENTER_CENTER, "5", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+                // Win 4
+                let rem_w2 = rem_w - w3_w;
+                let w4_h = rem_h * ratio;
+                let r4 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + w1_w + w3_w + gap_f, curr_y + w2_h + gap_f),
+                    egui::vec2(rem_w2 - gap_f * 2.0, w4_h - gap_f * 2.0),
+                );
+                painter.rect_filled(r4, 4.0, bot_color);
+                painter.text(r4.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(9.0), egui::Color32::WHITE);
+
+                // Win 5
+                let rem_h2 = rem_h - w4_h;
+                let r5 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + w1_w + w3_w + gap_f, curr_y + w2_h + w4_h + gap_f),
+                    egui::vec2(rem_w2 - gap_f * 2.0, rem_h2 - gap_f * 2.0),
+                );
+                painter.rect_filled(r5, 4.0, bot_color);
+                painter.text(r5.center(), egui::Align2::CENTER_CENTER, "5", egui::FontId::monospace(9.0), egui::Color32::WHITE);
+            }
+            "divisor" => {
+                let n = 5;
+                let col_w = w / n as f32;
+                for i in 0..n {
+                    let r = egui::Rect::from_min_size(
+                        rect.min + egui::vec2(i as f32 * col_w + gap_f, gap_f),
+                        egui::vec2(col_w - gap_f * 2.0, h - gap_f * 2.0),
+                    );
+                    let color = if i == 0 { center_color } else { side_color };
+                    let lbl = if i == 0 { "1" } else { "" };
+                    painter.rect_filled(r, 4.0, color);
+                    if i == 0 {
+                        painter.text(r.center(), egui::Align2::CENTER_CENTER, lbl, egui::FontId::monospace(10.0), egui::Color32::WHITE);
+                    } else {
+                        painter.text(r.center(), egui::Align2::CENTER_CENTER, &(i+1).to_string(), egui::FontId::monospace(10.0), egui::Color32::WHITE);
+                    }
+                }
+            }
+            "raven" | _ => {
+                let sidebar_w = w * (1.0 - ratio.clamp(0.35, 0.85)) / 2.0;
+                let center_w  = w - 2.0 * sidebar_w;
+                let bot_h     = h * 0.28;
+                let top_h     = h - bot_h;
+
+                let left = egui::Rect::from_min_size(
+                    rect.min + egui::vec2(gap_f, gap_f),
+                    egui::vec2(sidebar_w - gap_f * 2.0, h - gap_f * 2.0),
+                );
+                painter.rect_filled(left, 4.0, side_color);
+                painter.text(left.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+
+                let center = egui::Rect::from_min_size(
+                    rect.min + egui::vec2(sidebar_w + gap_f, gap_f),
+                    egui::vec2(center_w - gap_f * 2.0, top_h - gap_f * 2.0),
+                );
+                painter.rect_filled(center, 4.0, center_color);
+                painter.text(center.center(), egui::Align2::CENTER_CENTER, "1 (foco)", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+
+                let right = egui::Rect::from_min_size(
+                    rect.min + egui::vec2(sidebar_w + center_w + gap_f, gap_f),
+                    egui::vec2(sidebar_w - gap_f * 2.0, h - gap_f * 2.0),
+                );
+                painter.rect_filled(right, 4.0, side_color);
+                painter.text(right.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+
+                let bot_left = egui::Rect::from_min_size(
+                    rect.min + egui::vec2(sidebar_w + gap_f, top_h + gap_f),
+                    egui::vec2(center_w / 2.0 - gap_f * 1.5, bot_h - gap_f * 2.0),
+                );
+                painter.rect_filled(bot_left, 4.0, bot_color);
+                painter.text(bot_left.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+
+                let bot_right = egui::Rect::from_min_size(
+                    rect.min + egui::vec2(sidebar_w + center_w / 2.0 + gap_f * 0.5, top_h + gap_f),
+                    egui::vec2(center_w / 2.0 - gap_f * 1.5, bot_h - gap_f * 2.0),
+                );
+                painter.rect_filled(bot_right, 4.0, bot_color);
+                painter.text(bot_right.center(), egui::Align2::CENTER_CENTER, "5", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            }
+        }
     }
 }
 
@@ -331,6 +428,7 @@ impl eframe::App for RavenGuiApp {
                         ui.add_space(4.0);
                         Self::draw_layout_preview(
                             ui,
+                            &self.config.layout_type,
                             self.config.master_ratio,
                             self.config.default_gaps,
                             is_dark,
