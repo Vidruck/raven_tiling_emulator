@@ -7,6 +7,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+mod kde_theme;
+use kde_theme::KdePalette;
+use notify::{Watcher, RecursiveMode};
+use std::sync::mpsc::{channel, Receiver};
+
 /// Preset de layout para la UI (espejo del dominio Rust).
 struct PresetDef {
     name: &'static str,
@@ -32,6 +37,9 @@ struct RavenGuiApp {
     status_msg: String,
     is_active_cache: bool,
     last_active_check: Option<Instant>,
+    kde_palette: KdePalette,
+    _watcher: Option<notify::RecommendedWatcher>,
+    rx_theme: Option<Receiver<notify::Result<notify::Event>>>,
 }
 
 impl RavenGuiApp {
@@ -45,12 +53,30 @@ impl RavenGuiApp {
             RavenConfig::default()
         };
 
+        let mut kde_palette = KdePalette::default();
+        if let Some(p) = KdePalette::read_from_system() {
+            kde_palette = p;
+        }
+
+        let (tx, rx) = channel();
+        let mut watcher = None;
+        
+        if let Ok(mut w) = notify::recommended_watcher(tx) {
+            let kdeglobals_path = PathBuf::from(env::var("HOME").unwrap_or_default()).join(".config/kdeglobals");
+            if w.watch(&kdeglobals_path, RecursiveMode::NonRecursive).is_ok() {
+                watcher = Some(w);
+            }
+        }
+
         Self { 
             config, 
             config_path, 
             status_msg: String::new(),
             is_active_cache: false,
             last_active_check: None,
+            kde_palette,
+            _watcher: watcher,
+            rx_theme: Some(rx),
         }
     }
 
@@ -124,25 +150,21 @@ impl RavenGuiApp {
         }
     }
 
-    fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gaps: i32, is_dark: bool) {
+    fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gaps: i32, palette: &KdePalette) {
         let desired_size = egui::vec2(ui.available_width().min(320.0), 120.0);
         let (rect, _) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
 
         let painter = ui.painter_at(rect);
-        let bg = if is_dark {
-            egui::Color32::from_rgb(15, 23, 42)
-        } else {
-            egui::Color32::from_rgb(226, 232, 240)
-        };
+        let bg = palette.window_bg;
         painter.rect_filled(rect, 6.0, bg);
 
         let gap_f = gaps as f32 * 0.5;
         let w = rect.width();
         let h = rect.height();
 
-        let center_color = egui::Color32::from_rgb(0, 180, 216);
-        let side_color   = if is_dark { egui::Color32::from_rgb(30, 80, 120) } else { egui::Color32::from_rgb(100, 160, 200) };
-        let bot_color    = if is_dark { egui::Color32::from_rgb(20, 60, 100) } else { egui::Color32::from_rgb(130, 180, 210) };
+        let center_color = palette.selection_bg;
+        let side_color   = palette.button_bg;
+        let bot_color    = palette.view_bg;
 
         match layout_type {
             "tall" => {
@@ -292,28 +314,37 @@ impl RavenGuiApp {
 
 impl eframe::App for RavenGuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let is_dark = ctx.style().visuals.dark_mode;
-        let mut visuals = if is_dark { egui::Visuals::dark() } else { egui::Visuals::light() };
-
-        if is_dark {
-            visuals.widgets.active.bg_fill        = egui::Color32::from_rgb(0, 180, 216);
-            visuals.widgets.hovered.bg_fill       = egui::Color32::from_rgb(0, 119, 182);
-            visuals.widgets.inactive.bg_fill      = egui::Color32::from_rgb(30, 41, 59);
-            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(15, 23, 42);
-        } else {
-            visuals.widgets.active.bg_fill        = egui::Color32::from_rgb(0, 119, 182);
-            visuals.widgets.hovered.bg_fill       = egui::Color32::from_rgb(3, 4, 94);
-            visuals.widgets.inactive.bg_fill      = egui::Color32::from_rgb(226, 232, 240);
-            visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgb(241, 245, 249);
+        if let Some(rx) = &self.rx_theme {
+            let mut changed = false;
+            while let Ok(_) = rx.try_recv() {
+                changed = true;
+            }
+            if changed {
+                if let Some(p) = KdePalette::read_from_system() {
+                    self.kde_palette = p;
+                }
+                ctx.request_repaint();
+            }
         }
+
+        let mut visuals = if self.kde_palette.is_dark { egui::Visuals::dark() } else { egui::Visuals::light() };
+
+        visuals.window_fill = self.kde_palette.window_bg;
+        visuals.panel_fill = self.kde_palette.window_bg;
+        visuals.widgets.noninteractive.bg_fill = self.kde_palette.window_bg;
+        visuals.widgets.inactive.bg_fill = self.kde_palette.button_bg;
+        visuals.widgets.hovered.bg_fill = self.kde_palette.selection_bg;
+        visuals.widgets.active.bg_fill = self.kde_palette.selection_bg;
+        
+        visuals.widgets.noninteractive.fg_stroke.color = self.kde_palette.window_fg;
+        visuals.widgets.inactive.fg_stroke.color = self.kde_palette.button_fg;
+        visuals.widgets.hovered.fg_stroke.color = self.kde_palette.selection_fg;
+        visuals.widgets.active.fg_stroke.color = self.kde_palette.selection_fg;
+
         visuals.window_rounding = 12.0.into();
         ctx.set_visuals(visuals);
 
-        let accent = if is_dark {
-            egui::Color32::from_rgb(0, 180, 216)
-        } else {
-            egui::Color32::from_rgb(0, 119, 182)
-        };
+        let accent = self.kde_palette.selection_bg;
 
         egui::TopBottomPanel::bottom("footer_panel").show(ctx, |ui| {
             ui.add_space(8.0);
@@ -431,7 +462,7 @@ impl eframe::App for RavenGuiApp {
                             &self.config.layout_type,
                             self.config.master_ratio,
                             self.config.default_gaps,
-                            is_dark,
+                            &self.kde_palette,
                         );
                     });
                 });

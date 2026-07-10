@@ -962,7 +962,7 @@ function onWindowAdded(w) {
           w.__raven_stab_timer = null;
           requestStateSync();
         }
-      }, 250);
+      }, 300);
     } else {
       bindWindow(w);
       requestStateSync();
