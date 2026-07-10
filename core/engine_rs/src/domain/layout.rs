@@ -375,7 +375,7 @@ impl LayoutStrategy for MonocleStrategy {
         _active_window_id: Option<String>,
     ) -> (HashMap<String, Rect>, Vec<String>) {
         let mut layout_map = HashMap::new();
-        let mut evicted_windows = Vec::new();
+        let evicted_windows = Vec::new();
 
         let active_windows: Vec<WindowNode> = windows
             .iter()

@@ -1,6 +1,6 @@
 use eframe::egui;
 use raven_core::config::{RavenConfig, WindowRule};
-use serde::{Deserialize, Serialize};
+
 use std::env;
 use std::fs;
 use std::path::PathBuf;

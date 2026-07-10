@@ -7,7 +7,7 @@ use zbus::ConnectionBuilder;
 use raven_engine::application::controller::RavenController;
 use raven_engine::application::engine::TilingEngine;
 use raven_core::config::RavenConfig;
-use raven_engine::infrastructure::config::RavenConfigExt;
+
 use raven_engine::infrastructure::dbus::{KWinTopology, RavenDBusService};
 
 /// Punto de entrada principal del demonio (daemon) Raven Tiling Emulator.
