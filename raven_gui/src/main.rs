@@ -329,6 +329,21 @@ impl eframe::App for RavenGuiApp {
 
         let mut visuals = if self.kde_palette.is_dark { egui::Visuals::dark() } else { egui::Visuals::light() };
 
+        let primary_text = if self.kde_palette.is_dark {
+            egui::Color32::from_rgb(250, 250, 250) // Almost white
+        } else {
+            egui::Color32::from_rgb(20, 20, 20) // Almost black
+        };
+
+        let selection_lum = 0.299 * self.kde_palette.selection_bg.r() as f32 
+                          + 0.587 * self.kde_palette.selection_bg.g() as f32 
+                          + 0.114 * self.kde_palette.selection_bg.b() as f32;
+        let selection_text = if selection_lum < 128.0 {
+            egui::Color32::from_rgb(250, 250, 250)
+        } else {
+            egui::Color32::from_rgb(20, 20, 20)
+        };
+
         visuals.window_fill = self.kde_palette.window_bg;
         visuals.panel_fill = self.kde_palette.window_bg;
         visuals.widgets.noninteractive.bg_fill = self.kde_palette.window_bg;
@@ -336,10 +351,15 @@ impl eframe::App for RavenGuiApp {
         visuals.widgets.hovered.bg_fill = self.kde_palette.selection_bg;
         visuals.widgets.active.bg_fill = self.kde_palette.selection_bg;
         
-        visuals.widgets.noninteractive.fg_stroke.color = self.kde_palette.window_fg;
-        visuals.widgets.inactive.fg_stroke.color = self.kde_palette.button_fg;
-        visuals.widgets.hovered.fg_stroke.color = self.kde_palette.selection_fg;
-        visuals.widgets.active.fg_stroke.color = self.kde_palette.selection_fg;
+        visuals.override_text_color = Some(primary_text);
+        
+        visuals.widgets.noninteractive.fg_stroke.color = primary_text;
+        visuals.widgets.inactive.fg_stroke.color = primary_text;
+        visuals.widgets.hovered.fg_stroke.color = primary_text;
+        visuals.widgets.active.fg_stroke.color = primary_text;
+        
+        visuals.selection.bg_fill = self.kde_palette.selection_bg;
+        visuals.selection.stroke.color = primary_text;
 
         visuals.window_rounding = 12.0.into();
         ctx.set_visuals(visuals);
