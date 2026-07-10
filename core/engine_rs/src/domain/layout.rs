@@ -575,24 +575,27 @@ pub fn calculate_global_topology(
 
             for win in ws_windows {
                 if win.is_pip && !win.is_minimized {
+                    let final_pip_w = std::cmp::max(pip_w, win.min_w);
+                    let final_pip_h = std::cmp::max(pip_h, win.min_h);
+
                     let mut x = screen_rect.x + pip_gap;
                     let mut y = screen_rect.y + pip_gap;
 
-                    match pip_position {
+                    match pip_position.trim() {
                         "top-right" => {
-                            x = screen_rect.x + screen_rect.width - pip_w - pip_gap;
+                            x = screen_rect.x + screen_rect.width - final_pip_w - pip_gap;
                         }
                         "bottom-left" => {
-                            y = screen_rect.y + screen_rect.height - pip_h - pip_gap;
+                            y = screen_rect.y + screen_rect.height - final_pip_h - pip_gap;
                         }
                         "bottom-right" => {
-                            x = screen_rect.x + screen_rect.width - pip_w - pip_gap;
-                            y = screen_rect.y + screen_rect.height - pip_h - pip_gap;
+                            x = screen_rect.x + screen_rect.width - final_pip_w - pip_gap;
+                            y = screen_rect.y + screen_rect.height - final_pip_h - pip_gap;
                         }
                         _ => {}
                     }
 
-                    let pip_rect = Rect::new(x, y, pip_w, pip_h);
+                    let pip_rect = Rect::new(x, y, final_pip_w, final_pip_h);
                     global_layout.insert(win.window_id.clone(), pip_rect);
                 }
             }
