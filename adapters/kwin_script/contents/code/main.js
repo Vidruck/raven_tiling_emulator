@@ -188,7 +188,7 @@ function isFloating(w) {
       strCap.indexOf("immagine nell'immagine") !== -1 ||
       strCap.indexOf("pip") !== -1 ||
       w.keepAbove;
-      
+
     // Evaluamos reglas dinámicas
     if (_window_rules && _window_rules.length > 0) {
       for (var i = 0; i < _window_rules.length; i++) {
@@ -260,7 +260,7 @@ function getRectGeometry(rect) {
   if (!rect) {
     return { x: 0, y: 0, w: 1920, h: 1080 };
   }
-  
+
   function getProp(obj, p1, p2, def) {
     if (typeof obj[p1] === "function") return obj[p1]();
     if (obj[p1] !== undefined) return obj[p1];
@@ -538,7 +538,7 @@ function applyCommands(commandsJson) {
               ) {
                 break;
               }
-              
+
               // Forzar desmaximización antes de aplicar frameGeometry
               // Si la ventana está maximizada (interna de KWin), ignorará los gaps o el frameGeometry dictado
               if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
@@ -914,8 +914,8 @@ function onWindowAdded(w) {
   if (!isManageable(w)) {
     return;
   }
-  
-  // Forzar desmaximización al nacer para evitar que navegadores/Electron 
+
+  // Forzar desmaximización al nacer para evitar que navegadores/Electron
   // restauren su estado maximizado previo y floten sobre los gaps.
   try {
     if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
@@ -947,7 +947,7 @@ function onWindowAdded(w) {
     if (needsQuarantine) {
       w.__raven_quarantined = true;
       bindWindow(w);
-      // Usar pool de timers para la cuarentena de 250ms
+      // Usar pool de timers para la cuarentena de 360ms
       setKWinTimeout(function() {
         if (w && !w.deleted) {
           // Re-asegurar que no se maximizó durante la cuarentena
@@ -956,13 +956,13 @@ function onWindowAdded(w) {
               w.setMaximize(false, false);
             }
           } catch(e) {}
-          
+
           w.__raven_quarantined = false;
           w.__raven_strict_birth = true;
           w.__raven_stab_timer = null;
           requestStateSync();
         }
-      }, 300);
+      }, 360);
     } else {
       bindWindow(w);
       requestStateSync();
