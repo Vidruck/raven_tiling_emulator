@@ -838,8 +838,14 @@ function bindWindow(w) {
         return;
       }
       if (w.__raven_quarantined && w.__raven_stab_timer) {
-        w.__raven_stab_timer.stop();
-        w.__raven_stab_timer.start();
+        var t = w.__raven_stab_timer;
+        if (t.timer) {
+          t.timer.stop();
+          t.timer.start();
+        } else if (typeof t.stop === "function") {
+          t.stop();
+          t.start();
+        }
         return;
       }
 
@@ -969,8 +975,8 @@ function onWindowAdded(w) {
     if (needsQuarantine) {
       w.__raven_quarantined = true;
       bindWindow(w);
-      // Usar pool de timers para la cuarentena de 360ms
-      setKWinTimeout(function() {
+      // Usar pool de timers estático para la cuarentena dinámica de 150ms
+      w.__raven_stab_timer = setKWinTimeout(function() {
         if (w && !w.deleted) {
           // Re-asegurar que no se maximizó durante la cuarentena
           try {
@@ -984,7 +990,7 @@ function onWindowAdded(w) {
           w.__raven_stab_timer = null;
           requestStateSync();
         }
-      }, 360);
+      }, 150);
     } else {
       bindWindow(w);
       requestStateSync();
