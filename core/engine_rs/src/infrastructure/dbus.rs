@@ -377,6 +377,7 @@ impl RavenDBusService {
     async fn sync_window_delta(&self, delta_json: String) {
         let controller_clone = Arc::clone(&self.controller);
         let pending_clone = Arc::clone(&self.pending_commands);
+        let tokio_handle = self.tokio_handle.clone();
 
         self.tokio_handle.spawn(async move {
             if let Ok(win) = serde_json::from_str::<KWinWindow>(&delta_json) {
@@ -393,12 +394,26 @@ impl RavenDBusService {
                     win.min_h,
                     win.sb,
                 );
-                let mut ctrl = controller_clone.lock().await;
-                if let Ok(commands) = ctrl.handle_delta_change(win_node) {
-                    let mut queue = pending_clone.lock().await;
-                    let dbus_commands: Vec<TilingCommand> =
-                        commands.into_iter().map(Into::into).collect();
-                    queue.extend(dbus_commands);
+                
+                {
+                    let mut ctrl = controller_clone.lock().await;
+                    ctrl.handle_delta_change(win_node);
+                }
+
+                static PENDING_COMMIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                if !PENDING_COMMIT.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    tokio_handle.spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+                        PENDING_COMMIT.store(false, std::sync::atomic::Ordering::Relaxed);
+                        
+                        let mut ctrl = controller_clone.lock().await;
+                        if let Ok(commands) = ctrl.commit_layout() {
+                            let mut queue = pending_clone.lock().await;
+                            let dbus_commands: Vec<TilingCommand> =
+                                commands.into_iter().map(Into::into).collect();
+                            queue.extend(dbus_commands);
+                        }
+                    });
                 }
             }
         });
