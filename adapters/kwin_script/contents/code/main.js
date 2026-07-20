@@ -11,6 +11,28 @@
  * @author Alejandro González Hernández (Vidruck)
  */
 
+// --- Logger ---
+var Logger = {
+  // Activa esto a true si necesitas depurar localmente. Se deja en false por eficiencia.
+  debug_enabled: false,
+  
+  info: function(ctx, msg) {
+    print("[RAVEN] [INFO] [" + ctx + "] " + msg);
+  },
+  warn: function(ctx, msg) {
+    print("[RAVEN] [WARN] [" + ctx + "] " + msg);
+  },
+  error: function(ctx, msg, err) {
+    var trace = err ? " | Trace: " + err : "";
+    print("[RAVEN] [ERROR] [" + ctx + "] " + msg + trace);
+  },
+  debug: function(ctx, msg) {
+    if (this.debug_enabled) {
+      print("[RAVEN] [DEBUG] [" + ctx + "] " + msg);
+    }
+  }
+};
+
 // --- Globals de estado ---
 var _debounceTimer = null;
 var _is_listening = false;
@@ -54,7 +76,7 @@ function initTimerPool() {
     }
     _timer_pool_ready = true;
   } catch (e) {
-    print("[Raven] Error inicializando pool de timers: " + e);
+    Logger.error("initTimerPool", "Error inicializando pool de timers", e);
     _timer_pool_ready = false;
   }
 }
@@ -65,7 +87,7 @@ try {
   _debounceTimer.singleShot = true;
   _debounceTimer.timeout.connect(syncState);
 } catch (e) {
-  print("[Raven Bridge] Error inicializando timer de debounce: " + e);
+  Logger.error("Global", "Error inicializando timer de debounce", e);
 }
 
 /**
@@ -243,7 +265,7 @@ function requestStateSync() {
     }
     _debounceTimer.start();
   } catch (e) {
-    print("[Raven] Error en requestStateSync: " + e);
+    Logger.error("requestStateSync", "Fallo al solicitar sincronización de estado", e);
     try {
       sinkState();
     } catch (err) {}
@@ -332,7 +354,7 @@ function syncState() {
       }
     }
   } catch (e) {
-    print("[Raven] Error topología pantallas: " + e);
+    Logger.error("syncState", "Error iterando topología de pantallas", e);
   }
 
   for (var i = 0; i < windows.length; i++) {
@@ -376,7 +398,7 @@ function syncState() {
         sb: Boolean(w.__raven_strict_birth),
       });
     } catch (e) {
-      print("[Raven] Error mapeando ventana: " + e);
+      Logger.error("syncState", "Error extrayendo geometría/estado de ventana", e);
     }
   }
 
@@ -412,7 +434,7 @@ function syncState() {
       JSON.stringify(payload),
     );
   } catch (e) {
-    print("[Raven Bridge] D-bus Drop: " + e);
+    Logger.error("syncState", "D-Bus Drop: Fallo enviando payload", e);
   }
 }
 
@@ -463,7 +485,7 @@ function syncWindowDelta(w) {
       JSON.stringify(deltaPayload),
     );
   } catch (e) {
-    print("[Raven] Error Delta Sync: " + e);
+    Logger.error("syncWindowDelta", "Fallo en sincronización incremental", e);
   }
 }
 
@@ -498,7 +520,7 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
       }
     }
   } catch (e) {
-    print("[Raven] Fallo en migración nativa: " + e);
+    Logger.error("migrateWindow", "Fallo al migrar ventana", e);
   }
 }
 
@@ -625,7 +647,7 @@ function applyCommands(commandsJson) {
       }
     }
   } catch (e) {
-    print("[Raven Bridge] Error applyCommands: " + e);
+    Logger.error("applyCommands", "Fallo crítico aplicando comandos del daemon. Payload: " + commandsJson, e);
   }
 }
 
@@ -683,7 +705,7 @@ function receiveCommands(commandsJson) {
   // Activar modo push: el fallback pollér pausará su frecuencia
   if (!_push_mode_active) {
     _push_mode_active = true;
-    print("[Raven Bridge] ✅ Canal Push D-Bus activo. Reduciendo frecuencia de fallback.");
+    Logger.info("PushChannel", "✅ Canal Push D-Bus activo. Reduciendo frecuencia de fallback.");
   }
   if (commandsJson && commandsJson !== "[]") {
     applyCommands(commandsJson);
@@ -846,14 +868,14 @@ function bindWindow(w) {
       });
     }
   } catch (e) {
-    print("[Raven] Error bindWindow: " + e);
+    Logger.error("bindWindow", "Error enlazando eventos de ventana", e);
   }
 }
 /**
  * Inicializa el script puente de Raven conectando los listeners de KWin y disparando la sincronización inicial.
  */
 function init() {
-  print("[Raven Bridge] Inicializando v2.8 (Push-Based con Fallback)...");
+  Logger.info("init", "Inicializando v2.8 (Push-Based con Fallback)...");
 
   // Inicializar pool de timers estáticos (debe ser lo primero)
   initTimerPool();
@@ -1003,5 +1025,5 @@ function onWindowActivated(w) {
 try {
   init();
 } catch (e) {
-  print("[Raven Bridge] Error crítico: " + e);
+  Logger.error("Global", "Error crítico inicializando el bridge", e);
 }
