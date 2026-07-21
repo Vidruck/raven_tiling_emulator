@@ -44,6 +44,7 @@ La optimización sigue siendo el pilar fundamental. El motor opera con recursos 
 - **Reglas Dinámicas y Cuarentenas Integradas (v2.8):** Puedes definir desde la interfaz gráfica (GUI) qué clases de ventanas forzar como flotantes, PiP o cuáles poner en cuarentena, inyectándose en el compositor Wayland en tiempo real sin reiniciar.
 - **Protección Anti-Saturación / Flood Protection (v2.9):** Implementación de *Debouncing* nativo en Rust con cerrojos atómicos (`AtomicBool`). Si el compositor Wayland bombardea el motor con miles de eventos simultáneos, el sistema agrupa inteligentemente las peticiones y ejecuta un único recálculo geométrico, impidiendo cuellos de botella infinitos.
 - **Estabilización Zero-Allocation para Gecko (v2.9):** El *Silencio Geométrico* se ha optimizado para ser completamente amigable con el Garbage Collector (GC) de KWin. Se reutiliza un *Pool Estático de Temporizadores* (Zero-Allocation) para manejar las cuarentenas dinámicas de navegadores complejos (Firefox, LibreWolf, Floorp, Zen), logrando un acoplamiento perfecto libre de pausas o *micro-stutters*.
+- **Integración Nativa de Atajos de Teclado (v2.9):** El script puente de KWin se adueña automáticamente de los atajos del teclado a través de la API `registerShortcut`. Esto elimina la necesidad de programas de terceros como `sxhkd`. Los atajos aparecen directamente en *Preferencias del Sistema -> Atajos -> KWin* para su fácil reconfiguración. El atajo predeterminado para habilitar/deshabilitar el mosaico es **`Super+Space`** (o `Meta+Space`).
 
 ### 🏗️ Arquitectura de Comunicación (High-Performance Bridge)
 El sistema utiliza un puente de baja latencia altamente desacoplado entre el compositor KWin y el motor Raven, optimizado para los estándares de **Plasma 6 (Wayland)**:
@@ -79,14 +80,6 @@ cd raven_tiling_emulator
 ## 🧹 Desinstalación
 Si deseas eliminar Raven y todos sus binarios, ejecuta:
 `./uninstall.sh`
-
-### Atajos Predeterminados
-| Tecla | Acción |
-|---|---|
-| `Meta + I / D` | Incrementar/Disminuir el límite de ventanas en la espiral (nmaster) antes de desalojo |
-| `Meta + L / H` | Ajustar ratio del corte asimétrico en foco (master_ratio) |
-| `Meta + J / K` | Cambiar foco entre las ventanas del mosaico (Siguiente / Anterior) |
-| `Meta + G` | Alternar (Toggle) el motor de mosaico globalmente |
 
 ## ⚠️ Descargo de Responsabilidad (Disclaimer)
 **Este software se proporciona "tal cual" (AS IS), sin garantía de ningún tipo.** Raven interactúa directamente con el compositor de ventanas (KWin) y el bus de datos del sistema (DBus). El usuario asume toda la responsabilidad derivada de su uso. El autor no se hace responsable de inestabilidades en la sesión gráfica o conflictos con otros scripts del sistema.

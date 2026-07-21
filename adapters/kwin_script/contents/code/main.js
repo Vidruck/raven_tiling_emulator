@@ -202,6 +202,7 @@ function isFloating(w) {
       strCap.indexOf("pictureinpicture") !== -1 ||
       strCap.indexOf("imagen en imagen") !== -1 ||
       strCap.indexOf("imagen-en-imagen") !== -1 ||
+      strCap.indexOf("pantalla en pantalla") !== -1 ||
       strCap.indexOf("reproductor en miniatura") !== -1 ||
       strCap.indexOf("incrustation") !== -1 ||
       strCap.indexOf("bild-in-bild") !== -1 ||
@@ -878,6 +879,44 @@ function bindWindow(w) {
   }
 }
 /**
+ * Registra los atajos globales nativos de KWin para controlar a Raven.
+ */
+function registerRavenShortcuts() {
+  function dispatchToRaven(actionStr) {
+    try {
+      callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", actionStr);
+    } catch(e) {
+      Logger.error("Shortcuts", "Fallo al enviar atajo D-Bus: " + actionStr, e);
+    }
+  }
+
+  registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function() {
+    dispatchToRaven("toggle_tiling");
+  });
+  registerShortcut("RavenFocusNext", "Raven: Enfocar Siguiente", "Meta+J", function() {
+    dispatchToRaven("focus_next");
+  });
+  registerShortcut("RavenFocusPrev", "Raven: Enfocar Anterior", "Meta+K", function() {
+    dispatchToRaven("focus_prev");
+  });
+  registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function() {
+    dispatchToRaven("swap_next");
+  });
+  registerShortcut("RavenSwapPrev", "Raven: Intercambiar Anterior", "Meta+Shift+K", function() {
+    dispatchToRaven("swap_prev");
+  });
+  registerShortcut("RavenIncreaseRatio", "Raven: Expandir Master", "Meta+H", function() {
+    dispatchToRaven("increase_ratio");
+  });
+  registerShortcut("RavenDecreaseRatio", "Raven: Contraer Master", "Meta+L", function() {
+    dispatchToRaven("decrease_ratio");
+  });
+  registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Otro Monitor", "Meta+Shift+M", function() {
+    dispatchToRaven("migrate_active_to_screen");
+  });
+}
+
+/**
  * Inicializa el script puente de Raven conectando los listeners de KWin y disparando la sincronización inicial.
  */
 function init() {
@@ -885,6 +924,9 @@ function init() {
 
   // Inicializar pool de timers estáticos (debe ser lo primero)
   initTimerPool();
+
+  // Inyectar los atajos nativos de KWin
+  registerRavenShortcuts();
 
   var initialWindows = workspace.windowList();
   for (var i = 0; i < initialWindows.length; i++) {
