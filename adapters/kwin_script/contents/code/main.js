@@ -35,9 +35,6 @@ var Logger = {
 
 // --- Globals de estado ---
 var _debounceTimer = null;
-var _is_listening = false;
-var _watchdog_timer = null;
-var _push_mode_active = false;  // true cuando el canal push D-Bus está funcionando
 
 // Diccionario global de estado de ventanas indexado por internalId (UUID string).
 // Evita crear objetos temporales en los manejadores de eventos.
@@ -431,8 +428,13 @@ function syncState() {
       "org.kde.raven.Daemon",
       "/Events",
       "org.kde.raven.Events",
-      "syncState",
+      "syncStateAndUpdateLayout",
       JSON.stringify(payload),
+      function(response) {
+        if (response && response !== "[]") {
+          applyCommands(response);
+        }
+      }
     );
   } catch (e) {
     Logger.error("syncState", "D-Bus Drop: Fallo enviando payload", e);
@@ -484,6 +486,11 @@ function syncWindowDelta(w) {
       "org.kde.raven.Events",
       "syncWindowDelta",
       JSON.stringify(deltaPayload),
+      function(response) {
+        if (response && response !== "[]") {
+          applyCommands(response);
+        }
+      }
     );
   } catch (e) {
     Logger.error("syncWindowDelta", "Fallo en sincronización incremental", e);
@@ -697,73 +704,6 @@ function setKWinTimeout(callback, ms) {
  * Cuando el daemon calcula un nuevo layout, llama a este método en lugar de esperar
  * a que el bridge lo solicite (eliminando la latencia del long-polling).
  *
- * Al recibir comandos por push, activa _push_mode_active para que el fallback
- * (listenForCommands) se duerma y no consuma CPU innecesariamente.
- *
- * @param {string} commandsJson - Carga de comandos serializada en JSON desde el daemon.
- */
-function receiveCommands(commandsJson) {
-  // Activar modo push: el fallback pollér pausará su frecuencia
-  if (!_push_mode_active) {
-    _push_mode_active = true;
-    Logger.info("PushChannel", "✅ Canal Push D-Bus activo. Reduciendo frecuencia de fallback.");
-  }
-  if (commandsJson && commandsJson !== "[]") {
-    applyCommands(commandsJson);
-  }
-}
-
-/**
- * CANAL FALLBACK: Escucha comandos pendientes mediante polling cuando el canal push
- * no está disponible. Intervalo base: 500ms en reposo, 30ms cuando hay actividad.
- * Si _push_mode_active está activado, el intervalo se extiende a 2000ms para
- * minimizar el impacto en CPU mientras el canal push opera.
- */
-function listenForCommands() {
-  if (_is_listening) {
-    return;
-  }
-  _is_listening = true;
-  if (_watchdog_timer) {
-    try {
-      _watchdog_timer.stop();
-    } catch (e) {}
-  }
-  _watchdog_timer = setKWinTimeout(function () {
-    _is_listening = false;
-    listenForCommands();
-  }, 6000);
-
-  try {
-    callDBus(
-      "org.kde.raven.Daemon",
-      "/Events",
-      "org.kde.raven.Events",
-      "getPendingCommands",
-      function (response) {
-        if (_watchdog_timer) {
-          try {
-            _watchdog_timer.stop();
-          } catch (e) {}
-        }
-        _is_listening = false;
-
-        if (response && response !== "[]") {
-          applyCommands(response);
-          // Hay actividad: sondear rápido, pero si push está activo, es un extra
-          setKWinTimeout(listenForCommands, _push_mode_active ? 2000 : 30);
-        } else {
-          // Reposo: 500ms en modo normal, 2000ms si el push está cubriendo el trabajo
-          setKWinTimeout(listenForCommands, _push_mode_active ? 2000 : 500);
-        }
-      },
-    );
-  } catch (e) {
-    _is_listening = false;
-    setKWinTimeout(listenForCommands, 1000);
-  }
-}
-
 /**
  * Enlaza (binds) los eventos principales de una ventana a las funciones de sincronización del puente de Raven.
  *
@@ -920,7 +860,7 @@ function registerRavenShortcuts() {
  * Inicializa el script puente de Raven conectando los listeners de KWin y disparando la sincronización inicial.
  */
 function init() {
-  Logger.info("init", "Inicializando v2.9 (Push-Based con Fallback)...");
+  Logger.info("init", "Inicializando v2.9 (Push-Based)...");
 
   // Inicializar pool de timers estáticos (debe ser lo primero)
   initTimerPool();
@@ -933,7 +873,7 @@ function init() {
     bindWindow(initialWindows[i]);
   }
 
-  // Conectar con funciones estáticas nombradas (no closures anónimas)
+  // Conectar señales globales
   workspace.windowAdded.connect(onWindowAdded);
   workspace.windowRemoved.connect(onWindowRemoved);
   workspace.currentDesktopChanged.connect(onDesktopChanged);
@@ -974,8 +914,6 @@ function init() {
   } catch (e) {}
 
   requestStateSync();
-  // Arrancar el canal fallback (se auto-suprime cuando push está activo)
-  listenForCommands();
 }
 
 // ---- Manejadores de eventos globales (funciones estáticas, sin closures) ----

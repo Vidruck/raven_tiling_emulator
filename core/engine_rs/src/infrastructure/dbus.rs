@@ -1,11 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::runtime::Handle;
 use tokio::sync::Mutex;
-use tracing::debug;
 use zbus::interface;
 
 use crate::application::controller::RavenController;
@@ -267,8 +264,6 @@ impl From<RavenAction> for TilingCommand {
 pub struct RavenDBusService {
     /// Instancia protegida del orquestador de lógica del motor de Raven.
     pub controller: Arc<Mutex<RavenController>>,
-    /// Cola (queue) de comandos calculados pendientes de ser recogidos por KWin.
-    pub pending_commands: Arc<Mutex<Vec<TilingCommand>>>,
     /// Identificador único de la ventana actualmente enfocada en el sistema.
     pub active_window_id: Arc<Mutex<Option<String>>>,
     /// Último payload en formato JSON recibido para optimización de atajos.
@@ -281,105 +276,53 @@ pub struct RavenDBusService {
 
 #[interface(name = "org.kde.raven.Events")]
 impl RavenDBusService {
-    /// Recibe y procesa el estado global de las ventanas y del compositor KWin de forma asíncrona.
+    /// Recibe y procesa el estado global de las ventanas, retornando inmediatamente los comandos geométricos.
     ///
-    /// Cuenta con un cortocircuito (circuit breaker) que descarta paquetes si hay saturación.
-    #[zbus(name = "syncState")]
-    async fn sync_state(&self, payload_json: String) {
+    /// Este método implementa la arquitectura Single-Trip, reduciendo la latencia y eliminando el polling.
+    #[zbus(name = "syncStateAndUpdateLayout")]
+    async fn sync_state_and_update_layout(&self, payload_json: String) -> String {
         if payload_json.len() > 5 * 1024 * 1024 {
-            return;
+            return String::from("[]");
         }
 
-        static LAST_SYNC: AtomicU64 = AtomicU64::new(0);
-        static CIRCUIT_BREAKER: AtomicU64 = AtomicU64::new(0);
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-
-        if now < CIRCUIT_BREAKER.load(Ordering::Relaxed)
-            || now - LAST_SYNC.load(Ordering::Relaxed) < 32
-        {
-            if let Ok(mut last_payload) = self.last_payload_json.try_lock() {
-                *last_payload = payload_json;
-            }
-            return;
+        if let Ok(mut last_payload) = self.last_payload_json.try_lock() {
+            *last_payload = payload_json.clone();
         }
-        LAST_SYNC.store(now, Ordering::Relaxed);
 
         let controller_clone = Arc::clone(&self.controller);
-        let pending_clone = Arc::clone(&self.pending_commands);
-        let payload_clone = Arc::clone(&self.last_payload_json);
         let topology_clone = Arc::clone(&self.current_topology);
 
-        self.tokio_handle.spawn(async move {
-            *(payload_clone.lock().await) = payload_json.clone();
+        let calculation = self.tokio_handle.spawn_blocking(move || {
             let (workspaces, windows, topology) = match parse_payload(&payload_json) {
                 Ok(p) => p,
-                Err(_) => return,
+                Err(_) => return String::from("[]"),
             };
-            *(topology_clone.lock().await) = topology;
-
-            let mut ctrl = controller_clone.lock().await;
-            if let Ok(commands) = ctrl.handle_state_change(workspaces, windows) {
-                let mut queue = pending_clone.lock().await;
-                if queue.len() > 150 {
-                    queue.clear();
-                    let future_time = now + 1000;
-                    CIRCUIT_BREAKER.store(future_time, Ordering::Relaxed);
-                    return;
-                }
-                let dbus_commands: Vec<TilingCommand> =
-                    commands.into_iter().map(Into::into).collect();
-
-                // --- Canal Push-Based (v2.9) ---
-                // Intentar invocar receiveCommands() directamente en el bridge JS.
-                // Si el método está disponible en org.kde.kwin, el bridge lo recibe
-                // de forma inmediata sin esperar el próximo ciclo de polling.
-                // Si falla (bridge no expuesto o script no cargado), los comandos
-                // se encolan en pending_commands para ser recogidos por el fallback.
-                let push_ok = if !dbus_commands.is_empty() {
-                    if let Ok(json) = serde_json::to_string(&dbus_commands) {
-                        // La llamada se hace fire-and-forget; un error no es fatal.
-                        match zbus::Connection::session().await {
-                            Ok(conn) => {
-                                let result = conn
-                                    .call_method(
-                                        Some("org.kde.kwin.Script"),
-                                        "/Scripting",
-                                        Some("org.kde.kwin.Script"),
-                                        "receiveCommands",
-                                        &json,
-                                    )
-                                    .await;
-                                result.is_ok()
-                            }
-                            Err(_) => false,
-                        }
-                    } else {
-                        false
-                    }
-                } else {
-                    true // sin comandos que empujar, no necesita fallback
-                };
-
-                if !push_ok {
-                    // Fallback: encolar para que getPendingCommands() los entregue
-                    debug!("[PUSH] Canal push no disponible, usando cola de fallback.");
-                    queue.extend(dbus_commands);
-                }
+            
+            if let Ok(mut top) = topology_clone.try_lock() {
+                *top = topology;
             }
-        });
+
+            let mut ctrl = controller_clone.blocking_lock();
+            match ctrl.handle_state_change(workspaces, windows) {
+                Ok(commands) => {
+                    let dbus_commands: Vec<TilingCommand> =
+                        commands.into_iter().map(Into::into).collect();
+                    serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"))
+                }
+                Err(_) => String::from("[]"),
+            }
+        })
+        .await;
+
+        calculation.unwrap_or_else(|_| String::from("[]"))
     }
 
     /// Sincroniza de forma incremental (delta sync) el cambio de geometría o estado de una única ventana.
     #[zbus(name = "syncWindowDelta")]
-    async fn sync_window_delta(&self, delta_json: String) {
+    async fn sync_window_delta(&self, delta_json: String) -> String {
         let controller_clone = Arc::clone(&self.controller);
-        let pending_clone = Arc::clone(&self.pending_commands);
-        let tokio_handle = self.tokio_handle.clone();
 
-        self.tokio_handle.spawn(async move {
+        let calculation = self.tokio_handle.spawn_blocking(move || {
             if let Ok(win) = serde_json::from_str::<KWinWindow>(&delta_json) {
                 let win_node = WindowNode::new(
                     win.id,
@@ -395,48 +338,27 @@ impl RavenDBusService {
                     win.sb,
                 );
                 
-                {
-                    let mut ctrl = controller_clone.lock().await;
-                    ctrl.handle_delta_change(win_node);
-                }
+                let mut ctrl = controller_clone.blocking_lock();
+                ctrl.handle_delta_change(win_node);
 
-                static PENDING_COMMIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-                if !PENDING_COMMIT.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                    tokio_handle.spawn(async move {
-                        tokio::time::sleep(std::time::Duration::from_millis(15)).await;
-                        PENDING_COMMIT.store(false, std::sync::atomic::Ordering::Relaxed);
-                        
-                        let mut ctrl = controller_clone.lock().await;
-                        if let Ok(commands) = ctrl.commit_layout() {
-                            let mut queue = pending_clone.lock().await;
-                            let dbus_commands: Vec<TilingCommand> =
-                                commands.into_iter().map(Into::into).collect();
-                            queue.extend(dbus_commands);
-                        }
-                    });
+                if let Ok(commands) = ctrl.commit_layout() {
+                    let dbus_commands: Vec<TilingCommand> =
+                        commands.into_iter().map(Into::into).collect();
+                    return serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
                 }
             }
-        });
+            String::from("[]")
+        })
+        .await;
+
+        calculation.unwrap_or_else(|_| String::from("[]"))
     }
 
     /// Notifica que el puente de JavaScript se ha restablecido y está listo.
     #[zbus(name = "bridgeReady")]
     async fn bridge_ready(&self) {
-        self.pending_commands.lock().await.clear();
         self.last_payload_json.lock().await.clear();
         self.controller.lock().await.reset_state();
-    }
-
-    /// Retorna los comandos pendientes acumulados en la cola y los elimina.
-    #[zbus(name = "getPendingCommands")]
-    async fn get_pending_commands(&self) -> String {
-        let mut queue = self.pending_commands.lock().await;
-        if queue.is_empty() {
-            return String::from("[]");
-        }
-
-        let cmds = queue.drain(..).collect::<Vec<_>>();
-        serde_json::to_string(&cmds).unwrap_or_else(|_| String::from("[]"))
     }
 
     /// Registra el identificador de la ventana activa enfocada en KWin.
@@ -453,44 +375,44 @@ impl RavenDBusService {
 
     /// Alterna el estado operativo de activación del motor de mosaico.
     #[zbus(name = "toggleTiling")]
-    async fn toggle_tiling(&self) {
-        self.dispatch_shortcut("toggle_tiling", 0).await;
+    async fn toggle_tiling(&self) -> String {
+        self.dispatch_shortcut("toggle_tiling", 0).await
     }
 
     /// Incrementa o decrementa la separación (gaps) entre las ventanas.
     #[zbus(name = "incrementGaps")]
-    async fn increment_gaps(&self, amount: i32) {
-        self.dispatch_shortcut("increment_gaps", amount).await;
+    async fn increment_gaps(&self, amount: i32) -> String {
+        self.dispatch_shortcut("increment_gaps", amount).await
     }
 
     /// Incrementa el límite óptimo de ventanas activas en la composición foveal.
     #[zbus(name = "incrementMaster")]
-    async fn increment_master(&self) {
-        self.dispatch_shortcut("increment_nmaster", 1).await;
+    async fn increment_master(&self) -> String {
+        self.dispatch_shortcut("increment_nmaster", 1).await
     }
 
     /// Decrementa el límite óptimo de ventanas activas en la composición foveal.
     #[zbus(name = "decrementMaster")]
-    async fn decrement_master(&self) {
-        self.dispatch_shortcut("decrement_nmaster", 1).await;
+    async fn decrement_master(&self) -> String {
+        self.dispatch_shortcut("decrement_nmaster", 1).await
     }
 
     /// Aumenta el ratio de división (split ratio) asimétrica de la espiral BSP.
     #[zbus(name = "increaseRatio")]
-    async fn increase_ratio(&self) {
-        self.dispatch_shortcut("increase_ratio", 0).await;
+    async fn increase_ratio(&self) -> String {
+        self.dispatch_shortcut("increase_ratio", 0).await
     }
 
     /// Disminuye el ratio de división (split ratio) asimétrica de la espiral BSP.
     #[zbus(name = "decreaseRatio")]
-    async fn decrease_ratio(&self) {
-        self.dispatch_shortcut("decrease_ratio", 0).await;
+    async fn decrease_ratio(&self) -> String {
+        self.dispatch_shortcut("decrease_ratio", 0).await
     }
 
     /// Envía el foco a la ventana siguiente del mosaico.
     #[zbus(name = "focusNext")]
-    async fn focus_next(&self) {
-        self.dispatch_shortcut("focus_next", 0).await;
+    async fn focus_next(&self) -> String {
+        self.dispatch_shortcut("focus_next", 0).await
     }
 
     /// Retorna la lista de clases en cuarentena configuradas.
@@ -511,46 +433,44 @@ impl RavenDBusService {
 
     /// Envía el foco a la ventana anterior del mosaico.
     #[zbus(name = "focusPrev")]
-    async fn focus_prev(&self) {
-        self.dispatch_shortcut("focus_prev", 0).await;
+    async fn focus_prev(&self) -> String {
+        self.dispatch_shortcut("focus_prev", 0).await
     }
 
     /// Intercambia la ventana activa con la siguiente en la pila.
     #[zbus(name = "swapNext")]
-    async fn swap_next(&self) {
-        self.dispatch_shortcut("swap_next", 0).await;
+    async fn swap_next(&self) -> String {
+        self.dispatch_shortcut("swap_next", 0).await
     }
 
     /// Intercambia la ventana activa con la anterior en la pila.
     #[zbus(name = "swapPrev")]
-    async fn swap_prev(&self) {
-        self.dispatch_shortcut("swap_prev", 0).await;
+    async fn swap_prev(&self) -> String {
+        self.dispatch_shortcut("swap_prev", 0).await
     }
 
     /// Migra la ventana activa al monitor siguiente.
     #[zbus(name = "migrateActiveToScreen")]
-    async fn migrate_active_to_screen(&self) {
-        self.dispatch_shortcut("migrate_active_to_screen", 0).await;
+    async fn migrate_active_to_screen(&self) -> String {
+        self.dispatch_shortcut("migrate_active_to_screen", 0).await
     }
 
     /// Migra la ventana activa al monitor anterior.
     #[zbus(name = "migrateActiveToPrevScreen")]
-    async fn migrate_active_to_prev_screen(&self) {
-        self.dispatch_shortcut("migrate_active_to_prev_screen", 0)
-            .await;
+    async fn migrate_active_to_prev_screen(&self) -> String {
+        self.dispatch_shortcut("migrate_active_to_prev_screen", 0).await
     }
 
     /// Migra la ventana activa al escritorio virtual siguiente.
     #[zbus(name = "migrateActiveToDesktop")]
-    async fn migrate_active_to_desktop(&self) {
-        self.dispatch_shortcut("migrate_active_to_desktop", 0).await;
+    async fn migrate_active_to_desktop(&self) -> String {
+        self.dispatch_shortcut("migrate_active_to_desktop", 0).await
     }
 
     /// Migra la ventana activa al escritorio virtual anterior.
     #[zbus(name = "migrateActiveToPrevDesktop")]
-    async fn migrate_active_to_prev_desktop(&self) {
-        self.dispatch_shortcut("migrate_active_to_prev_desktop", 0)
-            .await;
+    async fn migrate_active_to_prev_desktop(&self) -> String {
+        self.dispatch_shortcut("migrate_active_to_prev_desktop", 0).await
     }
 
     /// Retorna si el motor de mosaico (tiling) está activado.
@@ -584,10 +504,10 @@ impl RavenDBusService {
 
 impl RavenDBusService {
     /// Despacha de forma asíncrona una acción de atajo de teclado, recalculando el layout si es necesario.
-    async fn dispatch_shortcut(&self, action: &str, payload: i32) {
+    async fn dispatch_shortcut(&self, action: &str, payload: i32) -> String {
         let payload_json = self.last_payload_json.lock().await.clone();
         if payload_json.is_empty() && action != "toggle_tiling" {
-            return;
+            return String::from("[]");
         }
 
         let active_id = self.active_window_id.lock().await.clone();
@@ -595,6 +515,7 @@ impl RavenDBusService {
             .unwrap_or_else(|_| (HashMap::new(), Vec::new(), KWinTopology::default()));
 
         let mut ctrl = self.controller.lock().await;
+        let mut all_commands = Vec::new();
         if let Ok((needs_recalc, cmds)) = ctrl.handle_shortcut(
             action.to_string(),
             payload,
@@ -602,23 +523,19 @@ impl RavenDBusService {
             workspaces,
             active_id,
         ) {
-            let mut queue = self.pending_commands.lock().await;
-            if queue.len() > 200 {
-                queue.clear();
-            }
-            let dbus_commands: Vec<TilingCommand> = cmds.into_iter().map(Into::into).collect();
-            queue.extend(dbus_commands);
+            all_commands.extend(cmds);
 
             if needs_recalc {
                 if let Ok((workspaces, windows, _topology)) = parse_payload(&payload_json) {
                     if let Ok(recalc_cmds) = ctrl.handle_state_change(workspaces, windows) {
-                        let recalc_dbus_cmds: Vec<TilingCommand> =
-                            recalc_cmds.into_iter().map(Into::into).collect();
-                        queue.extend(recalc_dbus_cmds);
+                        all_commands.extend(recalc_cmds);
                     }
                 }
             }
         }
+        
+        let dbus_commands: Vec<TilingCommand> = all_commands.into_iter().map(Into::into).collect();
+        serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"))
     }
 }
 

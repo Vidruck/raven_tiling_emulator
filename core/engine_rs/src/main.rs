@@ -35,7 +35,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let tokio_handle = tokio::runtime::Handle::current();
     let dbus_service = RavenDBusService {
         controller,
-        pending_commands: Arc::new(Mutex::new(Vec::new())),
         active_window_id: Arc::new(Mutex::new(None)),
         last_payload_json: Arc::new(Mutex::new(String::from("{}"))),
         current_topology: Arc::new(Mutex::new(KWinTopology::default())),
