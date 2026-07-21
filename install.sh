@@ -6,7 +6,7 @@ TARGET_DIR="$HOME/.local/share/raven"
 SOURCE_DIR=$(pwd)
 ICON_NAME="org.kde.raven.tiling"
 
-echo "🐦 Iniciando orquestación de Raven v2.7..."
+echo "🐦 Iniciando orquestación de Raven..."
 
 # Verificaciones de sanidad
 if [ -f "$HOME/.cargo/env" ]; then
@@ -137,4 +137,5 @@ if [ -x "$TARGET_DIR/bin/raven_gui" ]; then
     "$TARGET_DIR/bin/raven_gui" &
 fi
 
-echo "✅ Raven v2.7 instalado y operando con éxito. ¡Huélum!"
+echo "✅ Raven Tiling Emulator instalado y operando con éxito. ¡Huélum!"
+echo "En caso de no notar cambios o activacion instantanea, favor de reiniciar el puente en Guiones de KWin."

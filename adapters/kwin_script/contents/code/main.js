@@ -206,7 +206,8 @@ function isFloating(w) {
       strCap.indexOf("bild in bild") !== -1 ||
       strCap.indexOf("imagem em imagem") !== -1 ||
       strCap.indexOf("immagine nell'immagine") !== -1 ||
-      strCap.indexOf("pip") !== -1 ||
+      strCap === "pip" ||
+      strCap === "picture in picture" ||
       w.keepAbove;
 
     // Evaluamos reglas dinámicas
@@ -735,6 +736,18 @@ function bindWindow(w) {
       }
     });
 
+    if (w.captionChanged !== undefined) {
+      w.captionChanged.connect(function () {
+        if (
+          w &&
+          !w.deleted &&
+          !w.__raven_mutating
+        ) {
+          requestStateSync();
+        }
+      });
+    }
+
     w.outputChanged.connect(function () {
       if (!w || w.deleted || w.__raven_mutating) {
         return;
@@ -963,7 +976,26 @@ function onWindowAdded(w) {
     if (needsQuarantine) {
       w.__raven_quarantined = true;
       bindWindow(w);
-      // Usar pool de timers estático para la cuarentena dinámica de 150ms
+
+      // Heurística de Cold Start vs Warm Start
+      var qTime = 150; // Warm start por defecto
+      if (strClass !== "") {
+        var similarCount = 0;
+        var allW = workspace.windowList();
+        for (var k = 0; k < allW.length; k++) {
+          var wc = allW[k].resourceClass ? allW[k].resourceClass.toString().toLowerCase() : "";
+          if (wc === strClass) {
+            similarCount++;
+          }
+        }
+        if (similarCount <= 1) {
+          qTime = 800; // Cold start: requiere mucho más tiempo para inicializar CSD
+        }
+      } else {
+        qTime = 800; // Si nace sin clase, darle tiempo de sobra
+      }
+
+      // Usar pool de timers estático para la cuarentena dinámica
       w.__raven_stab_timer = setKWinTimeout(function() {
         if (w && !w.deleted) {
           // Re-asegurar que no se maximizó durante la cuarentena
@@ -978,7 +1010,7 @@ function onWindowAdded(w) {
           w.__raven_stab_timer = null;
           requestStateSync();
         }
-      }, 150);
+      }, qTime);
     } else {
       bindWindow(w);
       requestStateSync();
