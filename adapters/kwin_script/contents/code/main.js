@@ -1,12 +1,12 @@
 /**
- * @fileoverview Puente de Raven (Raven Bridge) para KDE Plasma 6 (Wayland) — v2.9
+ * @fileoverview Puente de Raven (Raven Bridge) para KDE Plasma 6 (Wayland) — v3.0
  * Proporciona la integración entre el compositor de ventanas KWin y el
  * motor de mosaico (tiling engine) nativo en Rust a través de D-Bus.
  *
- * Arquitectura Push-Based (v2.9):
- *   - El daemon Rust invoca receiveCommands() directamente cuando calcula un layout.
- *   - Si el push falla o el bridge no está listo, listenForCommands() actúa como fallback
- *     con un intervalo extendido de 500ms para minimizar carga.
+ * Arquitectura Single-Trip (v3.0):
+ *   - El puente opera 100% libre de polling (bucle de consulta).
+ *   - Las peticiones asíncronas de sincronización (D-Bus) retornan la nueva geometría en el mismo viaje.
+ *   - Reduce drásticamente la latencia y la carga del Garbage Collector en QJSEngine.
  *
  * @author Alejandro González Hernández (Vidruck)
  */
@@ -700,11 +700,6 @@ function setKWinTimeout(callback, ms) {
 }
 
 /**
- * CANAL PUSH (v2.9): Método público invocado directamente por el daemon Rust via D-Bus.
- * Cuando el daemon calcula un nuevo layout, llama a este método en lugar de esperar
- * a que el bridge lo solicite (eliminando la latencia del long-polling).
- *
-/**
  * Enlaza (binds) los eventos principales de una ventana a las funciones de sincronización del puente de Raven.
  *
  * @param {KWin::Window} w - Objeto de ventana.
@@ -820,39 +815,52 @@ function bindWindow(w) {
 }
 /**
  * Registra los atajos globales nativos de KWin para controlar a Raven.
+ * 
+ * Expone las acciones del gestor de ventanas al panel de preferencias del sistema.
+ * Utiliza llamadas D-Bus Single-Trip para aplicar el layout inmediatamente después del atajo.
  */
 function registerRavenShortcuts() {
   function dispatchToRaven(actionStr) {
     try {
-      callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", actionStr);
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        actionStr,
+        function(response) {
+          if (response && response !== "[]") {
+            applyCommands(response);
+          }
+        }
+      );
     } catch(e) {
       Logger.error("Shortcuts", "Fallo al enviar atajo D-Bus: " + actionStr, e);
     }
   }
 
   registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function() {
-    dispatchToRaven("toggle_tiling");
+    dispatchToRaven("toggleTiling");
   });
   registerShortcut("RavenFocusNext", "Raven: Enfocar Siguiente", "Meta+J", function() {
-    dispatchToRaven("focus_next");
+    dispatchToRaven("focusNext");
   });
   registerShortcut("RavenFocusPrev", "Raven: Enfocar Anterior", "Meta+K", function() {
-    dispatchToRaven("focus_prev");
+    dispatchToRaven("focusPrev");
   });
   registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function() {
-    dispatchToRaven("swap_next");
+    dispatchToRaven("swapNext");
   });
   registerShortcut("RavenSwapPrev", "Raven: Intercambiar Anterior", "Meta+Shift+K", function() {
-    dispatchToRaven("swap_prev");
+    dispatchToRaven("swapPrev");
   });
   registerShortcut("RavenIncreaseRatio", "Raven: Expandir Master", "Meta+H", function() {
-    dispatchToRaven("increase_ratio");
+    dispatchToRaven("increaseRatio");
   });
   registerShortcut("RavenDecreaseRatio", "Raven: Contraer Master", "Meta+L", function() {
-    dispatchToRaven("decrease_ratio");
+    dispatchToRaven("decreaseRatio");
   });
   registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Otro Monitor", "Meta+Shift+M", function() {
-    dispatchToRaven("migrate_active_to_screen");
+    dispatchToRaven("migrateActiveToScreen");
   });
 }
 

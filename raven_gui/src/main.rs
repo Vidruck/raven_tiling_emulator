@@ -388,13 +388,13 @@ impl eframe::App for RavenGuiApp {
             ui.vertical_centered(|ui| {
                 ui.add_space(8.0);
                 ui.heading(
-                    egui::RichText::new("🐦 Raven — Centro de Bienvenida")
+                    egui::RichText::new("🐦 Raven Tiling Emulator")
                         .size(24.0)
                         .strong()
                         .color(accent),
                 );
                 ui.label(
-                    egui::RichText::new("Motor nativo de mosaico para KDE Plasma 6 — v2.9")
+                    egui::RichText::new("Centro de Bienvenida al motor nativo de mosaico para KDE Plasma 6")
                         .weak()
                         .size(13.0),
                 );
@@ -633,12 +633,12 @@ impl eframe::App for RavenGuiApp {
     }
 }
 
-/// Punto de entrada principal del Centro de Bienvenida de Raven v2.9.
+/// Punto de entrada principal del Centro de Bienvenida de Raven .
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([700.0, 800.0])
-            .with_title("Raven — Centro de Bienvenida v2.9"),
+            .with_title("Raven Tiling Emulator — Centro de Bienvenida"),
         ..Default::default()
     };
 
