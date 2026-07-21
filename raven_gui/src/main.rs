@@ -338,7 +338,7 @@ impl eframe::App for RavenGuiApp {
         let selection_lum = 0.299 * self.kde_palette.selection_bg.r() as f32 
                           + 0.587 * self.kde_palette.selection_bg.g() as f32 
                           + 0.114 * self.kde_palette.selection_bg.b() as f32;
-        let selection_text = if selection_lum < 128.0 {
+        let _selection_text = if selection_lum < 128.0 {
             egui::Color32::from_rgb(250, 250, 250)
         } else {
             egui::Color32::from_rgb(20, 20, 20)
@@ -394,7 +394,7 @@ impl eframe::App for RavenGuiApp {
                         .color(accent),
                 );
                 ui.label(
-                    egui::RichText::new("Motor nativo de mosaico para KDE Plasma 6 — v2.8")
+                    egui::RichText::new("Motor nativo de mosaico para KDE Plasma 6 — v2.9")
                         .weak()
                         .size(13.0),
                 );
@@ -509,13 +509,6 @@ impl eframe::App for RavenGuiApp {
                                 egui::Slider::new(&mut self.config.master_ratio, 0.35..=0.85)
                                     .fixed_decimals(2),
                             );
-                        });
-
-                        ui.add_space(4.0);
-
-                        ui.horizontal(|ui| {
-                            ui.label("Altura del panel del sistema (px):");
-                            ui.add(egui::Slider::new(&mut self.config.panel_height, 20..=80).suffix(" px"));
                         });
 
                         ui.add_space(4.0);
@@ -640,12 +633,12 @@ impl eframe::App for RavenGuiApp {
     }
 }
 
-/// Punto de entrada principal del Centro de Bienvenida de Raven v2.8.
+/// Punto de entrada principal del Centro de Bienvenida de Raven v2.9.
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([700.0, 800.0])
-            .with_title("Raven — Centro de Bienvenida v2.8"),
+            .with_title("Raven — Centro de Bienvenida v2.9"),
         ..Default::default()
     };
 

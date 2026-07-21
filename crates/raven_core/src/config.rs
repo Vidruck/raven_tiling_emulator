@@ -28,9 +28,6 @@ pub struct RavenConfig {
     pub master_ratio: f32,
     /// Posición por defecto para ventanas Picture-in-Picture (PiP). Valores: top-left, top-right, bottom-left, bottom-right.
     pub pip_position: String,
-    /// Altura del panel persistente del shell en píxeles (usado para calcular el límite de saturación de pantalla).
-    #[serde(default = "default_panel_height")]
-    pub panel_height: i32,
     /// Preset de layout activo. Valores: dense, aesthetic, functional, balanced, simple.
     #[serde(default = "default_preset")]
     pub layout_preset: String,
@@ -57,7 +54,6 @@ pub fn default_quarantine() -> Vec<String> {
     ]
 }
 
-pub fn default_panel_height() -> i32 { 30 }
 pub fn default_preset() -> String { "balanced".to_string() }
 pub fn default_layout_type() -> String { "raven".to_string() }
 
@@ -76,7 +72,6 @@ impl RavenConfig {
             nmaster: 1,
             master_ratio: 0.5,
             pip_position: String::from("bottom-right"),
-            panel_height: 30,
             layout_preset: String::from("balanced"),
             layout_type: String::from("raven"),
             quarantine_classes: default_quarantine(),
@@ -98,7 +93,6 @@ impl RavenConfig {
                 config.master_ratio = config.master_ratio.clamp(0.1, 0.9);
                 config.default_gaps = std::cmp::max(0, config.default_gaps);
                 config.pip_position = config.pip_position.to_lowercase();
-                config.panel_height = config.panel_height.clamp(20, 120);
 
                 info!("[CONFIG] Preferencias cargadas con éxito desde disco.");
                 return config;

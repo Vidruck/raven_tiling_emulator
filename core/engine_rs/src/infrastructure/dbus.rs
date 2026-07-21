@@ -332,7 +332,7 @@ impl RavenDBusService {
                 let dbus_commands: Vec<TilingCommand> =
                     commands.into_iter().map(Into::into).collect();
 
-                // --- Canal Push-Based (v2.8) ---
+                // --- Canal Push-Based (v2.9) ---
                 // Intentar invocar receiveCommands() directamente en el bridge JS.
                 // Si el método está disponible en org.kde.kwin, el bridge lo recibe
                 // de forma inmediata sin esperar el próximo ciclo de polling.

@@ -1,9 +1,9 @@
 /**
- * @fileoverview Puente de Raven (Raven Bridge) para KDE Plasma 6 (Wayland) — v2.8
+ * @fileoverview Puente de Raven (Raven Bridge) para KDE Plasma 6 (Wayland) — v2.9
  * Proporciona la integración entre el compositor de ventanas KWin y el
  * motor de mosaico (tiling engine) nativo en Rust a través de D-Bus.
  *
- * Arquitectura Push-Based (v2.8):
+ * Arquitectura Push-Based (v2.9):
  *   - El daemon Rust invoca receiveCommands() directamente cuando calcula un layout.
  *   - Si el push falla o el bridge no está listo, listenForCommands() actúa como fallback
  *     con un intervalo extendido de 500ms para minimizar carga.
@@ -692,7 +692,7 @@ function setKWinTimeout(callback, ms) {
 }
 
 /**
- * CANAL PUSH (v2.8): Método público invocado directamente por el daemon Rust via D-Bus.
+ * CANAL PUSH (v2.9): Método público invocado directamente por el daemon Rust via D-Bus.
  * Cuando el daemon calcula un nuevo layout, llama a este método en lugar de esperar
  * a que el bridge lo solicite (eliminando la latencia del long-polling).
  *
@@ -881,7 +881,7 @@ function bindWindow(w) {
  * Inicializa el script puente de Raven conectando los listeners de KWin y disparando la sincronización inicial.
  */
 function init() {
-  Logger.info("init", "Inicializando v2.8 (Push-Based con Fallback)...");
+  Logger.info("init", "Inicializando v2.9 (Push-Based con Fallback)...");
 
   // Inicializar pool de timers estáticos (debe ser lo primero)
   initTimerPool();

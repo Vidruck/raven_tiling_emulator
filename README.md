@@ -11,9 +11,9 @@
 ![Wayland](https://img.shields.io/badge/Wayland-9999ff?style=for-the-badge&logo=wayland&logoColor=white)
 ![GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)
 
-Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.7**, Raven evoluciona hacia una arquitectura de **Composición Foveal Dinámica (Dynamic Foveal Composition)**, logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo mediante Arquitectura Hexagonal.
+Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.9**, Raven evoluciona hacia una arquitectura de **Composición Foveal Dinámica (Dynamic Foveal Composition)**, logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo mediante Arquitectura Hexagonal.
 
-## 🚀 El Salto a la Versión 2.7: Composición Foveal Dinámica y Reconciliación Orgánica
+## 🚀 El Salto a la Versión 2.9: Composición Foveal Dinámica y Reconciliación Orgánica
 Esta versión reimagina el motor de mosaico adoptando un esquema de diseño de foco centrado y paneles de utilidad distribuidos en base a una jerarquía foveal adaptativa, e implementa nuevos filtros de detección de ventanas *"Picture in Picture"*.
 
 ### 📉 Eficiencia Energética y de Almacenamiento
@@ -24,11 +24,12 @@ La optimización sigue siendo el pilar fundamental. El motor opera con recursos 
 | **v1.0** | Python Puro | 55.0 MB | ~15 MB |
 | **v1.6** | Híbrida (Python + Rust FFI) | ~25.9 MB | ~18 MB |
 | **v2.6** | Asynchronous Native Rust (Fixed) | ~4.3 MB | 1.4 MB |
-| **v2.7** | **Asynchronous Native Rust (Foveal Layout)** | **~4.5 MB** | **1.4 MB** |
+| **v2.7/2.8** | Asynchronous Native Rust (Foveal Layout) | ~4.5 MB | 1.4 MB |
+| **v2.9** | **Asynchronous Native Rust (Flood Protection & GC-Safe)** | **~4.5 MB** | **1.4 MB** |
 
 *La eficiencia extrema ha sido una directriz arquitectónica fundamental desde el inicio del proyecto. Tras validaciones exhaustivas en hardware real, se logró consolidar un motor de alto rendimiento que minimiza el impacto en recursos. Gracias al uso de LTO, el pruning de dependencias y la eliminación de símbolos, entregamos un binario ultra-compacto sin comprometer la estabilidad.*
 
-## 🌟 Nuevas Funciones y Estabilidad (v2.7+)
+## 🌟 Nuevas Funciones y Estabilidad (v2.9)
 - **Composición Foveal Dinámica (Dynamic Foveal Composition):** La pantalla se organiza de forma inteligente situando la ventana en foco activo en un *Centro Foveal* preponderante, flanqueado por ranuras de contexto lateral simétricas e inferiores de utilidad. Al superarse la cantidad base de ventanas, el motor aplica subdivisiones jerárquicas recursivas (empezando por los laterales) para preservar la legibilidad y área de trabajo central.
 - **Redimensionamiento Asimétrico Focalizado:** El ajuste del ratio de división (`master_ratio`) se aplica únicamente al corte que involucra a la ventana en foco activo (focused window). El resto de las ventanas mantienen una proporción simétrica limpia de `0.5` (50-50).
 - **Reinicio Automático de Proporción:** Para evitar deformaciones acumulativas, cualquier adición o remoción de ventanas en la composición restablece de manera atómica el ratio maestro a `0.5`, garantizando una transición visualmente limpia y simétrica de forma inmediata.
@@ -41,6 +42,8 @@ La optimización sigue siendo el pilar fundamental. El motor opera con recursos 
 - **Soporte a traspaso de ventanas vía arrastre:** Capacidad de arrastrar con el ratón la ventana a otro monitor o escritorio virtual disponible con reacomodo instantáneo de la composición.
 - **Persistencia Topológica de Sesión (v2.8):** El motor ahora guarda en segundo plano tu historial topológico. Al reiniciar el motor o KWin, el layout se restaura con tu orden previo exacto, evitando un reacomodo de ventanas no deseado.
 - **Reglas Dinámicas y Cuarentenas Integradas (v2.8):** Puedes definir desde la interfaz gráfica (GUI) qué clases de ventanas forzar como flotantes, PiP o cuáles poner en cuarentena, inyectándose en el compositor Wayland en tiempo real sin reiniciar.
+- **Protección Anti-Saturación / Flood Protection (v2.9):** Implementación de *Debouncing* nativo en Rust con cerrojos atómicos (`AtomicBool`). Si el compositor Wayland bombardea el motor con miles de eventos simultáneos, el sistema agrupa inteligentemente las peticiones y ejecuta un único recálculo geométrico, impidiendo cuellos de botella infinitos.
+- **Estabilización Zero-Allocation para Gecko (v2.9):** El *Silencio Geométrico* se ha optimizado para ser completamente amigable con el Garbage Collector (GC) de KWin. Se reutiliza un *Pool Estático de Temporizadores* (Zero-Allocation) para manejar las cuarentenas dinámicas de navegadores complejos (Firefox, LibreWolf, Floorp, Zen), logrando un acoplamiento perfecto libre de pausas o *micro-stutters*.
 
 ### 🏗️ Arquitectura de Comunicación (High-Performance Bridge)
 El sistema utiliza un puente de baja latencia altamente desacoplado entre el compositor KWin y el motor Raven, optimizado para los estándares de **Plasma 6 (Wayland)**:

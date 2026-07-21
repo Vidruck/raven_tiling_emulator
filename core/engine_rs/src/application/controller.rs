@@ -35,7 +35,7 @@ struct CommandedGeometry {
     timestamp: u64,
 }
 
-/// Orquestador principal de la lógica de Raven - v2.8 Master-Stack con soporte de intercambio de ventanas.
+/// Orquestador principal de la lógica de Raven - v2.9 Master-Stack con soporte de intercambio de ventanas.
 ///
 /// Administra el ciclo de vida del motor de mosaico (tiling engine), coordina
 /// la sincronización de estados del compositor y detecta situaciones de inestabilidad.
@@ -352,7 +352,6 @@ impl RavenController {
                 ws_rect.width,
                 ws_rect.height,
                 self.engine.config.default_gaps,
-                self.engine.config.panel_height,
                 300, // min_w funcional
                 250, // min_h funcional
                 ws_active,

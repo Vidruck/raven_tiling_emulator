@@ -1,4 +1,4 @@
-//! # Algoritmos de Layout - Versión 2.8 (Dwindle BSP con Reutilización Semántica)
+//! # Algoritmos de Layout - Versión 2.9
 //!
 //! Este submódulo contiene la lógica principal para el cálculo de la disposición
 //! de las ventanas en mosaico (tiling). Implementa un árbol de división binaria adaptativo (BSP)

@@ -23,7 +23,7 @@ impl RavenConfigExt for RavenConfig {
                 config.default_gaps = std::cmp::max(0, config.default_gaps);
                 // Normalizar pip_position a minúsculas para garantizar compatibilidad
                 config.pip_position = config.pip_position.to_lowercase();
-                config.panel_height = config.panel_height.clamp(20, 120);
+
 
                 info!("[CONFIG] Preferencias cargadas con éxito desde disco.");
                 return config;

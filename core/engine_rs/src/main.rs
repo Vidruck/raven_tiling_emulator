@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .compact()
         .init();
 
-    info!("\u{1f426} Iniciando Raven Tiling Emulator (Motor Nativo Rust v2.8)...");
+    info!("🐦 Iniciando Raven Tiling Emulator (Motor Nativo Rust v2.9)...");
 
     let app_config = RavenConfig::load();
     let engine = TilingEngine::new(app_config);

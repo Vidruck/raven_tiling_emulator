@@ -142,7 +142,7 @@ PlasmoidItem {
                         font.pixelSize: Kirigami.Units.gridUnit * 0.9
                     }
                     PlasmaComponents.Label {
-                        text: "v2.8 Master-Stack"
+                        text: "Raven Plasmoid"
                         opacity: 0.6
                         font.pixelSize: Kirigami.Units.gridUnit * 0.7
                     }
