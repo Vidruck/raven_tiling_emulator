@@ -851,6 +851,25 @@ function registerRavenShortcuts() {
     }
   }
 
+  function dispatchToRavenArg(actionStr, arg) {
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        actionStr,
+        arg,
+        function(response) {
+          if (response && response !== "[]") {
+            applyCommands(response);
+          }
+        }
+      );
+    } catch(e) {
+      Logger.error("Shortcuts", "Fallo al enviar atajo D-Bus con arg: " + actionStr, e);
+    }
+  }
+
   registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function() {
     dispatchToRaven("toggleTiling");
   });
@@ -874,6 +893,29 @@ function registerRavenShortcuts() {
   });
   registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Otro Monitor", "Meta+Shift+M", function() {
     dispatchToRaven("migrateActiveToScreen");
+  });
+  
+  // Shortcuts para uso desde Plasmoid / Externo
+  registerShortcut("RavenIncrementGaps", "Raven: Incrementar Gaps", "Meta+=", function() {
+    dispatchToRavenArg("incrementGaps", 2);
+  });
+  registerShortcut("RavenDecrementGaps", "Raven: Decrementar Gaps", "Meta+-", function() {
+    dispatchToRavenArg("incrementGaps", -2);
+  });
+  registerShortcut("RavenIncrementMaster", "Raven: Incrementar Master", "Meta+]", function() {
+    dispatchToRaven("incrementMaster");
+  });
+  registerShortcut("RavenDecrementMaster", "Raven: Decrementar Master", "Meta+[", function() {
+    dispatchToRaven("decrementMaster");
+  });
+  registerShortcut("RavenMigratePrevMonitor", "Raven: Enviar a Monitor Anterior", "Meta+Shift+N", function() {
+    dispatchToRaven("migrateActiveToPrevScreen");
+  });
+  registerShortcut("RavenMigrateDesktop", "Raven: Enviar a Escritorio Siguiente", "Meta+Shift+Right", function() {
+    dispatchToRaven("migrateActiveToDesktop");
+  });
+  registerShortcut("RavenMigratePrevDesktop", "Raven: Enviar a Escritorio Anterior", "Meta+Shift+Left", function() {
+    dispatchToRaven("migrateActiveToPrevDesktop");
   });
 }
 
@@ -978,7 +1020,7 @@ function onWindowAdded(w) {
       bindWindow(w);
 
       // Heurística de Cold Start vs Warm Start
-      var qTime = 150; // Warm start por defecto
+      var qTime = 120; // Warm start por defecto
       if (strClass !== "") {
         var similarCount = 0;
         var allW = workspace.windowList();
@@ -989,10 +1031,10 @@ function onWindowAdded(w) {
           }
         }
         if (similarCount <= 1) {
-          qTime = 800; // Cold start: requiere mucho más tiempo para inicializar CSD
+          qTime = 720; // Cold start: requiere mucho más tiempo para inicializar CSD
         }
       } else {
-        qTime = 800; // Si nace sin clase, darle tiempo de sobra
+        qTime = 720; // Si nace sin clase, darle tiempo de sobra
       }
 
       // Usar pool de timers estático para la cuarentena dinámica

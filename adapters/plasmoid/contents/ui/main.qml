@@ -18,18 +18,42 @@ PlasmoidItem {
     property string queryDesktopsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getDesktopCount"
 
     /**
-     * Ejecuta un comando en el bus de datos (D-Bus) dirigido al demonio (daemon) de Raven.
+     * Ejecuta un comando mapeándolo a los atajos globales de KWin para activar la arquitectura Single-Trip.
      *
-     * @param {string} method - Método de D-Bus a invocar.
-     * @param {var} args - Argumentos adicionales para el método.
+     * @param {string} method - Método lógico a invocar.
+     * @param {var} args - Argumentos adicionales (como incrementos de gaps).
      */
     function execDbus(method, args) {
-        let cmd = "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events." + method;
-        if (args) {
-            let cleanArgs = args.toString().replace("int32:", "");
-            cmd += " " + cleanArgs;
+        let shortcutMap = {
+            "toggleTiling": "RavenToggleTiling",
+            "focusPrev": "RavenFocusPrev",
+            "focusNext": "RavenFocusNext",
+            "swapPrev": "RavenSwapPrev",
+            "swapNext": "RavenSwapNext",
+            "increaseRatio": "RavenIncreaseRatio",
+            "decreaseRatio": "RavenDecreaseRatio",
+            "migrateActiveToScreen": "RavenMigrateMonitor",
+            "migrateActiveToPrevScreen": "RavenMigratePrevMonitor",
+            "migrateActiveToDesktop": "RavenMigrateDesktop",
+            "migrateActiveToPrevDesktop": "RavenMigratePrevDesktop",
+            "incrementMaster": "RavenIncrementMaster",
+            "decrementMaster": "RavenDecrementMaster"
+        };
+        
+        let targetShortcut = shortcutMap[method] || "";
+        
+        if (method === "incrementGaps") {
+            if (args === "2" || args === 2 || args === "int32:2") {
+                targetShortcut = "RavenIncrementGaps";
+            } else if (args === "-2" || args === -2 || args === "int32:-2") {
+                targetShortcut = "RavenDecrementGaps";
+            }
         }
-        executable.exec(cmd);
+        
+        if (targetShortcut !== "") {
+            let cmd = "qdbus6 org.kde.kglobalaccel /component/kwin invokeShortcut " + targetShortcut;
+            executable.exec(cmd);
+        }
     }
 
     /**
