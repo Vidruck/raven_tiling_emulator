@@ -74,6 +74,9 @@ pub struct KWinTopology {
     /// Listado de identificadores de escritorios virtuales activos.
     #[serde(default)]
     pub desktops: Vec<String>,
+    /// Identificador del escritorio actual activo.
+    #[serde(default)]
+    pub current_desktop: String,
 }
 
 /// Carga de datos (payload) completa con el estado del compositor KWin.
@@ -490,15 +493,21 @@ impl RavenDBusService {
         }
     }
 
-    /// Retorna el número actual de escritorios virtuales activos.
-    #[zbus(name = "getDesktopCount")]
-    async fn get_desktop_count(&self) -> i32 {
+    /// Retorna el estado formateado de los escritorios virtuales.
+    #[zbus(name = "getDesktopStatus")]
+    async fn get_desktop_status(&self) -> String {
         let topo = self.current_topology.lock().await;
-        if !topo.desktops.is_empty() {
-            topo.desktops.len() as i32
-        } else {
-            1
+        if topo.desktops.is_empty() {
+            return String::from("1 | Escritorio 1 | 1");
         }
+        
+        let total = topo.desktops.len();
+        let current_idx = topo.desktops.iter().position(|d| d == &topo.current_desktop).unwrap_or(0);
+        
+        let prev_idx = if current_idx == 0 { total - 1 } else { current_idx - 1 };
+        let next_idx = (current_idx + 1) % total;
+        
+        format!("{} | Escritorio {} | {}", prev_idx + 1, current_idx + 1, next_idx + 1)
     }
 }
 

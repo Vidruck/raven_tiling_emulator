@@ -421,6 +421,7 @@ function syncState() {
     topology: {
       outputs: masterOutputs,
       desktops: masterDesktops,
+      current_desktop: currentDesk ? currentDesk.id.toString() : "",
     },
   };
 
@@ -1020,7 +1021,7 @@ function onWindowAdded(w) {
       bindWindow(w);
 
       // Heurística de Cold Start vs Warm Start
-      var qTime = 120; // Warm start por defecto
+      var qTime = 480; // Warm start por defecto
       if (strClass !== "") {
         var similarCount = 0;
         var allW = workspace.windowList();
@@ -1031,10 +1032,10 @@ function onWindowAdded(w) {
           }
         }
         if (similarCount <= 1) {
-          qTime = 720; // Cold start: requiere mucho más tiempo para inicializar CSD
+          qTime = 960; // Cold start: requiere mucho más tiempo para inicializar CSD
         }
       } else {
-        qTime = 720; // Si nace sin clase, darle tiempo de sobra
+        qTime = 960; // Si nace sin clase, darle tiempo de sobra
       }
 
       // Usar pool de timers estático para la cuarentena dinámica

@@ -11,11 +11,11 @@ PlasmoidItem {
 
     property bool isEngineEnabled: true
     property int monitorCount: 1
-    property int desktopCount: 1
+    property string desktopStatus: " - | Escritorio 1 | - "
 
-    property string queryCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getTilingState"
+    property string queryCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.isTilingEnabled"
     property string queryMonitorsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getMonitorCount"
-    property string queryDesktopsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getDesktopCount"
+    property string queryDesktopsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getDesktopStatus"
 
     /**
      * Ejecuta un comando mapeándolo a los atajos globales de KWin para activar la arquitectura Single-Trip.
@@ -98,8 +98,7 @@ PlasmoidItem {
                     let val = parseInt(cleanOutput, 10);
                     root.monitorCount = isNaN(val) ? 1 : val;
                 } else if (sourceName === root.queryDesktopsCmd) {
-                    let val = parseInt(cleanOutput, 10);
-                    root.desktopCount = isNaN(val) ? 1 : val;
+                    root.desktopStatus = output;
                 }
             }
             disconnectSource(sourceName);
@@ -349,7 +348,7 @@ PlasmoidItem {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
                     PlasmaComponents.Label {
-                        text: "Escritorio | " + root.desktopCount + " |"
+                        text: root.desktopStatus
                         Layout.alignment: Qt.AlignHCenter
                         opacity: 0.8
                         font.pixelSize: Kirigami.Units.gridUnit * 0.7
@@ -359,13 +358,15 @@ PlasmoidItem {
                         PlasmaComponents.Button {
                             icon.name: "go-up"
                             Layout.fillWidth: true
-                            enabled: root.desktopCount > 1
+                            enabled: true
+
                             onClicked: root.execDbus("migrateActiveToPrevDesktop", "")
                         }
                         PlasmaComponents.Button {
                             icon.name: "go-down"
                             Layout.fillWidth: true
-                            enabled: root.desktopCount > 1
+                            enabled: true
+
                             onClicked: root.execDbus("migrateActiveToDesktop", "")
                         }
                     }
