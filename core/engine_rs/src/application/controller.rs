@@ -422,10 +422,11 @@ impl RavenController {
     pub fn handle_shortcut(
         &mut self,
         action: String,
-        payload: i32,
+        _payload: i32,
         windows: Vec<WindowNode>,
         _workspaces: HashMap<String, Rect>,
         active_window_id: Option<String>,
+        topology: &crate::infrastructure::dbus::KWinTopology,
     ) -> Result<(bool, Vec<RavenAction>), RavenError> {
         self.active_window_id = active_window_id.clone();
         self.engine.update_history(&windows);
@@ -449,7 +450,7 @@ impl RavenController {
             }
             "increment_gaps" => {
                 self.engine.config.default_gaps =
-                    std::cmp::max(0, self.engine.config.default_gaps + payload);
+                    std::cmp::max(0, self.engine.config.default_gaps + _payload);
                 needs_recalc = true;
             }
             // BUG-01: handlers de nmaster ahora implementados correctamente
@@ -470,7 +471,7 @@ impl RavenController {
             }
             "decrease_ratio" => {
                 self.engine.config.master_ratio =
-                    f32::max(0.15, self.engine.config.master_ratio - 0.05);
+                    f32::max(0.30, self.engine.config.master_ratio - 0.05);
                 needs_recalc = true;
             }
             "swap_next" | "swap_prev" => {
@@ -554,45 +555,42 @@ impl RavenController {
                 if let Some(ref wid) = active_window_id {
                     if let Some(win_node) = windows.iter().find(|w| &w.window_id == wid) {
                         let is_desktop = action.contains("desktop");
+                        let is_prev = action.contains("prev");
                         if is_desktop {
-                            let mut desktops = Vec::new();
-                            for key in _workspaces.keys() {
-                                let mut parts = key.split("||");
-                                if let (Some(out), Some(desk)) = (parts.next(), parts.next()) {
-                                    if out == win_node.output {
-                                        let desk_str = desk.to_string();
-                                        if !desktops.contains(&desk_str) {
-                                            desktops.push(desk_str);
-                                        }
-                                    }
+                            let desktops = &topology.desktops;
+                            let current_desk = win_node.desktops.first().cloned().unwrap_or_default();
+                            
+                            if let Some(current_idx) = desktops.iter().position(|d| d == &current_desk) {
+                                let target_idx = if is_prev {
+                                    if current_idx == 0 { desktops.len() - 1 } else { current_idx - 1 }
+                                } else {
+                                    (current_idx + 1) % desktops.len()
+                                };
+                                
+                                if let Some(target_desk) = desktops.get(target_idx) {
+                                    commands.push(RavenAction::MigrateToDesktop {
+                                        window_id: wid.clone(),
+                                        target_desktop: target_desk.clone(),
+                                    });
                                 }
-                            }
-                            let current_desk =
-                                win_node.desktops.first().cloned().unwrap_or_default();
-                            if let Some(target_desk) = desktops.iter().find(|&d| d != &current_desk)
-                            {
-                                commands.push(RavenAction::MigrateToDesktop {
-                                    window_id: wid.clone(),
-                                    target_desktop: target_desk.clone(),
-                                });
                             }
                         } else {
-                            let mut outputs = Vec::new();
-                            for key in _workspaces.keys() {
-                                if let Some(out) = key.split("||").next() {
-                                    let out_str = out.to_string();
-                                    if !outputs.contains(&out_str) {
-                                        outputs.push(out_str);
-                                    }
+                            let outputs = &topology.outputs;
+                            let current_out = &win_node.output;
+                            
+                            if let Some(current_idx) = outputs.iter().position(|o| o == current_out) {
+                                let target_idx = if is_prev {
+                                    if current_idx == 0 { outputs.len() - 1 } else { current_idx - 1 }
+                                } else {
+                                    (current_idx + 1) % outputs.len()
+                                };
+                                
+                                if let Some(target_out) = outputs.get(target_idx) {
+                                    commands.push(RavenAction::MigrateToOutput {
+                                        window_id: wid.clone(),
+                                        target_output: target_out.clone(),
+                                    });
                                 }
-                            }
-                            if let Some(target_out) =
-                                outputs.iter().find(|&o| o != &win_node.output)
-                            {
-                                commands.push(RavenAction::MigrateToOutput {
-                                    window_id: wid.clone(),
-                                    target_output: target_out.clone(),
-                                });
                             }
                         }
                     }

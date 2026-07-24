@@ -522,6 +522,7 @@ impl RavenDBusService {
             parsed_windows,
             workspaces,
             active_id,
+            &_topology,
         ) {
             all_commands.extend(cmds);
 
