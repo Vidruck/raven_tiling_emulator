@@ -330,8 +330,34 @@ impl LayoutStrategy for TallStrategy {
                 layout_map.insert(win.window_id.clone(), apply_gaps(&rect, half_g));
             }
         } else {
-            let master_w = (container.width as f32 * master_ratio) as i32;
-            let stack_w = container.width - master_w;
+            let mut master_w = (container.width as f32 * master_ratio) as i32;
+
+            // Restricción dinámica: Adaptarse a ventanas como Preferencias de KDE o Zen con minSize muy grande
+            let mut max_master_min_w = 0;
+            for i in 0..nmaster {
+                if active_windows[i].min_w > max_master_min_w {
+                    max_master_min_w = active_windows[i].min_w;
+                }
+            }
+            if master_w < max_master_min_w {
+                master_w = max_master_min_w;
+            }
+
+            let stack_count = active_windows.len() - nmaster;
+            let mut stack_w = container.width - master_w;
+
+            let mut max_stack_min_w = 0;
+            for i in 0..stack_count {
+                let win = &active_windows[nmaster + i];
+                if win.min_w > max_stack_min_w {
+                    max_stack_min_w = win.min_w;
+                }
+            }
+            if stack_w < max_stack_min_w {
+                stack_w = max_stack_min_w;
+                // Si la pila requiere más espacio del sobrante, empujar el master hacia la izquierda
+                master_w = std::cmp::max(1, container.width - stack_w);
+            }
 
             let master_h_slot = container.height / nmaster as i32;
             for i in 0..nmaster {

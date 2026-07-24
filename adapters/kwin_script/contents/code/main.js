@@ -15,18 +15,18 @@
 var Logger = {
   // Activa esto a true si necesitas depurar localmente. Se deja en false por eficiencia.
   debug_enabled: false,
-  
-  info: function(ctx, msg) {
+
+  info: function (ctx, msg) {
     print("[RAVEN] [INFO] [" + ctx + "] " + msg);
   },
-  warn: function(ctx, msg) {
+  warn: function (ctx, msg) {
     print("[RAVEN] [WARN] [" + ctx + "] " + msg);
   },
-  error: function(ctx, msg, err) {
+  error: function (ctx, msg, err) {
     var trace = err ? " | Trace: " + err : "";
     print("[RAVEN] [ERROR] [" + ctx + "] " + msg + trace);
   },
-  debug: function(ctx, msg) {
+  debug: function (ctx, msg) {
     if (this.debug_enabled) {
       print("[RAVEN] [DEBUG] [" + ctx + "] " + msg);
     }
@@ -62,10 +62,10 @@ function initTimerPool() {
       var t = new QTimer();
       t.singleShot = true;
       var slot = { timer: t, busy: false, callback: null };
-      (function(s) {
-        s.timer.timeout.connect(function() {
+      (function (s) {
+        s.timer.timeout.connect(function () {
           s.busy = false;
-          try { if (s.callback) s.callback(); } catch(e) {}
+          try { if (s.callback) s.callback(); } catch (e) { }
           s.callback = null;
         });
       })(slot);
@@ -267,7 +267,7 @@ function requestStateSync() {
     Logger.error("requestStateSync", "Fallo al solicitar sincronización de estado", e);
     try {
       sinkState();
-    } catch (err) {}
+    } catch (err) { }
   }
 }
 
@@ -313,12 +313,12 @@ function getSafeScreenGeometry(output, desktop) {
     if (area && area.width > 0 && area.height > 0) {
       return getRectGeometry(area);
     }
-  } catch (e) {}
+  } catch (e) { }
   try {
     if (output.geometry) {
       return getRectGeometry(output.geometry);
     }
-  } catch (e) {}
+  } catch (e) { }
   return { x: 0, y: 0, w: 1920, h: 1080 };
 }
 
@@ -432,7 +432,7 @@ function syncState() {
       "org.kde.raven.Events",
       "syncStateAndUpdateLayout",
       JSON.stringify(payload),
-      function(response) {
+      function (response) {
         if (response && response !== "[]") {
           applyCommands(response);
         }
@@ -488,7 +488,7 @@ function syncWindowDelta(w) {
       "org.kde.raven.Events",
       "syncWindowDelta",
       JSON.stringify(deltaPayload),
-      function(response) {
+      function (response) {
         if (response && response !== "[]") {
           applyCommands(response);
         }
@@ -578,12 +578,19 @@ function applyCommands(commandsJson) {
               }
 
               w.__raven_mutating = true;
-              w.frameGeometry = {
+              var targetGeom = {
                 x: Math.round(cmd.x),
                 y: Math.round(cmd.y),
                 width: Math.round(cmd.width),
                 height: Math.round(cmd.height),
               };
+
+              var dbgCls = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+              if (dbgCls.indexOf("zen") !== -1 || dbgCls.indexOf("firefox") !== -1) {
+                Logger.info("ZenDebug", "Applying commands [" + w.internalId + "] TARGET=" + targetGeom.width + "x" + targetGeom.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
+              }
+
+              w.frameGeometry = targetGeom;
 
               (function (capturedWindow) {
                 setKWinTimeout(function () {
@@ -592,7 +599,7 @@ function applyCommands(commandsJson) {
                   }
                 }, 400);
               })(w);
-            } catch (e) {}
+            } catch (e) { }
           } else if (cmd.action === "focus") {
             workspace.activeWindow = w;
           } else if (cmd.action === "request_feedback") {
@@ -690,13 +697,13 @@ function setKWinTimeout(callback, ms) {
     t.interval = ms;
     t.singleShot = true;
     t.timeout.connect(function () {
-      try { callback(); } catch(e) {}
-      try { t.stop(); } catch(err) {}
+      try { callback(); } catch (e) { }
+      try { t.stop(); } catch (err) { }
     });
     t.start();
     return t;
   } catch (e) {
-    try { callback(); } catch (err) {}
+    try { callback(); } catch (err) { }
     return null;
   }
 }
@@ -787,7 +794,13 @@ function bindWindow(w) {
       if (!w || w.deleted) {
         return;
       }
+      var dbgCls = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+      var isGecko = dbgCls.indexOf("zen") !== -1 || dbgCls.indexOf("firefox") !== -1;
+
       if (w.__raven_quarantined && w.__raven_stab_timer) {
+        if (isGecko) {
+          Logger.info("ZenDebug", "Quarantine MUTATION [" + w.internalId + "] geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
+        }
         var t = w.__raven_stab_timer;
         if (t.timer) {
           t.timer.stop();
@@ -812,6 +825,9 @@ function bindWindow(w) {
         return;
       }
 
+      if (isGecko) {
+        Logger.info("ZenDebug", "Delta SYNC [" + w.internalId + "] geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
+      }
       syncWindowDelta(w);
     });
 
@@ -841,13 +857,13 @@ function registerRavenShortcuts() {
         "/Events",
         "org.kde.raven.Events",
         actionStr,
-        function(response) {
+        function (response) {
           if (response && response !== "[]") {
             applyCommands(response);
           }
         }
       );
-    } catch(e) {
+    } catch (e) {
       Logger.error("Shortcuts", "Fallo al enviar atajo D-Bus: " + actionStr, e);
     }
   }
@@ -860,62 +876,62 @@ function registerRavenShortcuts() {
         "org.kde.raven.Events",
         actionStr,
         arg,
-        function(response) {
+        function (response) {
           if (response && response !== "[]") {
             applyCommands(response);
           }
         }
       );
-    } catch(e) {
+    } catch (e) {
       Logger.error("Shortcuts", "Fallo al enviar atajo D-Bus con arg: " + actionStr, e);
     }
   }
 
-  registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function() {
+  registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function () {
     dispatchToRaven("toggleTiling");
   });
-  registerShortcut("RavenFocusNext", "Raven: Enfocar Siguiente", "Meta+J", function() {
+  registerShortcut("RavenFocusNext", "Raven: Enfocar Siguiente", "Meta+J", function () {
     dispatchToRaven("focusNext");
   });
-  registerShortcut("RavenFocusPrev", "Raven: Enfocar Anterior", "Meta+K", function() {
+  registerShortcut("RavenFocusPrev", "Raven: Enfocar Anterior", "Meta+K", function () {
     dispatchToRaven("focusPrev");
   });
-  registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function() {
+  registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function () {
     dispatchToRaven("swapNext");
   });
-  registerShortcut("RavenSwapPrev", "Raven: Intercambiar Anterior", "Meta+Shift+K", function() {
+  registerShortcut("RavenSwapPrev", "Raven: Intercambiar Anterior", "Meta+Shift+K", function () {
     dispatchToRaven("swapPrev");
   });
-  registerShortcut("RavenIncreaseRatio", "Raven: Expandir Master", "Meta+H", function() {
+  registerShortcut("RavenIncreaseRatio", "Raven: Expandir Master", "Meta+H", function () {
     dispatchToRaven("increaseRatio");
   });
-  registerShortcut("RavenDecreaseRatio", "Raven: Contraer Master", "Meta+L", function() {
+  registerShortcut("RavenDecreaseRatio", "Raven: Contraer Master", "Meta+L", function () {
     dispatchToRaven("decreaseRatio");
   });
-  registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Otro Monitor", "Meta+Shift+M", function() {
+  registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Otro Monitor", "Meta+Shift+M", function () {
     dispatchToRaven("migrateActiveToScreen");
   });
-  
+
   // Shortcuts para uso desde Plasmoid / Externo
-  registerShortcut("RavenIncrementGaps", "Raven: Incrementar Gaps", "Meta+=", function() {
+  registerShortcut("RavenIncrementGaps", "Raven: Incrementar Gaps", "Meta+=", function () {
     dispatchToRavenArg("incrementGaps", 2);
   });
-  registerShortcut("RavenDecrementGaps", "Raven: Decrementar Gaps", "Meta+-", function() {
+  registerShortcut("RavenDecrementGaps", "Raven: Decrementar Gaps", "Meta+-", function () {
     dispatchToRavenArg("incrementGaps", -2);
   });
-  registerShortcut("RavenIncrementMaster", "Raven: Incrementar Master", "Meta+]", function() {
+  registerShortcut("RavenIncrementMaster", "Raven: Incrementar Master", "Meta+]", function () {
     dispatchToRaven("incrementMaster");
   });
-  registerShortcut("RavenDecrementMaster", "Raven: Decrementar Master", "Meta+[", function() {
+  registerShortcut("RavenDecrementMaster", "Raven: Decrementar Master", "Meta+[", function () {
     dispatchToRaven("decrementMaster");
   });
-  registerShortcut("RavenMigratePrevMonitor", "Raven: Enviar a Monitor Anterior", "Meta+Shift+N", function() {
+  registerShortcut("RavenMigratePrevMonitor", "Raven: Enviar a Monitor Anterior", "Meta+Shift+N", function () {
     dispatchToRaven("migrateActiveToPrevScreen");
   });
-  registerShortcut("RavenMigrateDesktop", "Raven: Enviar a Escritorio Siguiente", "Meta+Shift+Right", function() {
+  registerShortcut("RavenMigrateDesktop", "Raven: Enviar a Escritorio Siguiente", "Meta+Shift+Right", function () {
     dispatchToRaven("migrateActiveToDesktop");
   });
-  registerShortcut("RavenMigratePrevDesktop", "Raven: Enviar a Escritorio Anterior", "Meta+Shift+Left", function() {
+  registerShortcut("RavenMigratePrevDesktop", "Raven: Enviar a Escritorio Anterior", "Meta+Shift+Left", function () {
     dispatchToRaven("migrateActiveToPrevDesktop");
   });
 }
@@ -961,7 +977,7 @@ function init() {
               if (res) _quarantine_classes = JSON.parse(res);
             }
           );
-        } catch (e) {}
+        } catch (e) { }
         try {
           callDBus(
             "org.kde.raven.Daemon",
@@ -972,10 +988,10 @@ function init() {
               if (res) _window_rules = JSON.parse(res);
             }
           );
-        } catch (e) {}
+        } catch (e) { }
       },
     );
-  } catch (e) {}
+  } catch (e) { }
 
   requestStateSync();
 }
@@ -993,7 +1009,7 @@ function onWindowAdded(w) {
     if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
       w.setMaximize(false, false);
     }
-  } catch(e) {}
+  } catch (e) { }
 
   setKWinTimeout(function () {
     if (!w || w.deleted) {
@@ -1017,11 +1033,14 @@ function onWindowAdded(w) {
     }
 
     if (needsQuarantine) {
+      if (strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
+        Logger.info("ZenDebug", "onWindowAdded [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
+      }
       w.__raven_quarantined = true;
       bindWindow(w);
 
       // Heurística de Cold Start vs Warm Start
-      var qTime = 480; // Warm start por defecto
+      var qTime = 50; // Warm start por defecto
       if (strClass !== "") {
         var similarCount = 0;
         var allW = workspace.windowList();
@@ -1032,25 +1051,28 @@ function onWindowAdded(w) {
           }
         }
         if (similarCount <= 1) {
-          qTime = 960; // Cold start: requiere mucho más tiempo para inicializar CSD
+          qTime = 100; // Cold start
         }
       } else {
-        qTime = 960; // Si nace sin clase, darle tiempo de sobra
+        qTime = 150; // Si nace sin clase, darle un poco más de tiempo
       }
 
       // Usar pool de timers estático para la cuarentena dinámica
-      w.__raven_stab_timer = setKWinTimeout(function() {
+      w.__raven_stab_timer = setKWinTimeout(function () {
         if (w && !w.deleted) {
           // Re-asegurar que no se maximizó durante la cuarentena
           try {
             if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
               w.setMaximize(false, false);
             }
-          } catch(e) {}
+          } catch (e) { }
 
           w.__raven_quarantined = false;
           w.__raven_strict_birth = true;
           w.__raven_stab_timer = null;
+          if (strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
+            Logger.info("ZenDebug", "Quarantine ENDED [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height);
+          }
           requestStateSync();
         }
       }, qTime);
@@ -1085,7 +1107,7 @@ function onWindowActivated(w) {
         "org.kde.raven.Events",
         "windowActivated",
         id,
-        function () {},
+        function () { },
       );
     }
   }

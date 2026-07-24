@@ -266,8 +266,15 @@ impl RavenController {
             .retain(|id, _| active_ids.contains(id));
 
         for (wid, rect) in &new_layout {
+            let mut win_rect_differs = false;
+            if let Some(win_node) = windows.iter().find(|w| &w.window_id == wid) {
+                if win_node.geometry != *rect {
+                    win_rect_differs = true;
+                }
+            }
+
             let needs_move = match self.last_known_layout.get(wid) {
-                Some(old_rect) => old_rect != rect,
+                Some(old_rect) => old_rect != rect || win_rect_differs,
                 None => true,
             };
 

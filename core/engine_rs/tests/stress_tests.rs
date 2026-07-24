@@ -6,6 +6,7 @@ use raven_core::config::RavenConfig;
 use raven_engine::application::controller::RavenController;
 use raven_engine::application::engine::TilingEngine;
 use raven_engine::domain::geometry::{Rect, WindowNode};
+use raven_engine::infrastructure::dbus::KWinTopology;
 
 #[tokio::test]
 async fn test_saturation_flood() {
@@ -95,13 +96,23 @@ async fn test_concurrent_settings_conflict() {
     // Plasmoid recibe +10
     let task_a = tokio::spawn(async move {
         let mut guard = ctrl_a.lock().await;
-        let _ = guard.handle_shortcut("increment_gaps".to_string(), 10, vec![], HashMap::new(), None);
+        let topology = KWinTopology {
+            outputs: vec![],
+            desktops: vec![],
+            current_desktop: String::new(),
+        };
+        let _ = guard.handle_shortcut("increment_gaps".to_string(), 10, vec![], HashMap::new(), None, &topology);
     });
 
     // GUI recibe -8 concurrentemente
     let task_b = tokio::spawn(async move {
         let mut guard = ctrl_b.lock().await;
-        let _ = guard.handle_shortcut("increment_gaps".to_string(), -8, vec![], HashMap::new(), None);
+        let topology = KWinTopology {
+            outputs: vec![],
+            desktops: vec![],
+            current_desktop: String::new(),
+        };
+        let _ = guard.handle_shortcut("increment_gaps".to_string(), -8, vec![], HashMap::new(), None, &topology);
     });
 
     let _ = tokio::join!(task_a, task_b);
