@@ -809,6 +809,8 @@ function bindWindow(w) {
           t.stop();
           t.start();
         }
+        // Rectificación instantánea durante la cuarentena
+        syncWindowDelta(w);
         return;
       }
 
@@ -1038,6 +1040,9 @@ function onWindowAdded(w) {
       }
       w.__raven_quarantined = true;
       bindWindow(w);
+      
+      // Notificar a Rust inmediatamente para que calcule la geometría en t=0 (Rectificación instantánea)
+      requestStateSync();
 
       // Heurística de Cold Start vs Warm Start
       var qTime = 50; // Warm start por defecto

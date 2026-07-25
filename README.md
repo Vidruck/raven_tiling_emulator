@@ -11,7 +11,7 @@
 ![Wayland](https://img.shields.io/badge/Wayland-9999ff?style=for-the-badge&logo=wayland&logoColor=white)
 ![GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)
 
-Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 2.9**, Raven evoluciona hacia una arquitectura de **Composición Foveal Dinámica (Dynamic Foveal Composition)**, logrando el máximo desacoplamiento entre su lógica de negocio y la infraestructura del sistema operativo mediante Arquitectura Hexagonal.
+Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 3.0**, Raven evoluciona hacia una arquitectura de **Single-Trip Dbus Message** y un modelo de rectificación instantánea.
 
 ## 🚀 El Salto a la Versión 2.9: Composición Foveal Dinámica y Reconciliación Orgánica
 Esta versión reimagina el motor de mosaico adoptando un esquema de diseño de foco centrado y paneles de utilidad distribuidos en base a una jerarquía foveal adaptativa, e implementa nuevos filtros de detección de ventanas *"Picture in Picture"*.
@@ -26,18 +26,21 @@ La optimización sigue siendo el pilar fundamental. El motor opera con recursos 
 | **v2.6** | Asynchronous Native Rust (Fixed) | ~4.3 MB | 1.4 MB |
 | **v2.7/2.8** | Asynchronous Native Rust (Foveal Layout) | ~4.5 MB | 1.4 MB |
 | **v2.9** | **Asynchronous Native Rust (Flood Protection & GC-Safe)** | **~4.5 MB** | **1.4 MB** |
+| **v3.0** | **Native Rust (Single-Trip IPC & Dynamic Min-Size)** | **~4.5 MB** | **1.4 MB** |
 
 *La eficiencia extrema ha sido una directriz arquitectónica fundamental desde el inicio del proyecto. Tras validaciones exhaustivas en hardware real, se logró consolidar un motor de alto rendimiento que minimiza el impacto en recursos. Gracias al uso de LTO, el pruning de dependencias y la eliminación de símbolos, entregamos un binario ultra-compacto sin comprometer la estabilidad.*
 
-## 🌟 Nuevas Funciones y Estabilidad (v2.9)
+## 🌟 Nuevas Funciones y Estabilidad (v3.0)
+- **Motor Geomético Respetuoso (Dynami Min-Size Adaptation):** El motor Rust lee los requisitos de ventanas celosas de sus limites minimos de compocisión y **comprime dinámicamente el resto de la pila matemática** para asegurar que todos los elementos se muestren correctamente sin invadir el espacio de los demás.
+- **Arquitectura Single-Trip D-Bus:** El puente JS y el motor Rust ahora usan un modelo de "consulta-respuesta" sincrónica (Single-Trip). Se eliminaron las transmisiones masivas de estado redundante. El tráfico en el bus IPC de sistema se redujo a menos de un 10% respecto a la v2.9, aniquilando los cuellos de botella del CPU de KWin.
+- **Plasmóide Rediseñado con Carrusel Contextual:** El widget (plasmoide) oficial ahora actúa como un carrusel inteligente de orientación espacial. En lugar de textos genéricos, el plasmoide te muestra físicamente qué escritorio virtual tienes a tu izquierda y derecha (ej. 4 | Escritorio | 2), mejorando la navegación multisalida.
+- **Nuevos Controles Maestros:** Protección rígida del ratio maestro para que nunca colapse por debajo del 30% (0.30) sin importar la cantidad de clics del usuario, protegiendo la legibilidad de la pantalla.
+- Tránsito de Escritorios Secuencial: El envío de ventanas hacia otros escritorios (MigrateToDesktop) fue reescrito para saltar secuencialmente (1 -> 2 -> 3) en lugar de saltos abruptos.
 - **Composición Foveal Dinámica (Dynamic Foveal Composition):** La pantalla se organiza de forma inteligente situando la ventana en foco activo en un *Centro Foveal* preponderante, flanqueado por ranuras de contexto lateral simétricas e inferiores de utilidad. Al superarse la cantidad base de ventanas, el motor aplica subdivisiones jerárquicas recursivas (empezando por los laterales) para preservar la legibilidad y área de trabajo central.
 - **Redimensionamiento Asimétrico Focalizado:** El ajuste del ratio de división (`master_ratio`) se aplica únicamente al corte que involucra a la ventana en foco activo (focused window). El resto de las ventanas mantienen una proporción simétrica limpia de `0.5` (50-50).
 - **Reinicio Automático de Proporción:** Para evitar deformaciones acumulativas, cualquier adición o remoción de ventanas en la composición restablece de manera atómica el ratio maestro a `0.5`, garantizando una transición visualmente limpia y simétrica de forma inmediata.
-- **Protección y Acotamiento de Tamaño Mínimo:** Los tamaños mínimos reportados por KWin (`min_w` y `min_h`) se limitan a un tope máximo de `300x250` píxeles para verificar su acomodo. Esto evita que los navegadores o clientes de Wayland reporten dimensiones gigantes que provoquen su evicción inmediata de la pantalla.
 - **Bucle de Recálculo Dinámico sin Huecos:** Si una ventana no cabe en su celda calculada, el motor la desaloja y ejecuta una reconciliación iterativa redistribuyendo el 100% del área restante a las demás ventanas activas.
 - **Resiliencia y Comunicación Asíncrona:** El puente KWin-Raven ahora es completamente no bloqueante. El motor Rust utiliza offloading asíncrono con `tokio::spawn` para liberar el bus de datos instantáneamente.
-- **Estabilización de Ventanas Adaptativa:** Incorporación de un motor de detección por *Silencio Geométrico*. Las aplicaciones complejas (como Firefox, Brave, Floorp o Zen Browser) se mantienen en cuarentena dinámica hasta que cesan sus micro-redimensionamientos internos de Wayland, logrando un mosaico limpio y libre de parpadeos.
-- **Mapeo Predictivo de PiP (Picture-in-Picture):** El script bridge detecta de manera inteligente ventanas PiP en múltiples idiomas (inglés, español, francés, alemán, portugués, italiano) y las fuerza a flotar en lugar de integrarlas al mosaico.
 - **Envío de Ventanas mediante Toggle:** El toggle permite enviar la última ventana en foco al monitor o escritorio virtual alterno para comodidad del usuario.
 - **Soporte a traspaso de ventanas vía arrastre:** Capacidad de arrastrar con el ratón la ventana a otro monitor o escritorio virtual disponible con reacomodo instantáneo de la composición.
 - **Persistencia Topológica de Sesión (v2.8):** El motor ahora guarda en segundo plano tu historial topológico. Al reiniciar el motor o KWin, el layout se restaura con tu orden previo exacto, evitando un reacomodo de ventanas no deseado.
