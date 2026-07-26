@@ -124,3 +124,85 @@ async fn test_concurrent_settings_conflict() {
     // El valor final debe ser lógicamente consistente (por ejemplo, 6).
     assert!(final_gaps == 6 || final_gaps > 0);
 }
+
+#[tokio::test]
+async fn test_rebellious_window_flood() {
+    let config = RavenConfig::default();
+    let engine = TilingEngine::new(config);
+    let controller = Arc::new(Mutex::new(RavenController::new(engine)));
+    let output = "eDP-1".to_string();
+    let desktop = "Desk1".to_string();
+    let workspace_id = format!("{}||{}", desktop, output);
+
+    let mut workspaces = HashMap::new();
+    workspaces.insert(workspace_id.clone(), raven_core::geometry::Rect { x: 0, y: 0, width: 1920, height: 1080 });
+
+    // 1. Simular rebelde enviando geometrías basura rápidamente (tormenta de nacimiento)
+    for i in 0..100 {
+        let windows = vec![WindowNode {
+            window_id: "rebel-1".to_string(),
+            workspace_id: workspace_id.clone(),
+            output: output.clone(),
+            desktops: vec![desktop.clone()],
+            is_floating: false,
+            is_minimized: false,
+            is_pip: false,
+            geometry: raven_core::geometry::Rect { x: i, y: i, width: 800 + i, height: 600 + i },
+            min_w: 500,
+            min_h: 500,
+            strict_birth: true,
+        }];
+
+        let mut guard = controller.lock().await;
+        let actions = guard.handle_state_change(workspaces.clone(), windows).unwrap();
+        
+        // Como es la única ventana, Rust debe exigir que ocupe todo el ancho
+        // Como cambia la geometría, Rust debe emitir comandos RequestFeedback
+        assert!(!actions.is_empty());
+    }
+
+    // 2. Llega la nueva aplicación, la tormenta cesa
+    let windows = vec![
+        WindowNode {
+            window_id: "rebel-1".to_string(),
+            workspace_id: workspace_id.clone(),
+            output: output.clone(),
+            desktops: vec![desktop.clone()],
+            is_floating: false,
+            is_minimized: false,
+            is_pip: false,
+            geometry: raven_core::geometry::Rect { x: 0, y: 0, width: 800, height: 600 },
+            min_w: 500,
+            min_h: 500,
+            strict_birth: false,
+        },
+        WindowNode {
+            window_id: "good-app".to_string(),
+            workspace_id: workspace_id.clone(),
+            output: output.clone(),
+            desktops: vec![desktop.clone()],
+            is_floating: false,
+            is_minimized: false,
+            is_pip: false,
+            geometry: raven_core::geometry::Rect { x: 0, y: 0, width: 200, height: 200 },
+            min_w: 100,
+            min_h: 100,
+            strict_birth: false,
+        }
+    ];
+
+    let mut guard = controller.lock().await;
+    let actions = guard.handle_state_change(workspaces.clone(), windows).unwrap();
+
+    // Rust no debe ahogarse. Debe emitir comandos para 2 ventanas.
+    // Verificamos que se calculó el layout partiéndolo en 2 (ej. anchos de ~948).
+    let mut move_count = 0;
+    for action in actions {
+        if let raven_core::action::RavenAction::MoveWindow { width, .. } = action {
+            assert!(width > 800 && width < 1000); // 948px para cada ventana
+            move_count += 1;
+        }
+    }
+    
+    assert_eq!(move_count, 2);
+}

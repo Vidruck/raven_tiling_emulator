@@ -598,11 +598,16 @@ pub fn calculate_global_topology(
             let pip_w = (screen_rect.width as f32 * 0.22) as i32;
             let pip_h = (pip_w as f32 * 0.56) as i32;
             let pip_gap = default_gaps + 10;
+            let mut pip_index = 0;
 
             for win in ws_windows {
                 if win.is_pip && !win.is_minimized {
                     let final_pip_w = std::cmp::max(pip_w, win.min_w);
                     let final_pip_h = std::cmp::max(pip_h, win.min_h);
+
+                    // Calculamos el offset de apilamiento para evitar solapamiento exacto
+                    let offset_y = pip_index * (final_pip_h + pip_gap);
+                    let _offset_x = pip_index * (final_pip_w + pip_gap);
 
                     let mut x = screen_rect.x + pip_gap;
                     let mut y = screen_rect.y + pip_gap;
@@ -610,19 +615,34 @@ pub fn calculate_global_topology(
                     match pip_position.trim() {
                         "top-right" => {
                             x = screen_rect.x + screen_rect.width - final_pip_w - pip_gap;
+                            y += offset_y; // Apilar hacia abajo
                         }
                         "bottom-left" => {
                             y = screen_rect.y + screen_rect.height - final_pip_h - pip_gap;
+                            y -= offset_y; // Apilar hacia arriba
                         }
                         "bottom-right" => {
                             x = screen_rect.x + screen_rect.width - final_pip_w - pip_gap;
                             y = screen_rect.y + screen_rect.height - final_pip_h - pip_gap;
+                            y -= offset_y; // Apilar hacia arriba
                         }
-                        _ => {}
+                        _ => {
+                            // "top-left" por defecto
+                            y += offset_y; // Apilar hacia abajo
+                        }
+                    }
+
+                    // Prevenir que se salgan de la pantalla verticalmente
+                    if y < screen_rect.y + pip_gap {
+                        y = screen_rect.y + pip_gap;
+                    }
+                    if y + final_pip_h > screen_rect.y + screen_rect.height - pip_gap {
+                        y = screen_rect.y + screen_rect.height - final_pip_h - pip_gap;
                     }
 
                     let pip_rect = Rect::new(x, y, final_pip_w, final_pip_h);
                     global_layout.insert(win.window_id.clone(), pip_rect);
+                    pip_index += 1;
                 }
             }
         }

@@ -184,7 +184,7 @@ function isFloating(w) {
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) {
       return true;
     }
-    if (w.fullScreen) {
+    if (w.fullScreen || w.maximizeMode !== 0) {
       return true;
     }
 
@@ -359,7 +359,7 @@ function syncState() {
   for (var i = 0; i < windows.length; i++) {
     var w = windows[i];
     try {
-      if (!isManageable(w) || w.__raven_quarantined) {
+      if (!isManageable(w)) {
         continue;
       }
       var safeId = getSafeWindowId(w);
@@ -450,7 +450,7 @@ function syncState() {
  */
 function syncWindowDelta(w) {
   try {
-    if (!w || w.deleted || !isManageable(w) || w.__raven_quarantined) {
+    if (!w || w.deleted || !isManageable(w)) {
       return;
     }
     var safeId = getSafeWindowId(w);
@@ -571,13 +571,13 @@ function applyCommands(commandsJson) {
                 break;
               }
 
+              w.__raven_mutating = true;
+              
               // Forzar desmaximización antes de aplicar frameGeometry
               // Si la ventana está maximizada (interna de KWin), ignorará los gaps o el frameGeometry dictado
               if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
                 w.setMaximize(false, false);
               }
-
-              w.__raven_mutating = true;
               var targetGeom = {
                 x: Math.round(cmd.x),
                 y: Math.round(cmd.y),
@@ -1039,13 +1039,14 @@ function onWindowAdded(w) {
         Logger.info("ZenDebug", "onWindowAdded [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
       }
       w.__raven_quarantined = true;
+      w.__raven_strict_birth = true; // Forzar a Rust a pedir feedback constantemente hasta que obedezca
       bindWindow(w);
       
-      // Notificar a Rust inmediatamente para que calcule la geometría en t=0 (Rectificación instantánea)
+      // Notificar a Rust inmediatamente para que calcule la geometría en t=0
       requestStateSync();
 
       // Heurística de Cold Start vs Warm Start
-      var qTime = 50; // Warm start por defecto
+      var qTime = 32; // Warm start por defecto
       if (strClass !== "") {
         var similarCount = 0;
         var allW = workspace.windowList();
@@ -1056,10 +1057,10 @@ function onWindowAdded(w) {
           }
         }
         if (similarCount <= 1) {
-          qTime = 100; // Cold start
+          qTime = 64; // Cold start
         }
       } else {
-        qTime = 150; // Si nace sin clase, darle un poco más de tiempo
+        qTime = 96; // Si nace sin clase, darle un poco más de tiempo
       }
 
       // Usar pool de timers estático para la cuarentena dinámica

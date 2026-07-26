@@ -130,6 +130,10 @@ impl RavenController {
     /// # Retorno
     /// Verdadero (true) si la ventana está penalizada u oscilando; falso (false) de lo contrario.
     fn is_window_flapping(&mut self, win: &WindowNode) -> bool {
+        if win.strict_birth {
+            return false; // Las apps rebeldes en cuarentena tienen pase libre para intentar acatar la orden
+        }
+        
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

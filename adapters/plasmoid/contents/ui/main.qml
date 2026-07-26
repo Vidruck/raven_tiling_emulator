@@ -13,7 +13,7 @@ PlasmoidItem {
     property int monitorCount: 1
     property string desktopStatus: " - | Escritorio 1 | - "
 
-    property string queryCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.isTilingEnabled"
+    property string queryCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getTilingState"
     property string queryMonitorsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getMonitorCount"
     property string queryDesktopsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getDesktopStatus"
 
