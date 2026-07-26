@@ -187,6 +187,18 @@ function isFloating(w) {
     if (w.fullScreen || w.maximizeMode !== 0) {
       return true;
     }
+    
+    // Si la ventana no es redimensionable (ej. menús secundarios rebeldes o diálogos rígidos)
+    if (w.resizeable === false) {
+      return true;
+    }
+    if (w.minSize && w.maxSize) {
+      if (w.minSize.width > 0 && w.minSize.height > 0 && 
+          w.minSize.width === w.maxSize.width && 
+          w.minSize.height === w.maxSize.height) {
+        return true;
+      }
+    }
 
     var strClass = w.resourceClass
       ? w.resourceClass.toString().toLowerCase()
