@@ -184,20 +184,8 @@ function isFloating(w) {
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) {
       return true;
     }
-    if (w.fullScreen || w.maximizeMode !== 0) {
+    if (w.fullScreen) {
       return true;
-    }
-    
-    // Si la ventana no es redimensionable (ej. menús secundarios rebeldes o diálogos rígidos)
-    if (w.resizeable === false) {
-      return true;
-    }
-    if (w.minSize && w.maxSize) {
-      if (w.minSize.width > 0 && w.minSize.height > 0 && 
-          w.minSize.width === w.maxSize.width && 
-          w.minSize.height === w.maxSize.height) {
-        return true;
-      }
     }
 
     var strClass = w.resourceClass
@@ -371,7 +359,7 @@ function syncState() {
   for (var i = 0; i < windows.length; i++) {
     var w = windows[i];
     try {
-      if (!isManageable(w)) {
+      if (!isManageable(w) || w.__raven_quarantined) {
         continue;
       }
       var safeId = getSafeWindowId(w);
@@ -462,7 +450,7 @@ function syncState() {
  */
 function syncWindowDelta(w) {
   try {
-    if (!w || w.deleted || !isManageable(w)) {
+    if (!w || w.deleted || !isManageable(w) || w.__raven_quarantined) {
       return;
     }
     var safeId = getSafeWindowId(w);
@@ -583,13 +571,13 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              w.__raven_mutating = true;
-              
               // Forzar desmaximización antes de aplicar frameGeometry
               // Si la ventana está maximizada (interna de KWin), ignorará los gaps o el frameGeometry dictado
               if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
                 w.setMaximize(false, false);
               }
+
+              w.__raven_mutating = true;
               var targetGeom = {
                 x: Math.round(cmd.x),
                 y: Math.round(cmd.y),
@@ -821,8 +809,6 @@ function bindWindow(w) {
           t.stop();
           t.start();
         }
-        // Rectificación instantánea durante la cuarentena
-        syncWindowDelta(w);
         return;
       }
 
@@ -859,7 +845,7 @@ function bindWindow(w) {
 }
 /**
  * Registra los atajos globales nativos de KWin para controlar a Raven.
- * 
+ *
  * Expone las acciones del gestor de ventanas al panel de preferencias del sistema.
  * Utiliza llamadas D-Bus Single-Trip para aplicar el layout inmediatamente después del atajo.
  */
@@ -1051,14 +1037,10 @@ function onWindowAdded(w) {
         Logger.info("ZenDebug", "onWindowAdded [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
       }
       w.__raven_quarantined = true;
-      w.__raven_strict_birth = true; // Forzar a Rust a pedir feedback constantemente hasta que obedezca
       bindWindow(w);
-      
-      // Notificar a Rust inmediatamente para que calcule la geometría en t=0
-      requestStateSync();
 
       // Heurística de Cold Start vs Warm Start
-      var qTime = 32; // Warm start por defecto
+      var qTime = 120; // Warm start por defecto
       if (strClass !== "") {
         var similarCount = 0;
         var allW = workspace.windowList();
@@ -1069,10 +1051,10 @@ function onWindowAdded(w) {
           }
         }
         if (similarCount <= 1) {
-          qTime = 64; // Cold start
+          qTime = 180; // Cold start
         }
       } else {
-        qTime = 96; // Si nace sin clase, darle un poco más de tiempo
+        qTime = 240; // Si nace sin clase, darle un poco más de tiempo
       }
 
       // Usar pool de timers estático para la cuarentena dinámica
