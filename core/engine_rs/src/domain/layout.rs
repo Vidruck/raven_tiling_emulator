@@ -607,7 +607,6 @@ pub fn calculate_global_topology(
 
                     // Calculamos el offset de apilamiento para evitar solapamiento exacto
                     let offset_y = pip_index * (final_pip_h + pip_gap);
-                    let _offset_x = pip_index * (final_pip_w + pip_gap);
 
                     let mut x = screen_rect.x + pip_gap;
                     let mut y = screen_rect.y + pip_gap;

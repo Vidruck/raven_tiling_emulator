@@ -90,21 +90,3 @@ impl WindowNode {
         }
     }
 }
-
-/// Representa un escritorio o espacio de trabajo virtual.
-///
-/// Vincula un identificador único con un área rectangular específica en la pantalla.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Workspace {
-    /// Identificador único del escritorio (proporcionado por KWin).
-    pub id: String,
-    /// Área física disponible en este escritorio.
-    pub rect: Rect,
-}
-
-impl Workspace {
-    /// Crea una nueva instancia de un espacio de trabajo (`Workspace`).
-    pub fn new(id: String, rect: Rect) -> Self {
-        Workspace { id, rect }
-    }
-}

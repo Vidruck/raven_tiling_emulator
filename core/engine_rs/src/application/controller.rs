@@ -25,16 +25,6 @@ struct FlapTracker {
     last_minimized: bool,
 }
 
-/// Registra una geometría de ventana que fue ordenada aplicar de forma explícita.
-struct CommandedGeometry {
-    /// Rectángulo de geometría de la ventana ordenado.
-    #[allow(dead_code)]
-    rect: Rect,
-    /// Marca de tiempo del momento en que se emitió el comando (timestamp).
-    #[allow(dead_code)]
-    timestamp: u64,
-}
-
 /// Orquestador principal de la lógica de Raven - v2.9 Master-Stack con soporte de intercambio de ventanas.
 ///
 /// Administra el ciclo de vida del motor de mosaico (tiling engine), coordina
@@ -46,8 +36,6 @@ pub struct RavenController {
     last_known_layout: HashMap<String, Rect>,
     /// Registro de oscilaciones rápidas (flapping) por ventana.
     flap_registry: HashMap<String, FlapTracker>,
-    /// Historial de geometrías explícitamente ordenadas por el motor.
-    commanded_geometries: HashMap<String, CommandedGeometry>,
     /// Identificador de la ventana activa enfocada (focused window).
     pub active_window_id: Option<String>,
     /// Cantidad de ventanas activas en el último cambio de estado.
@@ -65,7 +53,6 @@ impl RavenController {
             engine,
             last_known_layout: HashMap::new(),
             flap_registry: HashMap::new(),
-            commanded_geometries: HashMap::new(),
             active_window_id: None,
             last_active_window_count: 0,
         }
@@ -80,7 +67,6 @@ impl RavenController {
     pub fn reset_state(&mut self) {
         self.last_known_layout.clear();
         self.flap_registry.clear();
-        self.commanded_geometries.clear();
         self.engine.current_workspaces.clear();
         self.engine.current_windows.clear();
         self.active_window_id = None;
@@ -215,10 +201,6 @@ impl RavenController {
         workspaces: HashMap<String, Rect>,
         windows: Vec<WindowNode>,
     ) -> Result<Vec<RavenAction>, RavenError> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
 
         let history_changed = self.engine.update_history(&windows);
         if history_changed {
@@ -238,10 +220,8 @@ impl RavenController {
             .iter()
             .filter(|w| !w.is_floating && !w.is_minimized)
             .count();
-        // Si el número de ventanas cambia (se agregó o eliminó de la composición),
-        // reiniciamos el ratio maestro (master ratio) a 0.5 (50-50) para evitar desorden.
+        // Actualizamos el tracking del número de ventanas activas.
         if active_count != self.last_active_window_count {
-            self.engine.config.master_ratio = 0.5;
             self.last_active_window_count = active_count;
         }
 
@@ -262,12 +242,6 @@ impl RavenController {
             self.active_window_id.clone(),
         )?;
         let mut commands = Vec::new();
-
-        // BUG-06: Purgar commanded_geometries de ventanas que ya no existen
-        let active_ids: std::collections::HashSet<&String> =
-            windows.iter().map(|w| &w.window_id).collect();
-        self.commanded_geometries
-            .retain(|id, _| active_ids.contains(id));
 
         for (wid, rect) in &new_layout {
             let mut win_rect_differs = false;
@@ -300,13 +274,6 @@ impl RavenController {
                 }
             }
 
-            self.commanded_geometries.insert(
-                wid.clone(),
-                CommandedGeometry {
-                    rect: *rect,
-                    timestamp: now,
-                },
-            );
         }
 
         for evicted_id in &evicted_windows {

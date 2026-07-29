@@ -476,6 +476,12 @@ impl RavenDBusService {
         self.dispatch_shortcut("migrate_active_to_prev_desktop", 0).await
     }
 
+    /// Cicla al siguiente layout (estrategia de tiling).
+    #[zbus(name = "cycleLayout")]
+    async fn cycle_layout(&self) -> String {
+        self.dispatch_shortcut("cycle_layout", 0).await
+    }
+
     /// Retorna si el motor de mosaico (tiling) está activado.
     #[zbus(name = "getTilingState")]
     async fn get_tiling_state(&self) -> bool {

@@ -38,7 +38,6 @@ var _debounceTimer = null;
 
 // Diccionario global de estado de ventanas indexado por internalId (UUID string).
 // Evita crear objetos temporales en los manejadores de eventos.
-var _window_state = {};
 
 // Lista de clases de ventana que requieren cuarentena de estabilización geométrica.
 var _quarantine_classes = [];
@@ -266,7 +265,7 @@ function requestStateSync() {
   } catch (e) {
     Logger.error("requestStateSync", "Fallo al solicitar sincronización de estado", e);
     try {
-      sinkState();
+      syncState();
     } catch (err) { }
   }
 }
@@ -647,6 +646,8 @@ function applyCommands(commandsJson) {
                 }
               }, 150);
             })(w);
+          } else if (cmd.action === "saturation_warning") {
+            Logger.warn("Saturation", "Pantalla cerca de saturación: " + cmd.active + "/" + cmd.cmax + " ventanas");
           } else if (cmd.action === "migrate_to_desktop") {
             w.__raven_mutating = true;
             migrateWindow(w, null, cmd.target_ws);
@@ -927,6 +928,9 @@ function registerRavenShortcuts() {
   });
   registerShortcut("RavenMigratePrevMonitor", "Raven: Enviar a Monitor Anterior", "Meta+Shift+N", function () {
     dispatchToRaven("migrateActiveToPrevScreen");
+  });
+  registerShortcut("RavenCycleLayout", "Raven: Ciclar Layout", "Meta+Shift+L", function() {
+    dispatchToRaven("cycleLayout");
   });
   registerShortcut("RavenMigrateDesktop", "Raven: Enviar a Escritorio Siguiente", "Meta+Shift+Right", function () {
     dispatchToRaven("migrateActiveToDesktop");
