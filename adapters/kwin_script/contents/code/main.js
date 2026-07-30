@@ -183,7 +183,13 @@ function isFloating(w) {
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) {
       return true;
     }
-    if (w.fullScreen || w.maximizeMode !== 0 || w.maximized === true || w.maximized) {
+    if (
+      w.fullScreen ||
+      w.maximizeMode !== 0 ||
+      w.maximized === true ||
+      w.maximized ||
+      (w.quickTileMode !== undefined && w.quickTileMode !== 0)
+    ) {
       return true;
     }
 
@@ -676,7 +682,11 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              // Se removió el forzado a desmaximizar para permitir la gestión de ventanas maximizadas
+              if (w.maximizeMode !== 0 || w.maximized === true || w.maximized) {
+                if (typeof w.setMaximize === "function") {
+                  w.setMaximize(false, false);
+                }
+              }
 
               w.__raven_mutating = true;
               var targetGeom = {
