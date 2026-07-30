@@ -636,6 +636,29 @@ function applyCommands(commandsJson) {
         continue;
       }
 
+      if (cmd.action === "saturation_warning") {
+        Logger.info("Raven UI", "Saturation warning received from core");
+        try {
+          if (workspace.showOutline) {
+            // Mostrar un recuadro parpadeante rápido indicando saturación
+            var activeWin = workspace.activeWindow;
+            if (activeWin) {
+              workspace.showOutline(activeWin.frameGeometry);
+            } else {
+              // Fallback a pantalla completa si no hay ventana activa (KWin < 6 puede no soportar bien esto, así que lo atrapamos con try)
+              var ca = workspace.clientArea(0, 0, workspace.currentDesktop);
+              workspace.showOutline({
+                x: ca.x, y: ca.y, width: ca.width, height: ca.height
+              });
+            }
+            setKWinTimeout(function() {
+              if (workspace.hideOutline) workspace.hideOutline();
+            }, 300); // 300ms = destello rápido
+          }
+        } catch(e) {}
+        continue;
+      }
+
       for (var j = 0; j < windows.length; j++) {
         var w = windows[j];
         if (getSafeWindowId(w) === cmd.window_id) {

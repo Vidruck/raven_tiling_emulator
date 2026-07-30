@@ -12,7 +12,6 @@ pub mod error;
 pub mod geometry;
 /// Módulo de algoritmos de disposición de ventanas en mosaico (tiling layout).
 pub mod layout;
-/// Módulo de presets semánticos de composición de layout.
-pub mod preset;
+
 /// Módulo para la gestión y detección de saturación en el sistema.
 pub mod saturation;
