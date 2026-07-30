@@ -1,11 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::runtime::Handle;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, oneshot};
 use zbus::interface;
 
-use crate::application::controller::RavenController;
+use crate::application::actor::RavenMessage;
 use crate::domain::action::RavenAction;
 use crate::domain::error::RavenError;
 use crate::domain::geometry::{Rect, WindowNode};
@@ -100,7 +98,7 @@ pub struct KWinPayload {
 ///
 /// # Retorno
 /// Tupla que contiene el mapa de geometrías de las áreas de trabajo, la lista de ventanas normalizadas y la topología actual.
-fn parse_payload(
+pub fn parse_payload(
     payload_json: &str,
 ) -> Result<(HashMap<String, Rect>, Vec<WindowNode>, KWinTopology), RavenError> {
     if payload_json.is_empty() || payload_json == "{}" {
@@ -265,16 +263,7 @@ impl From<RavenAction> for TilingCommand {
 ///
 /// Actúa como canal de comunicación interactivo e incremental entre KWin y el motor de mosaico.
 pub struct RavenDBusService {
-    /// Instancia protegida del orquestador de lógica del motor de Raven.
-    pub controller: Arc<Mutex<RavenController>>,
-    /// Identificador único de la ventana actualmente enfocada en el sistema.
-    pub active_window_id: Arc<Mutex<Option<String>>>,
-    /// Último payload en formato JSON recibido para optimización de atajos.
-    pub last_payload_json: Arc<Mutex<String>>,
-    /// Topología física de pantallas y escritorios virtuales en tiempo real.
-    pub current_topology: Arc<Mutex<KWinTopology>>,
-    /// Manejador de hilos asíncronos del runtime de Tokio.
-    pub tokio_handle: Handle,
+    pub tx: mpsc::Sender<RavenMessage>,
 }
 
 #[interface(name = "org.kde.raven.Events")]
@@ -288,80 +277,39 @@ impl RavenDBusService {
             return String::from("[]");
         }
 
-        if let Ok(mut last_payload) = self.last_payload_json.try_lock() {
-            *last_payload = payload_json.clone();
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = RavenMessage::SyncState {
+            payload_json,
+            reply: reply_tx,
+        };
+
+        if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        } else {
+            String::from("[]")
         }
-
-        let controller_clone = Arc::clone(&self.controller);
-        let topology_clone = Arc::clone(&self.current_topology);
-
-        let calculation = self.tokio_handle.spawn_blocking(move || {
-            let (workspaces, windows, topology) = match parse_payload(&payload_json) {
-                Ok(p) => p,
-                Err(_) => return String::from("[]"),
-            };
-            
-            if let Ok(mut top) = topology_clone.try_lock() {
-                *top = topology;
-            }
-
-            let mut ctrl = controller_clone.blocking_lock();
-            match ctrl.handle_state_change(workspaces, windows) {
-                Ok(commands) => {
-                    let dbus_commands: Vec<TilingCommand> =
-                        commands.into_iter().map(Into::into).collect();
-                    serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"))
-                }
-                Err(_) => String::from("[]"),
-            }
-        })
-        .await;
-
-        calculation.unwrap_or_else(|_| String::from("[]"))
     }
 
     /// Sincroniza de forma incremental (delta sync) el cambio de geometría o estado de una única ventana.
     #[zbus(name = "syncWindowDelta")]
     async fn sync_window_delta(&self, delta_json: String) -> String {
-        let controller_clone = Arc::clone(&self.controller);
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = RavenMessage::SyncWindowDelta {
+            delta_json,
+            reply: reply_tx,
+        };
 
-        let calculation = self.tokio_handle.spawn_blocking(move || {
-            if let Ok(win) = serde_json::from_str::<KWinWindow>(&delta_json) {
-                let win_node = WindowNode::new(
-                    win.id,
-                    win.ws,
-                    win.output,
-                    win.desktops,
-                    win.f,
-                    win.m,
-                    win.p,
-                    Rect::new(win.x, win.y, win.w, win.h),
-                    win.min_w,
-                    win.min_h,
-                    win.sb,
-                );
-                
-                let mut ctrl = controller_clone.blocking_lock();
-                ctrl.handle_delta_change(win_node);
-
-                if let Ok(commands) = ctrl.commit_layout() {
-                    let dbus_commands: Vec<TilingCommand> =
-                        commands.into_iter().map(Into::into).collect();
-                    return serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
-                }
-            }
+        if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        } else {
             String::from("[]")
-        })
-        .await;
-
-        calculation.unwrap_or_else(|_| String::from("[]"))
+        }
     }
 
     /// Notifica que el puente de JavaScript se ha restablecido y está listo.
     #[zbus(name = "bridgeReady")]
     async fn bridge_ready(&self) {
-        self.last_payload_json.lock().await.clear();
-        self.controller.lock().await.reset_state();
+        let _ = self.tx.send(RavenMessage::BridgeReady).await;
     }
 
     /// Registra el identificador de la ventana activa enfocada en KWin.
@@ -372,8 +320,7 @@ impl RavenDBusService {
         } else {
             Some(window_id.clone())
         };
-        *self.active_window_id.lock().await = val.clone();
-        self.controller.lock().await.active_window_id = val;
+        let _ = self.tx.send(RavenMessage::WindowActivated { window_id: val }).await;
     }
 
     /// Alterna el estado operativo de activación del motor de mosaico.
@@ -421,17 +368,23 @@ impl RavenDBusService {
     /// Retorna la lista de clases en cuarentena configuradas.
     #[zbus(name = "getQuarantineClasses")]
     async fn get_quarantine_classes(&self) -> String {
-        let controller = self.controller.lock().await;
-        serde_json::to_string(&controller.get_config().quarantine_classes)
-            .unwrap_or_else(|_| String::from("[]"))
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self.tx.send(RavenMessage::GetQuarantineClasses { reply: reply_tx }).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        } else {
+            String::from("[]")
+        }
     }
 
     /// Retorna la lista de reglas de ventanas configuradas.
     #[zbus(name = "getWindowRules")]
     async fn get_window_rules(&self) -> String {
-        let controller = self.controller.lock().await;
-        serde_json::to_string(&controller.get_config().window_rules)
-            .unwrap_or_else(|_| String::from("[]"))
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self.tx.send(RavenMessage::GetWindowRules { reply: reply_tx }).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        } else {
+            String::from("[]")
+        }
     }
 
     /// Envía el foco a la ventana anterior del mosaico.
@@ -482,18 +435,22 @@ impl RavenDBusService {
         self.dispatch_shortcut("cycle_layout", 0).await
     }
 
-    /// Retorna si el motor de mosaico (tiling) está activado.
     #[zbus(name = "getTilingState")]
     async fn get_tiling_state(&self) -> bool {
-        self.controller.lock().await.is_tiling_enabled()
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self.tx.send(RavenMessage::GetTilingState { reply: reply_tx }).await.is_ok() {
+            reply_rx.await.unwrap_or(true)
+        } else {
+            true
+        }
     }
 
     /// Retorna el número actual de monitores o salidas físicas activas.
     #[zbus(name = "getMonitorCount")]
     async fn get_monitor_count(&self) -> i32 {
-        let topo = self.current_topology.lock().await;
-        if !topo.outputs.is_empty() {
-            topo.outputs.len() as i32
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self.tx.send(RavenMessage::GetMonitorCount { reply: reply_tx }).await.is_ok() {
+            reply_rx.await.unwrap_or(1)
         } else {
             1
         }
@@ -502,56 +459,30 @@ impl RavenDBusService {
     /// Retorna el estado formateado de los escritorios virtuales.
     #[zbus(name = "getDesktopStatus")]
     async fn get_desktop_status(&self) -> String {
-        let topo = self.current_topology.lock().await;
-        if topo.desktops.is_empty() {
-            return String::from("1 | Escritorio 1 | 1");
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self.tx.send(RavenMessage::GetDesktopStatus { reply: reply_tx }).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("1 | Escritorio 1 | 1"))
+        } else {
+            String::from("1 | Escritorio 1 | 1")
         }
-        
-        let total = topo.desktops.len();
-        let current_idx = topo.desktops.iter().position(|d| d == &topo.current_desktop).unwrap_or(0);
-        
-        let prev_idx = if current_idx == 0 { total - 1 } else { current_idx - 1 };
-        let next_idx = (current_idx + 1) % total;
-        
-        format!("{} | Escritorio {} | {}", prev_idx + 1, current_idx + 1, next_idx + 1)
     }
 }
 
 impl RavenDBusService {
     /// Despacha de forma asíncrona una acción de atajo de teclado, recalculando el layout si es necesario.
     async fn dispatch_shortcut(&self, action: &str, payload: i32) -> String {
-        let payload_json = self.last_payload_json.lock().await.clone();
-        if payload_json.is_empty() && action != "toggle_tiling" {
-            return String::from("[]");
-        }
-
-        let active_id = self.active_window_id.lock().await.clone();
-        let (workspaces, parsed_windows, _topology) = parse_payload(&payload_json)
-            .unwrap_or_else(|_| (HashMap::new(), Vec::new(), KWinTopology::default()));
-
-        let mut ctrl = self.controller.lock().await;
-        let mut all_commands = Vec::new();
-        if let Ok((needs_recalc, cmds)) = ctrl.handle_shortcut(
-            action.to_string(),
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = RavenMessage::DispatchShortcut {
+            action: action.to_string(),
             payload,
-            parsed_windows,
-            workspaces,
-            active_id,
-            &_topology,
-        ) {
-            all_commands.extend(cmds);
+            reply: reply_tx,
+        };
 
-            if needs_recalc {
-                if let Ok((workspaces, windows, _topology)) = parse_payload(&payload_json) {
-                    if let Ok(recalc_cmds) = ctrl.handle_state_change(workspaces, windows) {
-                        all_commands.extend(recalc_cmds);
-                    }
-                }
-            }
+        if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        } else {
+            String::from("[]")
         }
-        
-        let dbus_commands: Vec<TilingCommand> = all_commands.into_iter().map(Into::into).collect();
-        serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"))
     }
 }
 

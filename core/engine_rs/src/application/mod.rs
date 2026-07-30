@@ -7,3 +7,4 @@
 pub mod controller;
 /// Módulo que implementa el motor de mosaico (tiling engine).
 pub mod engine;
+pub mod actor;

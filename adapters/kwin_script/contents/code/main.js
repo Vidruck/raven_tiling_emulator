@@ -183,7 +183,7 @@ function isFloating(w) {
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) {
       return true;
     }
-    if (w.fullScreen) {
+    if (w.fullScreen || w.maximizeMode !== 0 || w.maximized === true || w.maximized) {
       return true;
     }
 
@@ -241,7 +241,15 @@ function isFloating(w) {
         strClass.indexOf("virt-manager") !== -1) &&
       !w.normalWindow;
 
-    return Boolean(isPip || isSpectacle || isKlipper || isVirtPopup || isRaven);
+    // Heurística para IDEs y navegadores pesados: Sus tooltips/menus a veces se reportan como normalWindow sin caption.
+    var isHeavyAppPopup = false;
+    if (strClass.indexOf("jetbrains") !== -1 || strClass.indexOf("idea") !== -1 || strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
+      if (!strCap || strCap.trim() === "" || strCap === "win0") {
+        isHeavyAppPopup = true;
+      }
+    }
+
+    return Boolean(isPip || isSpectacle || isKlipper || isVirtPopup || isRaven || isHeavyAppPopup);
   } catch (e) {
     return true;
   }
@@ -267,6 +275,81 @@ function requestStateSync() {
     try {
       syncState();
     } catch (err) { }
+  }
+}
+
+/**
+ * Destaca visualmente una ventana usando el Outline de KWin.
+ */
+function highlightWindow(w) {
+  try {
+    if (!w) return;
+    if (workspace.showOutline) {
+      workspace.showOutline(w.frameGeometry);
+      setKWinTimeout(function() {
+        if (workspace.hideOutline) workspace.hideOutline();
+      }, 200);
+    }
+  } catch (e) { }
+}
+
+/**
+ * Foco direccional nativo utilizando geometría de KWin.
+ */
+function focusDirection(dx, dy) {
+  try {
+    var act = workspace.activeWindow;
+    if (!act) return;
+    
+    var actRect = getRectGeometry(act.frameGeometry);
+    var cx = actRect.x + actRect.w / 2;
+    var cy = actRect.y + actRect.h / 2;
+    
+    var bestWin = null;
+    var bestDist = 99999999;
+    
+    var windows = workspace.windowList();
+    for (var i = 0; i < windows.length; i++) {
+      var w = windows[i];
+      if (w === act || !isManageable(w) || w.minimized) continue;
+      
+      // Filter by the same desktop
+      var desktopMatch = false;
+      if (w.desktops && act.desktops && w.desktops.length > 0 && act.desktops.length > 0) {
+        for (var j = 0; j < w.desktops.length; j++) {
+          if (act.desktops.indexOf(w.desktops[j]) !== -1) {
+            desktopMatch = true;
+            break;
+          }
+        }
+      } else {
+        desktopMatch = true; // For Wayland environments where desktops array might be tricky or empty (e.g. pinned windows)
+      }
+      
+      if (!desktopMatch && (!w.onAllDesktops && !act.onAllDesktops)) continue;
+
+      var r = getRectGeometry(w.frameGeometry);
+      var wx = r.x + r.w / 2;
+      var wy = r.y + r.h / 2;
+      
+      if (dx > 0 && wx <= cx) continue;
+      if (dx < 0 && wx >= cx) continue;
+      if (dy > 0 && wy <= cy) continue;
+      if (dy < 0 && wy >= cy) continue;
+      
+      var dist = Math.pow(wx - cx, 2) + Math.pow(wy - cy, 2);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestWin = w;
+      }
+    }
+    
+    if (bestWin) {
+      workspace.activeWindow = bestWin;
+      highlightWindow(bestWin);
+    }
+  } catch(e) {
+    Logger.error("focusDirection", "Error enfocando dirección " + dx + "," + dy, e);
   }
 }
 
@@ -570,11 +653,7 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              // Forzar desmaximización antes de aplicar frameGeometry
-              // Si la ventana está maximizada (interna de KWin), ignorará los gaps o el frameGeometry dictado
-              if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
-                w.setMaximize(false, false);
-              }
+              // Se removió el forzado a desmaximizar para permitir la gestión de ventanas maximizadas
 
               w.__raven_mutating = true;
               var targetGeom = {
@@ -891,11 +970,23 @@ function registerRavenShortcuts() {
   registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function () {
     dispatchToRaven("toggleTiling");
   });
-  registerShortcut("RavenFocusNext", "Raven: Enfocar Siguiente", "Meta+J", function () {
+  registerShortcut("RavenFocusNext", "Raven: Siguiente Ventana", "Meta+J", function () {
     dispatchToRaven("focusNext");
   });
-  registerShortcut("RavenFocusPrev", "Raven: Enfocar Anterior", "Meta+K", function () {
+  registerShortcut("RavenFocusPrev", "Raven: Ventana Anterior", "Meta+K", function () {
     dispatchToRaven("focusPrev");
+  });
+  registerShortcut("RavenFocusLeft", "Raven: Foco Izquierda", "Meta+Left", function () {
+    focusDirection(-1, 0);
+  });
+  registerShortcut("RavenFocusRight", "Raven: Foco Derecha", "Meta+Right", function () {
+    focusDirection(1, 0);
+  });
+  registerShortcut("RavenFocusUp", "Raven: Foco Arriba", "Meta+Up", function () {
+    focusDirection(0, -1);
+  });
+  registerShortcut("RavenFocusDown", "Raven: Foco Abajo", "Meta+Down", function () {
+    focusDirection(0, 1);
   });
   registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function () {
     dispatchToRaven("swapNext");
@@ -931,6 +1022,7 @@ function registerRavenShortcuts() {
   });
   registerShortcut("RavenCycleLayout", "Raven: Ciclar Layout", "Meta+Shift+L", function() {
     dispatchToRaven("cycleLayout");
+    if (workspace.activeWindow) highlightWindow(workspace.activeWindow);
   });
   registerShortcut("RavenMigrateDesktop", "Raven: Enviar a Escritorio Siguiente", "Meta+Shift+Right", function () {
     dispatchToRaven("migrateActiveToDesktop");
@@ -962,6 +1054,33 @@ function init() {
   workspace.windowRemoved.connect(onWindowRemoved);
   workspace.currentDesktopChanged.connect(onDesktopChanged);
   workspace.windowActivated.connect(onWindowActivated);
+
+  // P2: Detección dinámica de monitores (hot-plug)
+  if (workspace.outputAdded) {
+    workspace.outputAdded.connect(requestStateSync);
+  }
+  if (workspace.outputRemoved) {
+    workspace.outputRemoved.connect(requestStateSync);
+  }
+
+  // P2: Detección de tiling nativo de Plasma 6 para evitar conflictos
+  try {
+    var output = workspace.activeScreen || workspace.activeOutput;
+    if (workspace.tilingForScreen && workspace.tilingForScreen(output)) {
+      Logger.warn("init", "Se detectó Tiling Nativo activado para la pantalla. Podrían ocurrir conflictos severos.");
+    }
+  } catch(e) {}
+
+  // P2: Atajos de bordes de pantalla para acciones rápidas
+  try {
+    if (workspace.registerScreenEdge) {
+      // 0 = TopEdge en KWin
+      workspace.registerScreenEdge(0, function() {
+        dispatchToRaven("cycleLayout");
+        if (workspace.activeWindow) highlightWindow(workspace.activeWindow);
+      });
+    }
+  } catch(e) {}
 
   try {
     callDBus(
@@ -1007,13 +1126,7 @@ function onWindowAdded(w) {
     return;
   }
 
-  // Forzar desmaximización al nacer para evitar que navegadores/Electron
-  // restauren su estado maximizado previo y floten sobre los gaps.
-  try {
-    if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
-      w.setMaximize(false, false);
-    }
-  } catch (e) { }
+  // Se removió la desmaximización forzada al nacer
 
   setKWinTimeout(function () {
     if (!w || w.deleted) {
@@ -1064,12 +1177,7 @@ function onWindowAdded(w) {
       // Usar pool de timers estático para la cuarentena dinámica
       w.__raven_stab_timer = setKWinTimeout(function () {
         if (w && !w.deleted) {
-          // Re-asegurar que no se maximizó durante la cuarentena
-          try {
-            if (w.maximizeMode !== 0 && typeof w.setMaximize === "function") {
-              w.setMaximize(false, false);
-            }
-          } catch (e) { }
+          // Se permite que la ventana conserve su estado maximizado si lo obtuvo
 
           w.__raven_quarantined = false;
           w.__raven_strict_birth = true;

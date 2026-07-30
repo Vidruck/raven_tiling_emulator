@@ -1,6 +1,4 @@
 use std::error::Error;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::info;
 use zbus::ConnectionBuilder;
 
@@ -8,7 +6,7 @@ use raven_engine::application::controller::RavenController;
 use raven_engine::application::engine::TilingEngine;
 use raven_core::config::RavenConfig;
 
-use raven_engine::infrastructure::dbus::{KWinTopology, RavenDBusService};
+use raven_engine::infrastructure::dbus::RavenDBusService;
 
 /// Punto de entrada principal del demonio (daemon) Raven Tiling Emulator.
 ///
@@ -29,17 +27,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let app_config = RavenConfig::load();
     let engine = TilingEngine::new(app_config);
+    let controller = RavenController::new(engine);
 
-    let controller = Arc::new(Mutex::new(RavenController::new(engine)));
+    let (tx, rx) = tokio::sync::mpsc::channel(100);
+    let actor = raven_engine::application::actor::RavenControllerActor::new(controller, rx);
+    
+    // Iniciar el actor en un hilo en background
+    tokio::spawn(actor.run());
 
-    let tokio_handle = tokio::runtime::Handle::current();
-    let dbus_service = RavenDBusService {
-        controller,
-        active_window_id: Arc::new(Mutex::new(None)),
-        last_payload_json: Arc::new(Mutex::new(String::from("{}"))),
-        current_topology: Arc::new(Mutex::new(KWinTopology::default())),
-        tokio_handle,
-    };
+    let dbus_service = RavenDBusService { tx };
 
     info!("[DBUS] Registrando servicio org.kde.raven.Daemon...");
 
