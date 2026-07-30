@@ -112,32 +112,25 @@ impl RavenControllerActor {
                 }
                 RavenMessage::DispatchShortcut { action, payload, reply } => {
                     let mut response = String::from("[]");
-                    if !self.last_payload_json.is_empty() || action == "toggle_tiling" {
-                        let (workspaces, windows, _topo) = parse_payload(&self.last_payload_json)
-                            .unwrap_or_else(|_| (HashMap::new(), Vec::new(), KWinTopology::default()));
+                    
+                    let mut all_commands = Vec::new();
+                    if let Ok((needs_recalc, cmds)) = self.controller.handle_shortcut(
+                        action,
+                        payload,
+                        self.active_window_id.clone(),
+                        &self.current_topology,
+                    ) {
+                        all_commands.extend(cmds);
                         
-                        let mut all_commands = Vec::new();
-                        if let Ok((needs_recalc, cmds)) = self.controller.handle_shortcut(
-                            action,
-                            payload,
-                            windows,
-                            workspaces,
-                            self.active_window_id.clone(),
-                            &self.current_topology,
-                        ) {
-                            all_commands.extend(cmds);
-                            
-                            if needs_recalc {
-                                if let Ok((wk, win, _t)) = parse_payload(&self.last_payload_json) {
-                                    if let Ok(recalc_cmds) = self.controller.handle_state_change(wk, win) {
-                                        all_commands.extend(recalc_cmds);
-                                    }
-                                }
+                        if needs_recalc {
+                            if let Ok(recalc_cmds) = self.controller.commit_layout() {
+                                all_commands.extend(recalc_cmds);
                             }
                         }
-                        let dbus_commands: Vec<TilingCommand> = all_commands.into_iter().map(Into::into).collect();
-                        response = serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
                     }
+                    let dbus_commands: Vec<TilingCommand> = all_commands.into_iter().map(Into::into).collect();
+                    response = serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
+                    
                     let _ = reply.send(response);
                 }
                 RavenMessage::BridgeReady => {

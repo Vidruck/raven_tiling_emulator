@@ -104,4 +104,22 @@ impl RavenConfig {
         }
         RavenConfig::new()
     }
+
+    /// Guarda la configuración en el archivo JSON.
+    pub fn save(&self) -> Result<(), std::io::Error> {
+        let home = env::var("HOME").unwrap_or_else(|_| String::from("~"));
+        let mut path = PathBuf::from(home);
+        path.push(".config");
+        path.push("raven");
+        
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        
+        // Agregar raven.json al final (el parent era ~/.config/raven)
+        path.push("raven.json");
+        
+        let json = serde_json::to_string_pretty(self)?;
+        fs::write(path, json)
+    }
 }

@@ -391,24 +391,19 @@ impl RavenController {
     /// # Parámetros
     /// * `action` - Identificador textual del atajo a ejecutar.
     /// * `payload` - Entero con argumento opcional de peso (p. ej., valor delta de gaps).
-    /// * `windows` - Listado de ventanas reportadas por el cliente D-Bus.
-    /// * `_workspaces` - Mapa de geometrías de las áreas de trabajo.
-    /// * `active_window_id` - Identificador de la ventana activa al momento del atajo.
-    ///
-    /// # Retorno
-    /// Una tupla que contiene si se requiere recálculo y la lista de comandos a despachar.
     pub fn handle_shortcut(
         &mut self,
         action: String,
         _payload: i32,
-        windows: Vec<WindowNode>,
-        _workspaces: HashMap<String, Rect>,
         active_window_id: Option<String>,
         topology: &crate::infrastructure::dbus::KWinTopology,
     ) -> Result<(bool, Vec<RavenAction>), RavenError> {
         self.active_window_id = active_window_id.clone();
+        
+        let windows: Vec<WindowNode> = self.engine.current_windows.values().cloned().collect();
         self.engine.update_history(&windows);
         let mut needs_recalc = false;
+        let mut config_changed = false;
         let mut commands = Vec::new();
 
         match action.as_str() {
@@ -425,32 +420,38 @@ impl RavenController {
                 };
                 info!("[CONTROLLER] Layout cambiado a: {}", self.engine.config.layout_type);
                 needs_recalc = true;
+                config_changed = true;
             }
             "increment_gaps" => {
                 self.engine.config.default_gaps =
                     std::cmp::max(0, self.engine.config.default_gaps + _payload);
                 needs_recalc = true;
+                config_changed = true;
             }
             // BUG-01: handlers de nmaster ahora implementados correctamente
             "increment_nmaster" => {
                 self.engine.config.nmaster =
                     (self.engine.config.nmaster + 1).min(8);
                 needs_recalc = true;
+                config_changed = true;
             }
             "decrement_nmaster" => {
                 self.engine.config.nmaster =
                     self.engine.config.nmaster.saturating_sub(1).max(1);
                 needs_recalc = true;
+                config_changed = true;
             }
             "increase_ratio" => {
                 self.engine.config.master_ratio =
                     f32::min(0.85, self.engine.config.master_ratio + 0.05);
                 needs_recalc = true;
+                config_changed = true;
             }
             "decrease_ratio" => {
                 self.engine.config.master_ratio =
                     f32::max(0.30, self.engine.config.master_ratio - 0.05);
                 needs_recalc = true;
+                config_changed = true;
             }
             "swap_next" | "swap_prev" => {
                 let mut active_windows: Vec<_> = windows
@@ -576,6 +577,12 @@ impl RavenController {
             }
             _ => {}
         }
+        if config_changed {
+            if let Err(e) = self.engine.config.save() {
+                warn!("[CONTROLLER] Error al persistir configuración: {}", e);
+            }
+        }
+        
         Ok((needs_recalc, commands))
     }
 }
