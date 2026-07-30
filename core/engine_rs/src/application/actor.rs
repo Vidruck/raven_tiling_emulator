@@ -111,8 +111,6 @@ impl RavenControllerActor {
                     let _ = reply.send(response);
                 }
                 RavenMessage::DispatchShortcut { action, payload, reply } => {
-                    let mut response = String::from("[]");
-                    
                     let mut all_commands = Vec::new();
                     if let Ok((needs_recalc, cmds)) = self.controller.handle_shortcut(
                         action,
@@ -129,7 +127,7 @@ impl RavenControllerActor {
                         }
                     }
                     let dbus_commands: Vec<TilingCommand> = all_commands.into_iter().map(Into::into).collect();
-                    response = serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
+                    let response = serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
                     
                     let _ = reply.send(response);
                 }
