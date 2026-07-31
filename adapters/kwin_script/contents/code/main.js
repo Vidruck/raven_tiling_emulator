@@ -247,10 +247,16 @@ function isFloating(w) {
       !w.normalWindow;
 
     // Heurística para IDEs y navegadores pesados: Sus tooltips/menus a veces se reportan como normalWindow sin caption.
+    // Solo se consideran popups flotantes si su geometría es pequeña (menos de 450x350).
     var isHeavyAppPopup = false;
     if (strClass.indexOf("jetbrains") !== -1 || strClass.indexOf("idea") !== -1 || strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
       if (!strCap || strCap.trim() === "" || strCap === "win0") {
-        isHeavyAppPopup = true;
+        var fg = w.frameGeometry;
+        var wWidth = fg ? fg.width : 0;
+        var wHeight = fg ? fg.height : 0;
+        if (wWidth > 0 && wHeight > 0 && wWidth < 450 && wHeight < 350) {
+          isHeavyAppPopup = true;
+        }
       }
     }
 
