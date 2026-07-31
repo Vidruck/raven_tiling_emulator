@@ -1,3 +1,9 @@
+//! # Orquestador de Topología Global y Soporte PiP
+//!
+//! Coordina la distribución de ventanas a través de múltiples workspaces y pantallas,
+//! ejecutando la estrategia de layout correspondiente por workspace y superponiendo
+//! las ventanas flotantes Picture-in-Picture (PiP) en sus esquinas configuradas.
+
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
@@ -5,9 +11,24 @@ use super::strategy::get_strategy;
 
 /// Calcula la topología global para todas las áreas de trabajo (workspaces) activas.
 ///
-/// Distribuye las ventanas no flotantes en sus respectivas geometrías de área de trabajo
-/// utilizando particiones binarias de espacio (BSP) y calcula las posiciones exactas de
-/// las ventanas flotantes con Picture-in-Picture (PiP).
+/// 1. Agrupa la lista global de ventanas según el `workspace_id` al que pertenecen.
+/// 2. Invoca la estrategia de layout seleccionada (`Tall`, `Dwindle`, `Monocle`, etc.) para cada monitor.
+/// 3. Superpone y posiciona las ventanas de reproducción "Pantalla en Pantalla" (PiP)
+///    en la esquina solicitada (`top-left`, `top-right`, `bottom-left`, `bottom-right`)
+///    evitando el solapamiento exacto mediante offsets de apilamiento vertical.
+///
+/// # Parámetros
+/// - `windows`: Colección completa de nodos de ventana gestionados por el motor.
+/// - `workspaces`: Mapa que vincula cada `workspace_id` con la geometría `Rect` de su monitor.
+/// - `nmaster`: Cantidad de ventanas maestras configuradas.
+/// - `master_ratio`: Relación de división de área maestra frente a secundaria.
+/// - `default_gaps`: Espaciado interno en píxeles.
+/// - `pip_position`: Ubicación deseada para las ventanas PiP (`"top-right"`, `"bottom-left"`, etc.).
+/// - `layout_type`: Identificador de la estrategia de layout activa.
+/// - `active_window_id`: Identificador opcional de la ventana enfocado en el sistema.
+///
+/// # Retorno
+/// Tupla `(HashMap<WindowId, Rect>, Vec<EvictedWindowId>)` con las geometrías de todas las ventanas.
 pub fn calculate_global_topology(
     windows: &[WindowNode],
     workspaces: &HashMap<String, Rect>,
@@ -22,6 +43,7 @@ pub fn calculate_global_topology(
     let mut global_evicted = Vec::new();
     let mut windows_by_ws: HashMap<String, Vec<WindowNode>> = HashMap::new();
 
+    // 1. Agrupar ventanas no flotantes (o PiP) por workspace
     for win in windows {
         if !win.is_floating || win.is_pip {
             windows_by_ws
@@ -31,8 +53,10 @@ pub fn calculate_global_topology(
         }
     }
 
+    // 2. Procesar cada workspace con la estrategia elegida y superponer PiP
     for (ws_id, ws_windows) in windows_by_ws {
         if let Some(screen_rect) = workspaces.get(&ws_id) {
+            // Instanciar estrategia según el nombre del layout
             let strategy = get_strategy(layout_type);
             let (ws_layout, ws_evicted) = strategy.calculate(
                 &ws_windows,
@@ -45,8 +69,9 @@ pub fn calculate_global_topology(
             global_layout.extend(ws_layout);
             global_evicted.extend(ws_evicted);
 
+            // 3. Dimensionar y superponer ventanas Picture-in-Picture (PiP)
             let pip_w = (screen_rect.width as f32 * 0.22) as i32;
-            let pip_h = (pip_w as f32 * 0.56) as i32;
+            let pip_h = (pip_w as f32 * 0.56) as i32; // Relación de aspecto ~16:9
             let pip_gap = default_gaps + 10;
             let mut pip_index = 0;
 
@@ -55,12 +80,13 @@ pub fn calculate_global_topology(
                     let final_pip_w = std::cmp::max(pip_w, win.min_w);
                     let final_pip_h = std::cmp::max(pip_h, win.min_h);
 
-                    // Calculamos el offset de apilamiento para evitar solapamiento exacto
+                    // Offset de apilamiento vertical si hay múltiples reproductores PiP
                     let offset_y = pip_index * (final_pip_h + pip_gap);
 
                     let mut x = screen_rect.x + pip_gap;
                     let mut y = screen_rect.y + pip_gap;
 
+                    // Posicionar según la esquina seleccionada
                     match pip_position.trim() {
                         "top-right" => {
                             x = screen_rect.x + screen_rect.width - final_pip_w - pip_gap;
@@ -81,7 +107,7 @@ pub fn calculate_global_topology(
                         }
                     }
 
-                    // Prevenir que se salgan de la pantalla verticalmente
+                    // Prevenir que la ventana salga de los límites verticales visibles
                     if y < screen_rect.y + pip_gap {
                         y = screen_rect.y + pip_gap;
                     }
@@ -102,8 +128,8 @@ pub fn calculate_global_topology(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::layout::DwindleBSPStrategy;
     use crate::domain::layout::strategy::LayoutStrategy;
+    use crate::domain::layout::DwindleBSPStrategy;
 
     fn mock_window(id: &str) -> WindowNode {
         WindowNode::new(

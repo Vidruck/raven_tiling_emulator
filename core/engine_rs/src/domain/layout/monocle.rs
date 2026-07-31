@@ -1,10 +1,28 @@
+//! # Estrategia de Disposición Monóculo (Pantalla Completa / Monocle)
+//!
+//! Implementa una distribución donde cada ventana no flotante ocupa el 100% del área
+//! del contenedor disponible, superponiéndose en capas (estilo pestañas o fullscreen).
+
 use super::{apply_gaps, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
+/// Estrategia de layout "Monóculo": asigna el tamaño completo de la pantalla a cada ventana.
 pub struct MonocleStrategy;
 
 impl LayoutStrategy for MonocleStrategy {
+    /// Asigna a todas las ventanas no flotantes del workspace exactamente la misma geometría de área completa.
+    ///
+    /// # Parámetros
+    /// - `windows`: Lista de ventanas registradas.
+    /// - `screen_rect`: Área utilizable de la pantalla.
+    /// - `_nmaster`: No utilizado en Monóculo.
+    /// - `_master_ratio`: No utilizado en Monóculo.
+    /// - `default_gaps`: Espaciado alrededor de la pantalla.
+    /// - `_active_window_id`: Identificador de la ventana enfocada.
+    ///
+    /// # Retorno
+    /// Tupla con las posiciones calculadas (todas idénticas) y lista de ventanas evictadas (vacía).
     fn calculate(
         &self,
         windows: &[WindowNode],
@@ -17,6 +35,7 @@ impl LayoutStrategy for MonocleStrategy {
         let mut layout_map = HashMap::new();
         let evicted_windows = Vec::new();
 
+        // 1. Filtrar solo ventanas que participan en la cuadrícula
         let active_windows: Vec<WindowNode> = windows
             .iter()
             .filter(|w| !w.is_floating && !w.is_minimized)
@@ -27,6 +46,7 @@ impl LayoutStrategy for MonocleStrategy {
             return (layout_map, evicted_windows);
         }
 
+        // 2. Definir el contenedor principal respetando los gaps periféricos
         let half_g = default_gaps / 2;
         let container = Rect {
             x: screen_rect.x + half_g,
@@ -35,6 +55,7 @@ impl LayoutStrategy for MonocleStrategy {
             height: std::cmp::max(1, screen_rect.height - default_gaps),
         };
 
+        // 3. Asignar el 100% de la geometría a cada ventana individual
         for win in active_windows {
             layout_map.insert(win.window_id.clone(), apply_gaps(&container, half_g));
         }
@@ -42,4 +63,3 @@ impl LayoutStrategy for MonocleStrategy {
         (layout_map, evicted_windows)
     }
 }
-

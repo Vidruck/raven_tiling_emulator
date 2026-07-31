@@ -1,10 +1,29 @@
+//! # Estrategia de Disposición Tall (Master + Stack Vertical)
+//!
+//! Implementa la distribución clásica "Tall": la pantalla se divide verticalmente en dos columnas.
+//! - La columna izquierda contiene las ventanas maestras (`nmaster`).
+//! - La columna derecha contiene el apilamiento vertical (stack) con las demás ventanas.
+
 use super::{apply_gaps, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
+/// Estrategia de layout "Tall": columna maestra a la izquierda y pila vertical a la derecha.
 pub struct TallStrategy;
 
 impl LayoutStrategy for TallStrategy {
+    /// Calcula las posiciones de las ventanas en columnas Master y Stack.
+    ///
+    /// # Parámetros
+    /// - `windows`: Lista de ventanas no flotantes ni minimizadas.
+    /// - `screen_rect`: Área útil de la pantalla.
+    /// - `nmaster`: Número de ventanas reservadas para el área principal (Master).
+    /// - `master_ratio`: Proporción de ancho asignada al área principal (ej. 0.50 o 0.60).
+    /// - `default_gaps`: Espaciado interno en píxeles.
+    /// - `_active_window_id`: Identificador de la ventana con foco.
+    ///
+    /// # Retorno
+    /// Tupla `(HashMap<WindowId, Rect>, Vec<EvictedWindowId>)`.
     fn calculate(
         &self,
         windows: &[WindowNode],
@@ -17,6 +36,7 @@ impl LayoutStrategy for TallStrategy {
         let mut layout_map = HashMap::new();
         let evicted_windows = Vec::new();
 
+        // 1. Filtrar ventanas activas en el mosaico
         let active_windows: Vec<WindowNode> = windows
             .iter()
             .filter(|w| !w.is_floating && !w.is_minimized)
@@ -27,6 +47,7 @@ impl LayoutStrategy for TallStrategy {
             return (layout_map, evicted_windows);
         }
 
+        // 2. Definir el contenedor principal respetando gaps periféricos
         let half_g = default_gaps / 2;
         let container = Rect {
             x: screen_rect.x + half_g,
@@ -35,22 +56,30 @@ impl LayoutStrategy for TallStrategy {
             height: std::cmp::max(1, screen_rect.height - default_gaps),
         };
 
+        // 3. Caso A: Si el número de ventanas es menor o igual a nmaster, todas ocupan el área completa en columnas
         if active_windows.len() <= nmaster {
             let w_slot = container.width / active_windows.len() as i32;
             for (i, win) in active_windows.iter().enumerate() {
                 let rect = Rect {
                     x: container.x + (i as i32 * w_slot),
                     y: container.y,
-                    width: if i == active_windows.len() - 1 { container.width - (i as i32 * w_slot) } else { w_slot },
+                    width: if i == active_windows.len() - 1 {
+                        container.width - (i as i32 * w_slot)
+                    } else {
+                        w_slot
+                    },
                     height: container.height,
                 };
                 layout_map.insert(win.window_id.clone(), apply_gaps(&rect, half_g));
             }
         } else {
+            // 4. Caso B: Hay ventanas suficientes para crear la columna Master (izq) y la columna Stack (der)
+            
+            // Límite defensivo: Ninguna ventana puede exigir un min_w mayor al 40% del contenedor útil
             let max_allowed_min_w = (container.width as f32 * 0.40) as i32;
             let mut master_w = (container.width as f32 * master_ratio) as i32;
 
-            // Restricción dinámica defensiva: Evitar que min_w desborde el 40% del contenedor o anule master_ratio
+            // Restricción dinámicas para el área Master
             let mut max_master_min_w = 0;
             for i in 0..nmaster {
                 let clamped_min = active_windows[i].min_w.min(max_allowed_min_w);
@@ -62,6 +91,7 @@ impl LayoutStrategy for TallStrategy {
                 master_w = max_master_min_w;
             }
 
+            // Restricciones dinámicas para la columna Stack
             let stack_count = active_windows.len() - nmaster;
             let mut stack_w = container.width - master_w;
 
@@ -78,25 +108,30 @@ impl LayoutStrategy for TallStrategy {
                 master_w = std::cmp::max(1, container.width - stack_w);
             }
 
-            // Garantía defensiva: La columna secundaria (stack) nunca debe ser menor al 20% del contenedor
+            // Garantía defensiva: La columna secundaria (stack) conserva siempre un mínimo del 20% del contenedor
             let min_stack_w = (container.width as f32 * 0.20) as i32;
             if stack_w < min_stack_w {
                 stack_w = min_stack_w;
                 master_w = std::cmp::max(1, container.width - stack_w);
             }
 
+            // 5. Apilar ventanas de la columna Master a la izquierda
             let master_h_slot = container.height / nmaster as i32;
             for i in 0..nmaster {
                 let rect = Rect {
                     x: container.x,
                     y: container.y + (i as i32 * master_h_slot),
                     width: master_w,
-                    height: if i == nmaster - 1 { container.height - (i as i32 * master_h_slot) } else { master_h_slot },
+                    height: if i == nmaster - 1 {
+                        container.height - (i as i32 * master_h_slot)
+                    } else {
+                        master_h_slot
+                    },
                 };
                 layout_map.insert(active_windows[i].window_id.clone(), apply_gaps(&rect, half_g));
             }
 
-            let stack_count = active_windows.len() - nmaster;
+            // 6. Apilar ventanas de la columna Stack a la derecha
             let stack_h_slot = container.height / stack_count as i32;
             for i in 0..stack_count {
                 let win = &active_windows[nmaster + i];
@@ -104,7 +139,11 @@ impl LayoutStrategy for TallStrategy {
                     x: container.x + master_w,
                     y: container.y + (i as i32 * stack_h_slot),
                     width: stack_w,
-                    height: if i == stack_count - 1 { container.height - (i as i32 * stack_h_slot) } else { stack_h_slot },
+                    height: if i == stack_count - 1 {
+                        container.height - (i as i32 * stack_h_slot)
+                    } else {
+                        stack_h_slot
+                    },
                 };
                 layout_map.insert(win.window_id.clone(), apply_gaps(&rect, half_g));
             }
@@ -113,4 +152,3 @@ impl LayoutStrategy for TallStrategy {
         (layout_map, evicted_windows)
     }
 }
-
