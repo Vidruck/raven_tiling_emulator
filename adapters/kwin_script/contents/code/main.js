@@ -1161,78 +1161,100 @@ function init() {
 
 // ---- Manejadores de eventos globales (funciones estáticas, sin closures) ----
 
+function processNewWindow(w) {
+  if (!w || w.deleted || !isManageable(w)) {
+    return;
+  }
+
+  var strClass = w.resourceClass
+    ? w.resourceClass.toString().toLowerCase()
+    : "";
+  var needsQuarantine = false;
+
+  if (strClass === "") {
+    needsQuarantine = true;
+  } else {
+    for (var i = 0; i < _quarantine_classes.length; i++) {
+      if (strClass.indexOf(_quarantine_classes[i]) !== -1) {
+        needsQuarantine = true;
+        break;
+      }
+    }
+  }
+
+  if (needsQuarantine) {
+    if (strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
+      Logger.info("ZenDebug", "onWindowAdded [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
+    }
+    w.__raven_quarantined = true;
+    bindWindow(w);
+
+    // Heurística de Cold Start vs Warm Start (Optimizado para feedback instantáneo)
+    var qTime = 80; // Warm start por defecto 
+    if (strClass !== "") {
+      var similarCount = 0;
+      var allW = workspace.windowList();
+      for (var k = 0; k < allW.length; k++) {
+        var wc = allW[k].resourceClass ? allW[k].resourceClass.toString().toLowerCase() : "";
+        if (wc === strClass) {
+          similarCount++;
+        }
+      }
+      if (similarCount <= 1) {
+        qTime = 120; // Cold start 
+      }
+    } else {
+      qTime = 150; // Si nace sin clase, darle un poco más de tiempo 
+    }
+
+    w.__raven_stab_timer = setKWinTimeout(function () {
+      if (w && !w.deleted) {
+        w.__raven_quarantined = false;
+        w.__raven_strict_birth = true;
+        w.__raven_stab_timer = null;
+        if (strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
+          Logger.info("ZenDebug", "Quarantine ENDED [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height);
+        }
+        requestStateSync();
+      }
+    }, qTime);
+  } else {
+    bindWindow(w);
+    requestStateSync();
+  }
+}
+
 function onWindowAdded(w) {
   if (!isManageable(w)) {
     return;
   }
 
-  // Se removió la desmaximización forzada al nacer
-
-  setKWinTimeout(function () {
-    if (!w || w.deleted) {
-      return;
-    }
-
-    var strClass = w.resourceClass
-      ? w.resourceClass.toString().toLowerCase()
-      : "";
-    var needsQuarantine = false;
-
-    if (strClass === "") {
-      needsQuarantine = true;
-    } else {
-      for (var i = 0; i < _quarantine_classes.length; i++) {
-        if (strClass.indexOf(_quarantine_classes[i]) !== -1) {
-          needsQuarantine = true;
-          break;
-        }
+  var strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+  if (strClass !== "") {
+    processNewWindow(w);
+  } else {
+    // Si la ventana nace sin clase de recurso asignada (común en XWayland/Wayland al instante exacto del spawn),
+    // nos conectamos al cambio de clase para procesarla tan pronto como se reciba, evitando retardos estáticos.
+    var classChangedConn = function() {
+      if (w && !w.deleted) {
+        processNewWindow(w);
+        try {
+          w.windowClassChanged.disconnect(classChangedConn);
+        } catch(e) {}
       }
-    }
+    };
+    w.windowClassChanged.connect(classChangedConn);
 
-    if (needsQuarantine) {
-      if (strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
-        Logger.info("ZenDebug", "onWindowAdded [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
+    // Fallback de seguridad en caso de que la señal no se dispare
+    setKWinTimeout(function () {
+      if (w && !w.deleted) {
+        try {
+          w.windowClassChanged.disconnect(classChangedConn);
+        } catch(e) {}
+        processNewWindow(w);
       }
-      w.__raven_quarantined = true;
-      bindWindow(w);
-
-      // Heurística de Cold Start vs Warm Start
-      var qTime = 180; // Warm start por defecto
-      if (strClass !== "") {
-        var similarCount = 0;
-        var allW = workspace.windowList();
-        for (var k = 0; k < allW.length; k++) {
-          var wc = allW[k].resourceClass ? allW[k].resourceClass.toString().toLowerCase() : "";
-          if (wc === strClass) {
-            similarCount++;
-          }
-        }
-        if (similarCount <= 1) {
-          qTime = 240; // Cold start
-        }
-      } else {
-        qTime = 300; // Si nace sin clase, darle un poco más de tiempo
-      }
-
-      // Usar pool de timers estático para la cuarentena dinámica
-      w.__raven_stab_timer = setKWinTimeout(function () {
-        if (w && !w.deleted) {
-          // Se permite que la ventana conserve su estado maximizado si lo obtuvo
-
-          w.__raven_quarantined = false;
-          w.__raven_strict_birth = true;
-          w.__raven_stab_timer = null;
-          if (strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
-            Logger.info("ZenDebug", "Quarantine ENDED [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height);
-          }
-          requestStateSync();
-        }
-      }, qTime);
-    } else {
-      bindWindow(w);
-      requestStateSync();
-    }
-  }, 60);
+    }, 50);
+  }
 }
 
 /** Manejador estático de evento 'windowRemoved'. */
