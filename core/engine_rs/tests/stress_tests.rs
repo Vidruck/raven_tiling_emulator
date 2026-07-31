@@ -101,7 +101,7 @@ async fn test_concurrent_settings_conflict() {
             desktops: vec![],
             current_desktop: String::new(),
         };
-        let _ = guard.handle_shortcut("increment_gaps".to_string(), 10, vec![], HashMap::new(), None, &topology);
+        let _ = guard.handle_shortcut("increment_gaps".to_string(), 10, None, &topology);
     });
 
     // GUI recibe -8 concurrentemente
@@ -112,7 +112,7 @@ async fn test_concurrent_settings_conflict() {
             desktops: vec![],
             current_desktop: String::new(),
         };
-        let _ = guard.handle_shortcut("increment_gaps".to_string(), -8, vec![], HashMap::new(), None, &topology);
+        let _ = guard.handle_shortcut("increment_gaps".to_string(), -8, None, &topology);
     });
 
     let _ = tokio::join!(task_a, task_b);

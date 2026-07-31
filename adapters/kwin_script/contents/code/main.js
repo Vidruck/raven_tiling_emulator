@@ -187,8 +187,7 @@ function isFloating(w) {
       w.fullScreen ||
       w.maximizeMode !== 0 ||
       w.maximized === true ||
-      w.maximized ||
-      (w.quickTileMode !== undefined && w.quickTileMode !== 0)
+      w.maximized
     ) {
       return true;
     }
@@ -541,6 +540,12 @@ function syncWindowDelta(w) {
     if (!w || w.deleted || !isManageable(w) || w.__raven_quarantined) {
       return;
     }
+    // Si la ventana está maximizada, no enviar delta.
+    // El syncState completo ya la reporta como flotante (f: true).
+    // Enviar un delta aquí podría generar un comando "move" residual.
+    if (w.maximizeMode !== 0) {
+      return;
+    }
     var safeId = getSafeWindowId(w);
     if (!safeId) {
       return;
@@ -682,10 +687,12 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              if (w.maximizeMode !== 0 || w.maximized === true || w.maximized) {
-                if (typeof w.setMaximize === "function") {
-                  w.setMaximize(false, false);
-                }
+              // GUARDA: Si la ventana está maximizada, NO aplicar move.
+              // La ventana maximizada fue reportada como flotante y el core
+              // no debería haberla incluido, pero si por latencia llegó un
+              // comando residual, lo descartamos silenciosamente.
+              if (w.maximizeMode !== 0) {
+                break;
               }
 
               w.__raven_mutating = true;
@@ -1190,7 +1197,7 @@ function onWindowAdded(w) {
       bindWindow(w);
 
       // Heurística de Cold Start vs Warm Start
-      var qTime = 120; // Warm start por defecto
+      var qTime = 180; // Warm start por defecto
       if (strClass !== "") {
         var similarCount = 0;
         var allW = workspace.windowList();
@@ -1201,10 +1208,10 @@ function onWindowAdded(w) {
           }
         }
         if (similarCount <= 1) {
-          qTime = 180; // Cold start
+          qTime = 240; // Cold start
         }
       } else {
-        qTime = 240; // Si nace sin clase, darle un poco más de tiempo
+        qTime = 300; // Si nace sin clase, darle un poco más de tiempo
       }
 
       // Usar pool de timers estático para la cuarentena dinámica
