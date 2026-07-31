@@ -226,14 +226,11 @@ impl RavenController {
         }
 
         windows.sort_by_key(|w| {
-            let is_strict = w.min_w > 0 || w.min_h > 0;
-            let pos = self
-                .engine
+            self.engine
                 .window_history
                 .iter()
                 .position(|id| id == &w.window_id)
-                .unwrap_or(usize::MAX);
-            (!is_strict, std::cmp::Reverse(pos))
+                .unwrap_or(usize::MAX)
         });
 
         let (new_layout, evicted_windows) = self.engine.calculate_from_payload(

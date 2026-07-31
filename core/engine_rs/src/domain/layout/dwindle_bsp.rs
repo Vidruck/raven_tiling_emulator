@@ -79,15 +79,18 @@ impl LayoutStrategy for DwindleBSPStrategy {
             }
         }
 
-        // Calcular restricciones de tamaño mínimo de cada grupo
-        let left_min_w = left_group.iter().map(|w| std::cmp::max(w.min_w, 100)).max().unwrap_or(0);
-        let right_min_w = right_group.iter().map(|w| std::cmp::max(w.min_w, 100)).max().unwrap_or(0);
-        let center_min_w = center_group.iter().map(|w| std::cmp::max(w.min_w, 150)).max().unwrap_or(0);
+        // Calcular restricciones de tamaño mínimo de cada grupo (defensivamente limitados al 35% del contenedor)
+        let max_allowed_min_w = (container.width as f32 * 0.35) as i32;
+        let max_allowed_min_h = (container.height as f32 * 0.35) as i32;
 
-        let _left_min_h = left_group.iter().map(|w| std::cmp::max(w.min_h, 80)).max().unwrap_or(0);
-        let _right_min_h = right_group.iter().map(|w| std::cmp::max(w.min_h, 80)).max().unwrap_or(0);
-        let _center_min_h = center_group.iter().map(|w| std::cmp::max(w.min_h, 120)).max().unwrap_or(0);
-        let bottom_min_h = bottom_group.iter().map(|w| std::cmp::max(w.min_h, 80)).max().unwrap_or(0);
+        let left_min_w = left_group.iter().map(|w| w.min_w.min(max_allowed_min_w)).max().unwrap_or(0);
+        let right_min_w = right_group.iter().map(|w| w.min_w.min(max_allowed_min_w)).max().unwrap_or(0);
+        let center_min_w = center_group.iter().map(|w| w.min_w.min(max_allowed_min_w)).max().unwrap_or(0);
+
+        let _left_min_h = left_group.iter().map(|w| w.min_h.min(max_allowed_min_h)).max().unwrap_or(0);
+        let _right_min_h = right_group.iter().map(|w| w.min_h.min(max_allowed_min_h)).max().unwrap_or(0);
+        let _center_min_h = center_group.iter().map(|w| w.min_h.min(max_allowed_min_h)).max().unwrap_or(0);
+        let bottom_min_h = bottom_group.iter().map(|w| w.min_h.min(max_allowed_min_h)).max().unwrap_or(0);
 
         let central_ratio = master_ratio.clamp(0.35, 0.85);
         let bottom_ratio = 0.30f32;

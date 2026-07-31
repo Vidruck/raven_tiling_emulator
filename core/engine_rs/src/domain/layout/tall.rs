@@ -47,13 +47,15 @@ impl LayoutStrategy for TallStrategy {
                 layout_map.insert(win.window_id.clone(), apply_gaps(&rect, half_g));
             }
         } else {
+            let max_allowed_min_w = (container.width as f32 * 0.40) as i32;
             let mut master_w = (container.width as f32 * master_ratio) as i32;
 
-            // Restricción dinámica: Adaptarse a ventanas como Preferencias de KDE o Zen con minSize muy grande
+            // Restricción dinámica defensiva: Evitar que min_w desborde el 40% del contenedor o anule master_ratio
             let mut max_master_min_w = 0;
             for i in 0..nmaster {
-                if active_windows[i].min_w > max_master_min_w {
-                    max_master_min_w = active_windows[i].min_w;
+                let clamped_min = active_windows[i].min_w.min(max_allowed_min_w);
+                if clamped_min > max_master_min_w {
+                    max_master_min_w = clamped_min;
                 }
             }
             if master_w < max_master_min_w {
@@ -66,13 +68,20 @@ impl LayoutStrategy for TallStrategy {
             let mut max_stack_min_w = 0;
             for i in 0..stack_count {
                 let win = &active_windows[nmaster + i];
-                if win.min_w > max_stack_min_w {
-                    max_stack_min_w = win.min_w;
+                let clamped_min = win.min_w.min(max_allowed_min_w);
+                if clamped_min > max_stack_min_w {
+                    max_stack_min_w = clamped_min;
                 }
             }
             if stack_w < max_stack_min_w {
                 stack_w = max_stack_min_w;
-                // Si la pila requiere más espacio del sobrante, empujar el master hacia la izquierda
+                master_w = std::cmp::max(1, container.width - stack_w);
+            }
+
+            // Garantía defensiva: La columna secundaria (stack) nunca debe ser menor al 20% del contenedor
+            let min_stack_w = (container.width as f32 * 0.20) as i32;
+            if stack_w < min_stack_w {
+                stack_w = min_stack_w;
                 master_w = std::cmp::max(1, container.width - stack_w);
             }
 
