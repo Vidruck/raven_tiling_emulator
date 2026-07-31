@@ -22,6 +22,11 @@ pub(crate) fn apply_gaps(rect: &Rect, gap: i32) -> Rect {
 pub(crate) fn distribute_sizes(total: i32, minimums: &[i32]) -> Vec<i32> {
     let n = minimums.len();
     if n == 0 { return vec![]; }
+
+    // Medida defensiva global: evitar que la suma de mínimos consuma todo el espacio útil
+    let max_min_per_item = std::cmp::max(10, total / n as i32);
+    let sanitized_mins: Vec<i32> = minimums.iter().map(|&m| m.min(max_min_per_item)).collect();
+
     let mut sizes = vec![total / n as i32; n];
     sizes[n - 1] += total % n as i32;
 
@@ -32,11 +37,11 @@ pub(crate) fn distribute_sizes(total: i32, minimums: &[i32]) -> Vec<i32> {
         let mut flexible_count = 0;
 
         for i in 0..n {
-            if sizes[i] < minimums[i] {
-                deficit += minimums[i] - sizes[i];
-                sizes[i] = minimums[i];
+            if sizes[i] < sanitized_mins[i] {
+                deficit += sanitized_mins[i] - sizes[i];
+                sizes[i] = sanitized_mins[i];
                 unresolved = true;
-            } else if sizes[i] > minimums[i] {
+            } else if sizes[i] > sanitized_mins[i] {
                 flexible_count += 1;
             }
         }
@@ -45,10 +50,10 @@ pub(crate) fn distribute_sizes(total: i32, minimums: &[i32]) -> Vec<i32> {
             let deduction = deficit / flexible_count;
             let mut remainder = deficit % flexible_count;
             for i in 0..n {
-                if sizes[i] > minimums[i] {
+                if sizes[i] > sanitized_mins[i] {
                     let mut take = deduction;
                     if remainder > 0 { take += 1; remainder -= 1; }
-                    let actual_take = std::cmp::min(take, sizes[i] - minimums[i]);
+                    let actual_take = std::cmp::min(take, sizes[i] - sanitized_mins[i]);
                     sizes[i] -= actual_take;
                 }
             }
