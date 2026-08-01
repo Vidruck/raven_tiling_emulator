@@ -39,8 +39,55 @@ var _debounceTimer = null;
 // Diccionario global de estado de ventanas indexado por internalId (UUID string).
 // Evita crear objetos temporales en los manejadores de eventos.
 
-// Lista de clases de ventana que requieren cuarentena de estabilización geométrica.
-var _quarantine_classes = [];
+// Lista de clases de ventana base (Gecko / CSD conocidas) inamovibles.
+var HARDCODED_QUARANTINE_BASE = [
+  "firefox",
+  "zen",
+  "floorp",
+  "waterfox",
+  "librewolf",
+  "tor-browser",
+  "gecko",
+  "chrome",
+  "chromium",
+  "brave",
+  "electron",
+  "code",
+  "spotify"
+];
+
+// Lista activa fusionada y deduplicada de clases en cuarentena.
+var _quarantine_classes = HARDCODED_QUARANTINE_BASE.slice();
+
+/**
+ * Fusiona la lista base de cuarentena con las personalizaciones enviadas desde la UI.
+ * Elimina duplicados y garantiza disponibilidad instantánea.
+ */
+function updateQuarantineClasses(res) {
+  if (!res) return;
+  try {
+    var userList = JSON.parse(res);
+    if (!Array.isArray(userList)) return;
+    
+    var map = {};
+    for (var i = 0; i < HARDCODED_QUARANTINE_BASE.length; i++) {
+      map[HARDCODED_QUARANTINE_BASE[i]] = true;
+    }
+    for (var j = 0; j < userList.length; j++) {
+      if (userList[j]) {
+        map[userList[j].toString().toLowerCase().trim()] = true;
+      }
+    }
+    
+    var merged = [];
+    for (var key in map) {
+      merged.push(key);
+    }
+    _quarantine_classes = merged;
+  } catch (e) {
+    Logger.error("updateQuarantineClasses", "Error fusionando clases de cuarentena", e);
+  }
+}
 
 // Lista de reglas de ventanas.
 var _window_rules = [];
@@ -1145,7 +1192,7 @@ function init() {
             "org.kde.raven.Events",
             "getQuarantineClasses",
             function (res) {
-              if (res) _quarantine_classes = JSON.parse(res);
+              updateQuarantineClasses(res);
             }
           );
         } catch (e) { }

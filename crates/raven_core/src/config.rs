@@ -92,7 +92,14 @@ impl RavenConfig {
                 config.nmaster = std::cmp::max(1, config.nmaster);
                 config.master_ratio = config.master_ratio.clamp(0.1, 0.9);
                 config.default_gaps = std::cmp::max(0, config.default_gaps);
-                config.pip_position = config.pip_position.to_lowercase();
+                let mut merged_quarantine = default_quarantine();
+                for cls in config.quarantine_classes {
+                    let cls_clean = cls.trim().to_lowercase();
+                    if !cls_clean.is_empty() && !merged_quarantine.contains(&cls_clean) {
+                        merged_quarantine.push(cls_clean);
+                    }
+                }
+                config.quarantine_classes = merged_quarantine;
 
                 info!("[CONFIG] Preferencias cargadas con éxito desde disco.");
                 return config;
