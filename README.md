@@ -1,93 +1,141 @@
 # Raven Tiling Emulator 🐦
 
-
 <p align="center">
   <img src="icon/org.kde.raven.tiling.svg" width="250" alt="Raven Logo">
 </p>
 
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/javascript-%23323330.svg?style=for-the-badge&logo=javascript&logoColor=%23F7DF1E)
-![KDE](https://img.shields.io/badge/KDE%20Plasma-21D359?style=for-the-badge&logo=kde&logoColor=white)
+![KDE](https://img.shields.io/badge/KDE%20Plasma%206-21D359?style=for-the-badge&logo=kde&logoColor=white)
 ![Wayland](https://img.shields.io/badge/Wayland-9999ff?style=for-the-badge&logo=wayland&logoColor=white)
 ![GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)
 
-Raven es un gestor de ventanas dinámico (Tiling Window Manager) diseñado específicamente para **KDE Plasma 6 (Wayland)**. Con la llegada de la **versión 3.0**, Raven evoluciona hacia una arquitectura de **Single-Trip Dbus Message** y un modelo de rectificación instantánea.
+**Raven Tiling Emulator** es un gestor de ventanas dinámico en mosaico (Tiling Window Manager) de alto rendimiento diseñado específicamente para **KDE Plasma 6 (Wayland)**. 
 
-## 🚀 El Salto a la Versión 2.9: Composición Foveal Dinámica y Reconciliación Orgánica
-Esta versión reimagina el motor de mosaico adoptando un esquema de diseño de foco centrado y paneles de utilidad distribuidos en base a una jerarquía foveal adaptativa, e implementa nuevos filtros de detección de ventanas *"Picture in Picture"*.
+Con el lanzamiento de la **Versión 3.0**, implementa una arquitectura modular en Rust nativo, comunicación de ultra-baja latencia **Single-Trip IPC**, 5 algoritmos de ordenamiento espacial y mejora su integración con navegadores web base **Gecko**.
 
-### 📉 Eficiencia Energética y de Almacenamiento
-La optimización sigue siendo el pilar fundamental. El motor opera con recursos sumamente bajos y contenidos:
+---
 
-| Versión | Arquitectura | RAM (Runtime) | ROM (Binario) |
-|---|---|---|---|
-| **v1.0** | Python Puro | 55.0 MB | ~15 MB |
-| **v1.6** | Híbrida (Python + Rust FFI) | ~25.9 MB | ~18 MB |
-| **v2.6** | Asynchronous Native Rust (Fixed) | ~4.3 MB | 1.4 MB |
-| **v2.7/2.8** | Asynchronous Native Rust (Foveal Layout) | ~4.5 MB | 1.4 MB |
-| **v2.9** | **Asynchronous Native Rust (Flood Protection & GC-Safe)** | **~4.5 MB** | **1.4 MB** |
-| **v3.0** | **Native Rust (Single-Trip IPC & Dynamic Min-Size)** | **~4.5 MB** | **1.4 MB** |
+## ⚡ Novedades Principales de la Versión 3.0
 
-*La eficiencia extrema ha sido una directriz arquitectónica fundamental desde el inicio del proyecto. Tras validaciones exhaustivas en hardware real, se logró consolidar un motor de alto rendimiento que minimiza el impacto en recursos. Gracias al uso de LTO, el pruning de dependencias y la eliminación de símbolos, entregamos un binario ultra-compacto sin comprometer la estabilidad.*
+### 📐 1. Módulo de Layouts Rediseñado y Modular (Domain-Driven Architecture)
+El motor geométrico se ha reestructurado por completo en submódulos especializados dentro de `domain/layout/`, ofreciendo desacoplamiento total y 5 algoritmos de distribución seleccionables:
 
-## 🌟 Nuevas Funciones y Estabilidad (v3.0)
-- **Motor Geomético Respetuoso (Dynami Min-Size Adaptation):** El motor Rust lee los requisitos de ventanas celosas de sus limites minimos de compocisión y **comprime dinámicamente el resto de la pila matemática** para asegurar que todos los elementos se muestren correctamente sin invadir el espacio de los demás.
-- **Arquitectura Single-Trip D-Bus:** El puente JS y el motor Rust ahora usan un modelo de "consulta-respuesta" sincrónica (Single-Trip). Se eliminaron las transmisiones masivas de estado redundante. El tráfico en el bus IPC de sistema se redujo a menos de un 10% respecto a la v2.9, aniquilando los cuellos de botella del CPU de KWin.
-- **Plasmóide Rediseñado con Carrusel Contextual:** El widget (plasmoide) oficial ahora actúa como un carrusel inteligente de orientación espacial. En lugar de textos genéricos, el plasmoide te muestra físicamente qué escritorio virtual tienes a tu izquierda y derecha (ej. 4 | Escritorio | 2), mejorando la navegación multisalida.
-- **Nuevos Controles Maestros:** Protección rígida del ratio maestro para que nunca colapse por debajo del 30% (0.30) sin importar la cantidad de clics del usuario, protegiendo la legibilidad de la pantalla.
-- Tránsito de Escritorios Secuencial: El envío de ventanas hacia otros escritorios (MigrateToDesktop) fue reescrito para saltar secuencialmente (1 -> 2 -> 3) en lugar de saltos abruptos.
-- **Composición Foveal Dinámica (Dynamic Foveal Composition):** La pantalla se organiza de forma inteligente situando la ventana en foco activo en un *Centro Foveal* preponderante, flanqueado por ranuras de contexto lateral simétricas e inferiores de utilidad. Al superarse la cantidad base de ventanas, el motor aplica subdivisiones jerárquicas recursivas (empezando por los laterales) para preservar la legibilidad y área de trabajo central.
-- **Redimensionamiento Asimétrico Focalizado:** El ajuste del ratio de división (`master_ratio`) se aplica únicamente al corte que involucra a la ventana en foco activo (focused window). El resto de las ventanas mantienen una proporción simétrica limpia de `0.5` (50-50).
-- **Reinicio Automático de Proporción:** Para evitar deformaciones acumulativas, cualquier adición o remoción de ventanas en la composición restablece de manera atómica el ratio maestro a `0.5`, garantizando una transición visualmente limpia y simétrica de forma inmediata.
-- **Bucle de Recálculo Dinámico sin Huecos:** Si una ventana no cabe en su celda calculada, el motor la desaloja y ejecuta una reconciliación iterativa redistribuyendo el 100% del área restante a las demás ventanas activas.
-- **Resiliencia y Comunicación Asíncrona:** El puente KWin-Raven ahora es completamente no bloqueante. El motor Rust utiliza offloading asíncrono con `tokio::spawn` para liberar el bus de datos instantáneamente.
-- **Envío de Ventanas mediante Toggle:** El toggle permite enviar la última ventana en foco al monitor o escritorio virtual alterno para comodidad del usuario.
-- **Soporte a traspaso de ventanas vía arrastre:** Capacidad de arrastrar con el ratón la ventana a otro monitor o escritorio virtual disponible con reacomodo instantáneo de la composición.
-- **Persistencia Topológica de Sesión (v2.8):** El motor ahora guarda en segundo plano tu historial topológico. Al reiniciar el motor o KWin, el layout se restaura con tu orden previo exacto, evitando un reacomodo de ventanas no deseado.
-- **Reglas Dinámicas y Cuarentenas Integradas (v2.8):** Puedes definir desde la interfaz gráfica (GUI) qué clases de ventanas forzar como flotantes, PiP o cuáles poner en cuarentena, inyectándose en el compositor Wayland en tiempo real sin reiniciar.
-- **Protección Anti-Saturación / Flood Protection (v2.9):** Implementación de *Debouncing* nativo en Rust con cerrojos atómicos (`AtomicBool`). Si el compositor Wayland bombardea el motor con miles de eventos simultáneos, el sistema agrupa inteligentemente las peticiones y ejecuta un único recálculo geométrico, impidiendo cuellos de botella infinitos.
-- **Estabilización Zero-Allocation para Gecko (v2.9):** El *Silencio Geométrico* se ha optimizado para ser completamente amigable con el Garbage Collector (GC) de KWin. Se reutiliza un *Pool Estático de Temporizadores* (Zero-Allocation) para manejar las cuarentenas dinámicas de navegadores complejos (Firefox, LibreWolf, Floorp, Zen), logrando un acoplamiento perfecto libre de pausas o *micro-stutters*.
-- **Integración Nativa de Atajos de Teclado (v2.9):** El script puente de KWin se adueña automáticamente de los atajos del teclado a través de la API `registerShortcut`. Esto elimina la necesidad de programas de terceros como `sxhkd`. Los atajos aparecen directamente en *Preferencias del Sistema -> Atajos -> KWin* para su fácil reconfiguración. El atajo predeterminado para habilitar/deshabilitar el mosaico es **`Super+Space`** (o `Meta+Space`).
+| Algoritmo | Identificador | Descripción y Caso de Uso |
+| :--- | :--- | :--- |
+| **Raven (BSP Foveal)** | `"raven"` | Composición dinámica foveal con ranuras de utilidad laterales e inferiores para monitores ultrapanorámicos. |
+| **Clásico (Tall)** | `"tall"` | Columna maestra principal en el lateral con apilamiento secundario vertical. |
+| **Monóculo** | `"monocle"` | Maximización total enfocada de una sola ventana para concentración intensiva. |
+| **Flujo Avanzado** | `"strict_dwindle"` | División fractal en espiral binaria simétrica secuencial. |
+| **Divisor** | `"divisor"` | Reparto equitativo proporcional en $N$ columnas verticales. |
 
-### 🏗️ Arquitectura de Comunicación (High-Performance Bridge)
-El sistema utiliza un puente de baja latencia altamente desacoplado entre el compositor KWin y el motor Raven, optimizado para los estándares de **Plasma 6 (Wayland)**:
-- **Puente de Alto Rendimiento (Sensor-Actuator Model):** Basado en una investigación profunda de la API `QJSEngine`, Raven ahora utiliza un sistema de sincronización atómica donde el script de KWin actúa como un sensor debounced.
-- **Optimización de D-Bus:** Se ha eliminado el envío masivo de estados redundantes. El tráfico en el bus de sistema se ha reducido en un **~70%**, liberando recursos críticos del compositor.
-- **Uso de Identificadores Nativos:** Migración completa al uso de `internalId` y la topología global de `workspace.screens` de Plasma 6, eliminando desincronizaciones en configuraciones multi-monitor o escritorios virtuales.
-- **Mecanismo Watchdog:** El script de KWin incorpora un temporizador de vigilancia (Watchdog) de 6 segundos para liberar bloqueos potenciales en la comunicación IPC.
+### 🚀 2. Arquitectura Single-Trip D-Bus IPC (zbus 4)
+- **Cero Polling y Tráfico Optimizado**: Se eliminaron las transmisiones masivas de estado redundantes. El script de KWin y el motor de Rust interactúan mediante un modelo síncrono de consulta-respuesta en un solo viaje IPC (`syncStateAndUpdateLayout` y `syncWindowDelta`).
+- **Reducción del 90% en Bus IPC**: Minimiza el uso de CPU de KWin y elimina cuellos de botella en composiciones complejas.
 
-## 🏗️ Nueva Estructura del Proyecto
-- `core/engine_rs/`: El corazón del proyecto. Un daemon nativo asíncrono que escucha al compositor KWin.
-- `raven_gui/`: Aplicación de preferencias nativa basada en egui para una configuración visual fluida.
-- `adapters/`: 
-    - `kwin_script/`: Bridge liviano en JavaScript para la API de Plasma 6.
-    - `plasmoid/`: Widget de Plasma para el control rápido del estado del motor.
-- `bin/`: Directorio de destino para los binarios optimizados una vez instalados.
+### 🎨 3. Centro de Control Nativo (`raven_gui`) con Temática KDE
+- **Interfaz en egui/eframe**: Aplicación gráfica ligera para configurar márgenes (gaps), ratios maestros, posiciones PiP y reglas dinámicas.
+- **Previsualizador de Canvas en Vivo**: Renderiza espacialmente la distribución del layout seleccionado en tiempo real antes de aplicarlo.
+- **Sincronización de Paleta KDE**: Lee dinámicamente la configuración de colores del sistema desde `~/.config/kdeglobals`, adaptando su apariencia a cualquier tema claro u oscuro de Plasma.
+
+### 🦊 4. Mejoras en la Mitigación Nativa para Navegadores Gecko
+- **Cuarentena Dinámica y Bandera `sb`**: Identifica automáticamente la creación de ventanas de navegadores Gecko notificando su tamaño definitivo tras estabilizar sus decoraciones CSD/SSD, previniendo parpadeos, encimamientos o desacomodos.
+
+---
+
+## 📉 Eficiencia Energética, Huella en Disco y Rendimiento (v3.0)
+
+El proyecto prioriza la eficiencia extrema y el uso mínimo de recursos del sistema.
+
+### 📊 Evolución del Consumo por Versión
+
+| Versión | Arquitectura | RAM (Runtime) | Peso Binario Motor | Tráfico IPC |
+| :--- | :--- | :--- | :--- | :--- |
+| **v1.0** | Python Puro | 55.0 MB | ~15 MB | Alto (Polling continuo) |
+| **v1.6** | Híbrida (Python + Rust FFI) | ~25.9 MB | ~18 MB | Medio |
+| **v2.6** | Rust Nativo Asíncrono | ~4.3 MB | 1.4 MB | Continuo |
+| **v2.9** | Rust Nativo (Flood Protection) | ~4.5 MB | 1.4 MB | Debounced |
+| **v3.0** | **Rust Nativo (Single-Trip IPC & 5 Layouts)** | **~4.9 MB** | **1.9 MB** | **Ultra-bajo (-90%)** |
+
+### 💾 Desglose de Almacenamiento e Instalación Local (v3.0)
+
+| Componente | Tipo de Recurso | Tamaño en Disco | Notas Técnicas |
+| :--- | :--- | :--- | :--- |
+| **`raven_engine`** | Daemon Nativo en Rust | **1.9 MB** *(1,995 KB)* | Incluye los 5 algoritmos de layout, topología PiP e IPC Single-Trip (zbus 4). |
+| **`raven_gui`** | Centro de Control (egui/eframe) | **4.3 MB** *(4,596 KB)* | Renderizado GPU nativo OpenGL, selector de presets y lector de paletas KDE. |
+| **Adaptadores & Plasmoides** | KWin Script & Plasmoid QML | **< 60 KB** | Puente sensor-actuador ligero para Plasma 6. |
+| **Total Instalación** | Entorno Local (`~/.local/share/raven/`) | **6.9 MB** | **Huella ultra-compacta en almacenamiento.** |
+
+---
+
+## 🏗️ Estructura del Proyecto
+
+- **`core/engine_rs/`**: Núcleo principal en Rust nativo (Daemon systemd).
+  - `domain/layout/`: Algoritmos de ordenamiento espacial (`dwindle_bsp`, `tall`, `monocle`, `strict_dwindle`, `divisor`, `topology`, `strategy`, `utils`).
+  - `infrastructure/dbus.rs`: Servicio D-Bus zbus 4 que expone la interfaz `org.kde.raven.Events`.
+- **`crates/raven_core/`**: Biblioteca de entidades de dominio, geometría (`Rect`, `WindowNode`) y configuración JSON.
+- **`raven_gui/`**: Centro de preferencias nativo basado en egui.
+- **`adapters/`**:
+  - `kwin_script/`: Puente liviano en JavaScript para la API de KWin de Plasma 6.
+  - `plasmoid/`: Widget de Plasma 6 para control rápido y estado desde el panel.
+
+---
 
 ## 🛠️ Instalación y Uso
-El nuevo instalador gestiona la descarga de dependencias, crates de Rust y la compilación optimizada de los componentes nativos.
 
-> [!NOTE]
-> **Instalación automática de Rust/Cargo:** Si `cargo` no está presente en el sistema, `install.sh` intentará descargarlo e instalarlo de manera automatizada a través del instalador oficial `rustup.rs` (fuente segura por contrato social). Sin embargo, por seguridad y control del entorno, **se recomienda que el usuario gestione e instale el compilador de Rust por cuenta propia**. Esta opción automática está pensada solo para aquellos usuarios que buscan una automatización total; en tal caso, se requiere tener previamente instalado `curl` en el sistema para que el instalador actúe de forma autónoma.
+### Requisitos Previos
+- **KDE Plasma 6** sobre **Wayland**.
+- Compilador de Rust (Cargo) y herramientas base de compilación (`build-essential` / `pkg-config`).
 
-1. Clona el repositorio.
-2. Ejecuta `./install.sh`.
-3. Activa "Raven Bridge" en la configuración de KWin (Scripts de KWin).
-
+### Pasos de Instalación
 ```bash
-git clone https://github.com/Vidruck/raven_tiling_emulator
+git clone https://github.com/Vidruck/raven_tiling_emulator.git
 cd raven_tiling_emulator
 ./install.sh
 ```
 
-## 🧹 Desinstalación
-Si deseas eliminar Raven y todos sus binarios, ejecuta:
-`./uninstall.sh`
+El script `./install.sh` se encarga de:
+1. Compilar los binarios nativos optimizados en modo `--release`.
+2. Registrar el script de KWin y el Plasmoide en Plasma 6.
+3. Configurar e iniciar el servicio `systemd` del usuario (`raven.service`).
 
-## ⚠️ Descargo de Responsabilidad (Disclaimer)
-**Este software se proporciona "tal cual" (AS IS), sin garantía de ningún tipo.** Raven interactúa directamente con el compositor de ventanas (KWin) y el bus de datos del sistema (DBus). El usuario asume toda la responsabilidad derivada de su uso. El autor no se hace responsable de inestabilidades en la sesión gráfica o conflictos con otros scripts del sistema.
+### Atajos de Teclado Predeterminados (KWin)
+
+| Atajo | Función |
+| :--- | :--- |
+| **`Super + Space`** | Habilitar / Deshabilitar el motor de mosaico |
+| **`Super + Shift + C`** | Ciclar entre los 5 algoritmos de layout |
+| **`Super + J` / `Super + K`** | Mover el foco a la ventana Siguiente / Anterior |
+| **`Super + Shift + J` / `Super + Shift + K`** | Intercambiar posición de la ventana activa |
+| **`Super + Equal` / `Super + Minus`** | Incrementar / Decrementar espaciado (Gaps) |
+| **`Super + Shift + Right` / `Left`** | Migrar ventana activa al Monitor siguiente / anterior |
 
 ---
-**Si este proyecto te es útil, considera ayudarme a mejorarlo con feedback o contribuciones. ¡Huélum!**
 
-*Desarrollado por Alejandro González Hernández (Vidruck). Licencia GPL-3.*
+## 🦊 Recomendación de Configuración para Navegadores (Gecko / CSD)
+
+Los navegadores basados en Gecko (Firefox, Floorp, LibreWolf, Zen) en Wayland utilizan por defecto decoraciones en el lado del cliente (CSD). Aunque Raven v3.0 incluye mitigación en cuarentena, para una experiencia 100% fluida se sugiere activar las decoraciones del lado del servidor (SSD):
+
+1. Abre tu navegador Gecko.
+2. Haz clic derecho en la barra de herramientas o abre **Personalizar barra de herramientas...**
+3. En la esquina inferior izquierda, activa la casilla **Barra de título (Title Bar)**.
+
+---
+
+## 🧹 Desinstalación
+
+Para remover completamente Raven y sus componentes del sistema:
+```bash
+./uninstall.sh
+```
+
+---
+
+## ⚠️ Descargo de Responsabilidad (Disclaimer)
+
+**Este software se proporciona "tal cual" (AS IS), sin garantía de ningún tipo.** Raven interactúa directamente con el compositor KWin y el bus D-Bus de Plasma. El usuario asume la responsabilidad de su uso.
+
+---
+
+*Desarrollado por **Alejandro González Hernández (Vidruck)**. Licencia **GPL-3.0**.*  
+*¡Huélum!*

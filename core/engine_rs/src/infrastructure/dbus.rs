@@ -61,6 +61,9 @@ pub struct KWinWindow {
     /// Indica si la ventana requiere retroalimentación (feedback) de sincronización inmediata tras su creación.
     #[serde(default)]
     pub sb: bool,
+    /// Indica si la ventana se encuentra en cuarentena de estabilización (Gecko/CSD).
+    #[serde(default)]
+    pub iq: bool,
 }
 
 /// Representa el estado global de salidas y escritorios virtuales en KWin.
@@ -126,6 +129,7 @@ pub fn parse_payload(
             win.min_w,
             win.min_h,
             win.sb,
+            win.iq,
         ));
     }
     Ok((workspaces, windows, payload.topology))

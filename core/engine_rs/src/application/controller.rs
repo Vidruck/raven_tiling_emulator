@@ -248,8 +248,14 @@ impl RavenController {
                 }
             }
 
+            let is_quarantined_or_strict = windows
+                .iter()
+                .find(|w| &w.window_id == wid)
+                .map(|w| w.is_quarantined || w.strict_birth)
+                .unwrap_or(false);
+
             let needs_move = match self.last_known_layout.get(wid) {
-                Some(old_rect) => old_rect != rect || win_rect_differs,
+                Some(old_rect) => old_rect != rect || win_rect_differs || is_quarantined_or_strict,
                 None => true,
             };
 
@@ -262,12 +268,10 @@ impl RavenController {
                     height: rect.height,
                 });
 
-                if let Some(win_node) = windows.iter().find(|w| &w.window_id == wid) {
-                    if win_node.strict_birth {
-                        commands.push(RavenAction::RequestFeedback {
-                            window_id: wid.clone(),
-                        });
-                    }
+                if is_quarantined_or_strict {
+                    commands.push(RavenAction::RequestFeedback {
+                        window_id: wid.clone(),
+                    });
                 }
             }
 

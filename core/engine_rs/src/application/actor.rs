@@ -99,6 +99,7 @@ impl RavenControllerActor {
                             win.min_w,
                             win.min_h,
                             win.sb,
+                            win.iq,
                         );
                         
                         self.controller.handle_delta_change(win_node);

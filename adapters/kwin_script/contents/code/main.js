@@ -488,6 +488,7 @@ function syncState() {
         min_w: w.minSize ? Math.round(w.minSize.width) : 0,
         min_h: w.minSize ? Math.round(w.minSize.height) : 0,
         sb: Boolean(w.__raven_strict_birth),
+        iq: Boolean(w.__raven_quarantined),
       });
     } catch (e) {
       Logger.error("syncState", "Error extrayendo geometría/estado de ventana", e);
@@ -580,6 +581,7 @@ function syncWindowDelta(w) {
       min_w: w.minSize ? Math.round(w.minSize.width) : 0,
       min_h: w.minSize ? Math.round(w.minSize.height) : 0,
       sb: Boolean(w.__raven_strict_birth),
+      iq: Boolean(w.__raven_quarantined),
     };
     callDBus(
       "org.kde.raven.Daemon",

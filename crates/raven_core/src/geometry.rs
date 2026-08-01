@@ -58,6 +58,9 @@ pub struct WindowNode {
     pub min_h: i32,
     /// Bandera que indica si la ventana requiere retroalimentación (feedback) inmediata en su creación.
     pub strict_birth: bool,
+    /// Indica si la ventana se encuentra actualmente en cuarentena de estabilización geométrica (Gecko/CSD).
+    #[serde(default)]
+    pub is_quarantined: bool,
 }
 
 impl WindowNode {
@@ -74,6 +77,7 @@ impl WindowNode {
         min_w: i32,
         min_h: i32,
         strict_birth: bool,
+        is_quarantined: bool,
     ) -> Self {
         WindowNode {
             window_id,
@@ -87,6 +91,7 @@ impl WindowNode {
             min_w,
             min_h,
             strict_birth,
+            is_quarantined,
         }
     }
 }
