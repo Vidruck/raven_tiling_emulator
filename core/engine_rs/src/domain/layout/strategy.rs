@@ -7,7 +7,8 @@ use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
 use super::{
-    DivisorStrategy, DwindleBSPStrategy, MonocleStrategy, StrictDwindleStrategy, TallStrategy,
+    DivisorStrategy, DwindleBSPStrategy, InvertedStrictDwindleStrategy, MonocleStrategy,
+    StrictDwindleStrategy, TallStrategy,
 };
 
 /// Interfaz (Trait) común para todos los algoritmos de distribución de ventanas (Layout Strategies).
@@ -42,7 +43,7 @@ pub trait LayoutStrategy: Send + Sync {
 /// Fábrica para la instanciación dinámica de algoritmos de distribución según su nombre.
 ///
 /// # Parámetros
-/// - `layout_type`: Nombre de la estrategia (`"tall"`, `"monocle"`, `"strict_dwindle"`, `"divisor"`, `"raven"`).
+/// - `layout_type`: Nombre de la estrategia (`"tall"`, `"monocle"`, `"strict_dwindle"`, `"inverted_strict_dwindle"`, `"divisor"`, `"raven"`).
 ///
 /// # Retorno
 /// Un puntero inteligente `Box<dyn LayoutStrategy>` listo para ser invocado.
@@ -51,6 +52,7 @@ pub fn get_strategy(layout_type: &str) -> Box<dyn LayoutStrategy> {
         "tall" => Box::new(TallStrategy),
         "monocle" => Box::new(MonocleStrategy),
         "strict_dwindle" => Box::new(StrictDwindleStrategy),
+        "inverted_strict_dwindle" => Box::new(InvertedStrictDwindleStrategy),
         "divisor" => Box::new(DivisorStrategy),
         "raven" | _ => Box::new(DwindleBSPStrategy),
     }

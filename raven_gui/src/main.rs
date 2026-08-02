@@ -23,11 +23,12 @@ struct PresetDef {
 }
 
 const PRESETS: &[PresetDef] = &[
-    PresetDef { name: "raven",      display: "Raven (Base)",     desc: "Esquema dinámico y asimétrico para pantallas panorámicas.", layout_type: "raven", gaps: 6, ratio: 0.5 },
-    PresetDef { name: "clasico",    display: "Clásico",          desc: "Esquema de panel maestro con pila secundaria.", layout_type: "tall", gaps: 8, ratio: 0.55 },
-    PresetDef { name: "monoculo",   display: "Monóculo",         desc: "Modo maximizado de una sola ventana.", layout_type: "monocle", gaps: 0, ratio: 1.0 },
-    PresetDef { name: "hyper",      display: "Flujo Avanzado",   desc: "Mosaico fractal estrictamente simétrico en espiral.", layout_type: "strict_dwindle", gaps: 8, ratio: 0.5 },
-    PresetDef { name: "divisor",    display: "Divisor",          desc: "Disposición equitativa en columnas proporcionales.", layout_type: "divisor", gaps: 8, ratio: 0.5 },
+    PresetDef { name: "raven",            display: "Raven (Base)",                 desc: "Esquema dinámico y asimétrico para pantallas panorámicas.", layout_type: "raven", gaps: 6, ratio: 0.5 },
+    PresetDef { name: "clasico",          display: "Clásico",                      desc: "Esquema de panel maestro con pila secundaria.", layout_type: "tall", gaps: 8, ratio: 0.55 },
+    PresetDef { name: "monoculo",         display: "Monóculo",                     desc: "Modo maximizado de una sola ventana.", layout_type: "monocle", gaps: 0, ratio: 1.0 },
+    PresetDef { name: "hyper",            display: "Flujo Avanzado",               desc: "Mosaico fractal estrictamente simétrico en espiral.", layout_type: "strict_dwindle", gaps: 8, ratio: 0.5 },
+    PresetDef { name: "hyper_inverted",   display: "Flujo Avanzado (Invertido)",   desc: "Mosaico fractal en espiral con orden de acomodo invertido.", layout_type: "inverted_strict_dwindle", gaps: 8, ratio: 0.5 },
+    PresetDef { name: "divisor",          display: "Divisor",                      desc: "Disposición equitativa en columnas proporcionales.", layout_type: "divisor", gaps: 8, ratio: 0.5 },
 ];
 
 /// Aplicación gráfica del Centro de Bienvenida (Welcome Center) de Raven.
@@ -197,10 +198,10 @@ impl RavenGuiApp {
                 painter.text(r.center(), egui::Align2::CENTER_CENTER, "1 (maximizado)", egui::FontId::monospace(12.0), egui::Color32::WHITE);
             }
             "strict_dwindle" => {
-                // Dibujamos espiral: 1 izquierda, 2 der-arriba, 3 der-abajo-izq, 4 der-abajo-der-arriba, 5 der-abajo-der-abajo
+                // Dibujamos espiral normal: 1 izquierda, 2 der-arriba, 3 der-abajo-izq, 4 der-abajo-der-arriba, 5 der-abajo-der-abajo
                 let curr_x = rect.min.x;
                 let curr_y = rect.min.y;
-                
+
                 // Win 1
                 let w1_w = w * ratio;
                 let r1 = egui::Rect::from_min_size(
@@ -244,6 +245,59 @@ impl RavenGuiApp {
                 let rem_h2 = rem_h - w4_h;
                 let r5 = egui::Rect::from_min_size(
                     egui::pos2(curr_x + w1_w + w3_w + gap_f, curr_y + w2_h + w4_h + gap_f),
+                    egui::vec2(rem_w2 - gap_f * 2.0, rem_h2 - gap_f * 2.0),
+                );
+                painter.rect_filled(r5, 4.0, bot_color);
+                painter.text(r5.center(), egui::Align2::CENTER_CENTER, "5", egui::FontId::monospace(9.0), egui::Color32::WHITE);
+            }
+            "inverted_strict_dwindle" => {
+                // Dibujamos espiral invertida: 1 DERECHA (principal), 2 izq-abajo, 3 izq-arriba-der, 4 izq-arriba-izq-abajo, 5 izq-arriba-izq-arriba
+                let curr_x = rect.min.x;
+                let curr_y = rect.min.y;
+
+                // Win 1 (Lado derecho)
+                let w1_w = w * ratio;
+                let rem_w1 = w - w1_w;
+                let r1 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + rem_w1 + gap_f, curr_y + gap_f),
+                    egui::vec2(w1_w - gap_f * 2.0, h - gap_f * 2.0),
+                );
+                painter.rect_filled(r1, 4.0, center_color);
+                painter.text(r1.center(), egui::Align2::CENTER_CENTER, "1 (foco)", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+
+                // Win 2 (Lado izquierdo, bloque inferior)
+                let w2_h = h * ratio;
+                let rem_h1 = h - w2_h;
+                let r2 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + gap_f, curr_y + rem_h1 + gap_f),
+                    egui::vec2(rem_w1 - gap_f * 2.0, w2_h - gap_f * 2.0),
+                );
+                painter.rect_filled(r2, 4.0, side_color);
+                painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+
+                // Win 3 (Lado izquierdo, bloque superior-izq)
+                let w3_w = rem_w1 * ratio;
+                let r3 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + gap_f, curr_y + gap_f),
+                    egui::vec2(w3_w - gap_f * 2.0, rem_h1 - gap_f * 2.0),
+                );
+                painter.rect_filled(r3, 4.0, bot_color);
+                painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+
+                // Win 4
+                let rem_w2 = rem_w1 - w3_w;
+                let w4_h = rem_h1 * ratio;
+                let r4 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + w3_w + gap_f, curr_y + gap_f),
+                    egui::vec2(rem_w2 - gap_f * 2.0, w4_h - gap_f * 2.0),
+                );
+                painter.rect_filled(r4, 4.0, bot_color);
+                painter.text(r4.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(9.0), egui::Color32::WHITE);
+
+                // Win 5 (Restante final)
+                let rem_h2 = rem_h1 - w4_h;
+                let r5 = egui::Rect::from_min_size(
+                    egui::pos2(curr_x + w3_w + gap_f, curr_y + w4_h + gap_f),
                     egui::vec2(rem_w2 - gap_f * 2.0, rem_h2 - gap_f * 2.0),
                 );
                 painter.rect_filled(r5, 4.0, bot_color);

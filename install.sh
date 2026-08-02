@@ -93,7 +93,23 @@ echo "[4/7] Regenerando caché de servicios de KDE..."
 kbuildsycoca6 --noincremental > /dev/null 2>&1
 
 # [5/7] Instalación de Extensiones KWin
-echo "[5/7] Instalando adaptadores de KWin y Plasmoids..."
+echo "[5/7] Compilando y empaquetando adaptadores KWin..."
+if command -v node >/dev/null 2>&1; then
+    node -e '
+        const fs = require("fs");
+        const path = require("path");
+        function buildBundle(entryPath) {
+            let content = fs.readFileSync(entryPath, "utf8");
+            const dir = path.dirname(entryPath);
+            return content.replace(/\/\/\s*@include\s+"([^"]+)"/g, (match, relPath) => {
+                return buildBundle(path.join(dir, relPath));
+            });
+        }
+        const bundle = buildBundle("adapters/kwin_script/contents/code/main.js");
+        fs.writeFileSync("adapters/kwin_script/contents/code/main.js", bundle);
+    ' 2>/dev/null || true
+fi
+
 kpackagetool6 --type=KWin/Script -i adapters/kwin_script/ 2>/dev/null || kpackagetool6 --type=KWin/Script -u adapters/kwin_script/
 kpackagetool6 --type=Plasma/Applet -i adapters/plasmoid/ 2>/dev/null || kpackagetool6 --type=Plasma/Applet -u adapters/plasmoid/
 

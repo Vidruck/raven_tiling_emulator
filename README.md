@@ -27,6 +27,7 @@ El motor geométrico se ha reestructurado por completo en submódulos especializ
 | **Clásico (Tall)** | `"tall"` | Columna maestra principal en el lateral con apilamiento secundario vertical. |
 | **Monóculo** | `"monocle"` | Maximización total enfocada de una sola ventana para concentración intensiva. |
 | **Flujo Avanzado** | `"strict_dwindle"` | División fractal en espiral binaria simétrica secuencial. |
+| **Flujo Avanzado (Invertido)** | `"inverted_strict_dwindle"` | División fractal en espiral binaria simétrica secuencial con orden de acomodo invertido. |
 | **Divisor** | `"divisor"` | Reparto equitativo proporcional en $N$ columnas verticales. |
 
 ### 🚀 2. Arquitectura Single-Trip D-Bus IPC (zbus 4)
@@ -76,7 +77,10 @@ El proyecto prioriza la eficiencia extrema y el uso mínimo de recursos del sist
 - **`crates/raven_core/`**: Biblioteca de entidades de dominio, geometría (`Rect`, `WindowNode`) y configuración JSON.
 - **`raven_gui/`**: Centro de preferencias nativo basado en egui.
 - **`adapters/`**:
-  - `kwin_script/`: Puente liviano en JavaScript para la API de KWin de Plasma 6.
+  - `kwin_script/`: Puente liviano para la API de KWin de Plasma 6, organizado en submódulos especializados:
+    - `utils/`: Módulos del sistema (`logger`, `geometry`, `timer_pool`).
+    - `core/`: Reglas de ventanas (`window_utils`), cuarentena CSD (`quarantine`) y foco direccional (`focus`).
+    - `services/`: Puente de eventos D-Bus IPC (`dbus_bridge`) e inyección de atajos globales (`shortcuts`).
   - `plasmoid/`: Widget de Plasma 6 para control rápido y estado desde el panel.
 
 ---

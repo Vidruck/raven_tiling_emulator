@@ -6,6 +6,7 @@
 
 pub mod divisor;
 pub mod dwindle_bsp;
+pub mod inverted_strict_dwindle;
 pub mod monocle;
 pub mod strategy;
 pub mod strict_dwindle;
@@ -15,6 +16,7 @@ pub mod utils;
 
 pub use divisor::DivisorStrategy;
 pub use dwindle_bsp::DwindleBSPStrategy;
+pub use inverted_strict_dwindle::InvertedStrictDwindleStrategy;
 pub use monocle::MonocleStrategy;
 pub use strategy::{get_strategy, LayoutStrategy};
 pub use strict_dwindle::StrictDwindleStrategy;
