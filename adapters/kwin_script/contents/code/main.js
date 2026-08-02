@@ -218,6 +218,9 @@ function isManageable(w) {
   }
 }
 
+// Expresión regular para detectar títulos Picture-in-Picture en múltiples idiomas
+const PIP_CAPTION_REGEX = /picture[- ]?in[- ]?picture|imagen[- ]en[- ]imagen|pantalla en pantalla|reproductor en miniatura|incrustation|bild[- ]in[- ]bild|imagem em imagem|immagine nell'immagine|^pip$/i;
+
 /**
  * Determina si una ventana debe comportarse como flotante (floating).
  *
@@ -226,51 +229,21 @@ function isManageable(w) {
  */
 function isFloating(w) {
   try {
-    if (!w || w.deleted) {
-      return true;
-    }
-    if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) {
-      return true;
-    }
-    if (
-      w.fullScreen ||
-      w.maximizeMode !== 0 ||
-      w.maximized === true ||
-      w.maximized
-    ) {
-      return true;
-    }
+    if (!w || w.deleted) return true;
+    if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) return true;
+    if (w.fullScreen || w.maximizeMode !== 0 || w.maximized) return true;
 
-    var strClass = w.resourceClass
-      ? w.resourceClass.toString().toLowerCase()
-      : "";
-    var strCap = w.caption ? w.caption.toString().toLowerCase() : "";
+    const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+    const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
 
-    var isPip =
-      strCap.indexOf("picture-in-picture") !== -1 ||
-      strCap.indexOf("picture in picture") !== -1 ||
-      strCap.indexOf("pictureinpicture") !== -1 ||
-      strCap.indexOf("imagen en imagen") !== -1 ||
-      strCap.indexOf("imagen-en-imagen") !== -1 ||
-      strCap.indexOf("pantalla en pantalla") !== -1 ||
-      strCap.indexOf("reproductor en miniatura") !== -1 ||
-      strCap.indexOf("incrustation") !== -1 ||
-      strCap.indexOf("bild-in-bild") !== -1 ||
-      strCap.indexOf("bild in bild") !== -1 ||
-      strCap.indexOf("imagem em imagem") !== -1 ||
-      strCap.indexOf("immagine nell'immagine") !== -1 ||
-      strCap === "pip" ||
-      strCap === "picture in picture" ||
-      w.keepAbove;
+    let isPip = PIP_CAPTION_REGEX.test(strCap) || w.keepAbove;
 
-    // Evaluamos reglas dinámicas
+    // Evaluamos reglas dinámicas enviadas desde la interfaz de usuario
     if (_window_rules && _window_rules.length > 0) {
-      for (var i = 0; i < _window_rules.length; i++) {
-        var rule = _window_rules[i];
+      for (let i = 0; i < _window_rules.length; i++) {
+        const rule = _window_rules[i];
         if (rule && rule.class && strClass.indexOf(rule.class.toLowerCase()) !== -1) {
-          if (rule.pip) {
-            isPip = true;
-          }
+          if (rule.pip) isPip = true;
           if (rule.action === "float") {
             if (isPip && !w.keepAbove) w.keepAbove = true;
             return true;
@@ -283,26 +256,18 @@ function isFloating(w) {
       w.keepAbove = true;
     }
 
-    var isRaven =
-      strClass.indexOf("raven") !== -1 ||
-      strCap.indexOf("raven control center") !== -1;
-    var isSpectacle = strClass.indexOf("spectacle") !== -1;
-    var isKlipper =
-      strClass.indexOf("klipper") !== -1 ||
-      strClass.indexOf("plasma.clipboard") !== -1;
-    var isVirtPopup =
-      (strClass.indexOf("qemu") !== -1 ||
-        strClass.indexOf("virt-manager") !== -1) &&
-      !w.normalWindow;
+    const isRaven = strClass.indexOf("raven") !== -1 || strCap.indexOf("raven control center") !== -1;
+    const isSpectacle = strClass.indexOf("spectacle") !== -1;
+    const isKlipper = strClass.indexOf("klipper") !== -1 || strClass.indexOf("plasma.clipboard") !== -1;
+    const isVirtPopup = (strClass.indexOf("qemu") !== -1 || strClass.indexOf("virt-manager") !== -1) && !w.normalWindow;
 
-    // Heurística para IDEs y navegadores pesados: Sus tooltips/menus a veces se reportan como normalWindow sin caption.
-    // Solo se consideran popups flotantes si su geometría es pequeña (menos de 450x350).
-    var isHeavyAppPopup = false;
+    // Popups flotantes de aplicaciones pesadas (JetBrains, Zen, Firefox) sin título
+    let isHeavyAppPopup = false;
     if (strClass.indexOf("jetbrains") !== -1 || strClass.indexOf("idea") !== -1 || strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
       if (!strCap || strCap.trim() === "" || strCap === "win0") {
-        var fg = w.frameGeometry;
-        var wWidth = fg ? fg.width : 0;
-        var wHeight = fg ? fg.height : 0;
+        const fg = w.frameGeometry;
+        const wWidth = fg ? fg.width : 0;
+        const wHeight = fg ? fg.height : 0;
         if (wWidth > 0 && wHeight > 0 && wWidth < 450 && wHeight < 350) {
           isHeavyAppPopup = true;
         }
@@ -354,61 +319,65 @@ function highlightWindow(w) {
 }
 
 /**
+ * Determina si dos ventanas comparten al menos un escritorio virtual activo.
+ */
+function isSameDesktop(w1, w2) {
+  if (!w1.desktops || !w2.desktops || w1.desktops.length === 0 || w2.desktops.length === 0) {
+    return true; // En Wayland/ventanas fijadas, asumir coincidencia
+  }
+  for (let i = 0; i < w1.desktops.length; i++) {
+    if (w2.desktops.indexOf(w1.desktops[i]) !== -1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Foco direccional nativo utilizando geometría de KWin.
  */
 function focusDirection(dx, dy) {
   try {
-    var act = workspace.activeWindow;
-    if (!act) return;
-    
-    var actRect = getRectGeometry(act.frameGeometry);
-    var cx = actRect.x + actRect.w / 2;
-    var cy = actRect.y + actRect.h / 2;
-    
-    var bestWin = null;
-    var bestDist = 99999999;
-    
-    var windows = workspace.windowList();
-    for (var i = 0; i < windows.length; i++) {
-      var w = windows[i];
-      if (w === act || !isManageable(w) || w.minimized) continue;
-      
-      // Filter by the same desktop
-      var desktopMatch = false;
-      if (w.desktops && act.desktops && w.desktops.length > 0 && act.desktops.length > 0) {
-        for (var j = 0; j < w.desktops.length; j++) {
-          if (act.desktops.indexOf(w.desktops[j]) !== -1) {
-            desktopMatch = true;
-            break;
-          }
-        }
-      } else {
-        desktopMatch = true; // Para entornos Wayland donde el arreglo de escritorios puede ser complicado o estar vacío (ej. ventanas fijadas)
-      }
-      
-      if (!desktopMatch && (!w.onAllDesktops && !act.onAllDesktops)) continue;
+    const activeWin = workspace.activeWindow;
+    if (!activeWin) return;
 
-      var r = getRectGeometry(w.frameGeometry);
-      var wx = r.x + r.w / 2;
-      var wy = r.y + r.h / 2;
-      
+    const actRect = getRectGeometry(activeWin.frameGeometry);
+    const cx = actRect.x + actRect.w / 2;
+    const cy = actRect.y + actRect.h / 2;
+
+    let bestWin = null;
+    let bestDist = Infinity;
+
+    const windows = workspace.windowList();
+    for (let i = 0; i < windows.length; i++) {
+      const w = windows[i];
+      if (w === activeWin || !isManageable(w) || w.minimized) continue;
+
+      const desktopMatch = isSameDesktop(w, activeWin);
+      if (!desktopMatch && (!w.onAllDesktops && !activeWin.onAllDesktops)) continue;
+
+      const r = getRectGeometry(w.frameGeometry);
+      const wx = r.x + r.w / 2;
+      const wy = r.y + r.h / 2;
+
+      // Filtrado según dirección solicitada
       if (dx > 0 && wx <= cx) continue;
       if (dx < 0 && wx >= cx) continue;
       if (dy > 0 && wy <= cy) continue;
       if (dy < 0 && wy >= cy) continue;
-      
-      var dist = Math.pow(wx - cx, 2) + Math.pow(wy - cy, 2);
+
+      const dist = Math.pow(wx - cx, 2) + Math.pow(wy - cy, 2);
       if (dist < bestDist) {
         bestDist = dist;
         bestWin = w;
       }
     }
-    
+
     if (bestWin) {
       workspace.activeWindow = bestWin;
       highlightWindow(bestWin);
     }
-  } catch(e) {
+  } catch (e) {
     Logger.error("focusDirection", "Error enfocando dirección " + dx + "," + dy, e);
   }
 }
@@ -1205,20 +1174,42 @@ function init() {
 
 // ---- Manejadores de eventos globales (funciones estáticas, sin closures) ----
 
+/**
+ * Calcula el tiempo óptimo de cuarentena para una ventana según la heurística
+ * de arranque en frío (Cold Start) o caliente (Warm Start).
+ *
+ * @param {string} strClass - Nombre en minúsculas de la clase de recurso de la ventana.
+ * @returns {number} Duración del temporizador de estabilización en milisegundos.
+ */
+function calculateQuarantineDuration(strClass) {
+  if (strClass === "") {
+    return 150; // Sin clase asignada al nacer, dar más margen
+  }
+
+  let similarCount = 0;
+  const allWindows = workspace.windowList();
+  for (let k = 0; k < allWindows.length; k++) {
+    const wc = allWindows[k].resourceClass ? allWindows[k].resourceClass.toString().toLowerCase() : "";
+    if (wc === strClass) {
+      similarCount++;
+    }
+  }
+
+  return similarCount <= 1 ? 120 : 80; // 120ms Cold start, 80ms Warm start
+}
+
 function processNewWindow(w) {
   if (!w || w.deleted || !isManageable(w)) {
     return;
   }
 
-  var strClass = w.resourceClass
-    ? w.resourceClass.toString().toLowerCase()
-    : "";
-  var needsQuarantine = false;
+  const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+  let needsQuarantine = false;
 
   if (strClass === "") {
     needsQuarantine = true;
   } else {
-    for (var i = 0; i < _quarantine_classes.length; i++) {
+    for (let i = 0; i < _quarantine_classes.length; i++) {
       if (strClass.indexOf(_quarantine_classes[i]) !== -1) {
         needsQuarantine = true;
         break;
@@ -1230,32 +1221,16 @@ function processNewWindow(w) {
     w.__raven_quarantined = true;
     bindWindow(w);
 
-    // Heurística de Cold Start vs Warm Start (Optimizado para feedback instantáneo)
-    var qTime = 80; // Warm start por defecto 
-    if (strClass !== "") {
-      var similarCount = 0;
-      var allW = workspace.windowList();
-      for (var k = 0; k < allW.length; k++) {
-        var wc = allW[k].resourceClass ? allW[k].resourceClass.toString().toLowerCase() : "";
-        if (wc === strClass) {
-          similarCount++;
-        }
-      }
-      if (similarCount <= 1) {
-        qTime = 120; // Cold start 
-      }
-    } else {
-      qTime = 150; // Si nace sin clase, darle un poco más de tiempo 
-    }
+    const quarantineDurationMs = calculateQuarantineDuration(strClass);
 
-    w.__raven_stab_timer = setKWinTimeout(function () {
+    w.__raven_stab_timer = setKWinTimeout(() => {
       if (w && !w.deleted) {
         w.__raven_quarantined = false;
         w.__raven_strict_birth = true;
         w.__raven_stab_timer = null;
         requestStateSync();
       }
-    }, qTime);
+    }, quarantineDurationMs);
   } else {
     bindWindow(w);
     requestStateSync();
