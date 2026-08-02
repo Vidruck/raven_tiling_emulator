@@ -53,7 +53,9 @@ var HARDCODED_QUARANTINE_BASE = [
   "brave",
   "electron",
   "code",
-  "spotify"
+  "spotify",
+  "intellij",
+  "java"
 ];
 
 // Lista activa fusionada y deduplicada de clases en cuarentena.
@@ -381,7 +383,7 @@ function focusDirection(dx, dy) {
           }
         }
       } else {
-        desktopMatch = true; // For Wayland environments where desktops array might be tricky or empty (e.g. pinned windows)
+        desktopMatch = true; // Para entornos Wayland donde el arreglo de escritorios puede ser complicado o estar vacío (ej. ventanas fijadas)
       }
       
       if (!desktopMatch && (!w.onAllDesktops && !act.onAllDesktops)) continue;
@@ -758,10 +760,6 @@ function applyCommands(commandsJson) {
                 height: Math.round(cmd.height),
               };
 
-              var dbgCls = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
-              if (dbgCls.indexOf("zen") !== -1 || dbgCls.indexOf("firefox") !== -1) {
-                Logger.info("ZenDebug", "Applying commands [" + w.internalId + "] TARGET=" + targetGeom.width + "x" + targetGeom.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
-              }
 
               w.frameGeometry = targetGeom;
 
@@ -969,13 +967,7 @@ function bindWindow(w) {
       if (!w || w.deleted) {
         return;
       }
-      var dbgCls = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
-      var isGecko = dbgCls.indexOf("zen") !== -1 || dbgCls.indexOf("firefox") !== -1;
-
       if (w.__raven_quarantined && w.__raven_stab_timer) {
-        if (isGecko) {
-          Logger.info("ZenDebug", "Quarantine MUTATION [" + w.internalId + "] geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
-        }
         var t = w.__raven_stab_timer;
         if (t.timer) {
           t.timer.stop();
@@ -1000,9 +992,6 @@ function bindWindow(w) {
         return;
       }
 
-      if (isGecko) {
-        Logger.info("ZenDebug", "Delta SYNC [" + w.internalId + "] geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
-      }
       syncWindowDelta(w);
     });
 
@@ -1238,9 +1227,6 @@ function processNewWindow(w) {
   }
 
   if (needsQuarantine) {
-    if (strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
-      Logger.info("ZenDebug", "onWindowAdded [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height + " minSize=" + (w.minSize ? w.minSize.width + "x" + w.minSize.height : "null"));
-    }
     w.__raven_quarantined = true;
     bindWindow(w);
 
@@ -1267,9 +1253,6 @@ function processNewWindow(w) {
         w.__raven_quarantined = false;
         w.__raven_strict_birth = true;
         w.__raven_stab_timer = null;
-        if (strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
-          Logger.info("ZenDebug", "Quarantine ENDED [" + w.internalId + "] " + strClass + " geom=" + w.frameGeometry.width + "x" + w.frameGeometry.height);
-        }
         requestStateSync();
       }
     }, qTime);
