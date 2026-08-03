@@ -46,18 +46,9 @@ impl LayoutStrategy for MonocleStrategy {
             return (layout_map, evicted_windows);
         }
 
-        // 2. Definir el contenedor principal respetando los gaps periféricos
-        let half_g = default_gaps / 2;
-        let container = Rect {
-            x: screen_rect.x + half_g,
-            y: screen_rect.y + half_g,
-            width: std::cmp::max(1, screen_rect.width - default_gaps),
-            height: std::cmp::max(1, screen_rect.height - default_gaps),
-        };
-
-        // 3. Asignar el 100% de la geometría a cada ventana individual
+        // 2. Definir el contenedor principal aplicando los gaps configurados
         for win in active_windows {
-            layout_map.insert(win.window_id.clone(), apply_gaps(&container, half_g));
+            layout_map.insert(win.window_id.clone(), apply_gaps(&screen_rect, default_gaps));
         }
 
         (layout_map, evicted_windows)
