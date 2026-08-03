@@ -8,6 +8,9 @@
 ![JavaScript](https://img.shields.io/badge/javascript-%23323330.svg?style=for-the-badge&logo=javascript&logoColor=%23F7DF1E)
 ![KDE](https://img.shields.io/badge/KDE%20Plasma%206-21D359?style=for-the-badge&logo=kde&logoColor=white)
 ![Wayland](https://img.shields.io/badge/Wayland-9999ff?style=for-the-badge&logo=wayland&logoColor=white)
+![Fedora](https://img.shields.io/badge/Fedora-51A2DA?style=for-the-badge&logo=fedora&logoColor=white)
+![Arch Linux](https://img.shields.io/badge/Arch%20Linux-1793D1?style=for-the-badge&logo=arch-linux&logoColor=white)
+![Debian](https://img.shields.io/badge/Debian-A81D33?style=for-the-badge&logo=debian&logoColor=white)
 ![GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)
 
 **Raven Tiling Emulator** es un gestor de ventanas dinámico en mosaico (Tiling Window Manager) de alto rendimiento diseñado específicamente para **KDE Plasma 6 (Wayland)**. 
@@ -39,8 +42,10 @@ El motor geométrico se ha reestructurado por completo en submódulos especializ
 - **Previsualizador de Canvas en Vivo**: Renderiza espacialmente la distribución del layout seleccionado en tiempo real antes de aplicarlo.
 - **Sincronización de Paleta KDE**: Lee dinámicamente la configuración de colores del sistema desde `~/.config/kdeglobals`, adaptando su apariencia a cualquier tema claro u oscuro de Plasma.
 
-### 🦊 4. Mejoras en la Mitigación Nativa para Navegadores Gecko
-- **Cuarentena Dinámica y Bandera `sb`**: Identifica automáticamente la creación de ventanas de navegadores Gecko notificando su tamaño definitivo tras estabilizar sus decoraciones CSD/SSD, previniendo parpadeos, encimamientos o desacomodos.
+### 🦊 4. Erradicación del Desacomodo Nativo en Navegadores Gecko
+- **Protocolo de Doble Confirmación**: Elimina definitivamente los parpadeos, traslapes y saltos geométricos causados por la inicialización asíncrona de marcos CSD/SSD en navegadores basados en Gecko (Firefox, Zen, Floorp, LibreWolf).
+- **Cuarentena Dinámica Heurística**: Mantiene la ventana entrante en una fase de aislamiento temporal calibrada dinámicamente según la clase de la aplicación, esperando a que el motor gráfico de la ventana notifique sus dimensiones estables definitivas.
+- **Marca de Acomodo (`sb`)**: Aplica una bandera interna de verificación síncrona en el adaptador de KWin, garantizando que el motor de Rust solo integre la ventana a la retícula espacial una vez validado su estado geométrico final mediante confirmación bilateral.
 
 ---
 
@@ -99,9 +104,12 @@ cd raven_tiling_emulator
 ```
 
 El script `./install.sh` se encarga de:
-1. Compilar los binarios nativos optimizados en modo `--release`.
-2. Registrar el script de KWin y el Plasmoide en Plasma 6.
-3. Configurar e iniciar el servicio `systemd` del usuario (`raven.service`).
+1. Detectar automáticamente la distribución (ej. Fedora Linux KDE Spin, Arch, Debian/Ubuntu) e instalar dependencias del sistema faltantes vía `dnf` u otros gestores.
+2. Compilar los binarios nativos optimizados en modo `--release`.
+3. Registrar el script de KWin y el Plasmoide en Plasma 6 (`kf6-kpackage`).
+4. Configurar e iniciar el servicio `systemd` del usuario (`raven.service`).
+
+> **Nota para Fedora Linux (KDE Plasma Spin)**: El instalador detecta automáticamente Fedora e instala los paquetes necesarios (`kf6-kpackage`, `kde-cli-tools`, `nodejs`, `gcc`, `rsync`) en caso de que no estén presentes.
 
 ### Atajos de Teclado Predeterminados (KWin)
 
@@ -116,7 +124,7 @@ El script `./install.sh` se encarga de:
 
 ---
 
-## 🦊 Recomendación de Configuración para Navegadores (Gecko / CSD)
+## Recomendación de Configuración para Navegadores (Gecko / CSD) (Opcional)
 
 Los navegadores basados en Gecko (Firefox, Floorp, LibreWolf, Zen) en Wayland utilizan por defecto decoraciones en el lado del cliente (CSD). Aunque Raven v3.0 incluye mitigación en cuarentena, para una experiencia 100% fluida se sugiere activar las decoraciones del lado del servidor (SSD):
 
