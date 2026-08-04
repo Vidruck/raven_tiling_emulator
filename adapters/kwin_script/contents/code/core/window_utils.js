@@ -17,7 +17,20 @@ var HARDCODED_QUARANTINE_BASE = [
   "electron",
   "code",
   "spotify",
-  "intellij",
+  "intellij-idea-ultimate-edition",
+  "intellij-idea-community-edition",
+  "jetbrains-studio-ultimate-edition",
+  "jetbrains-phpstorm-ultimate-edition",
+  "jetbrains-android-studio-ultimate-edition",
+  "jetbrains-clion-ultimate-edition",
+  "jetbrains-pycharm-professional-edition",
+  "jetbrains-goland-professional-edition",
+  "jetbrains-webstorm-professional-edition",
+  "jetbrains-datagrip-professional-edition",
+  "jetbrains-appcode-professional-edition",
+  "jetbrains-rubymine-professional-edition",
+  "jetbrains-rider-professional-edition",
+  "jetbrains-rustrover-professional-edition",
   "java"
 ];
 
@@ -127,6 +140,9 @@ function isManageable(w) {
       ? w.resourceClass.toString().toLowerCase()
       : "";
     if (strClass.indexOf("spectacle") !== -1 && w.fullScreen) {
+      return false;
+    }
+    if (w.fullScreen) {
       return false;
     }
     if (!w.normalWindow && !w.dialog && !w.utility) {

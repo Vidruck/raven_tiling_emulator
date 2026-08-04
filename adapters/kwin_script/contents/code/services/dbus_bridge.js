@@ -303,7 +303,7 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              if (w.maximizeMode !== 0) {
+              if (w.maximizeMode !== 0 || w.fullScreen) {
                 break;
               }
 
@@ -430,6 +430,20 @@ function bindWindow(w) {
         requestStateSync();
       }
     });
+
+    if (w.fullScreenChanged !== undefined) {
+      w.fullScreenChanged.connect(function () {
+        if (
+          w &&
+          !w.deleted &&
+          !w.__raven_mutating &&
+          !w.interactiveMove &&
+          !w.interactiveResize
+        ) {
+          requestStateSync();
+        }
+      });
+    }
 
     if (w.captionChanged !== undefined) {
       w.captionChanged.connect(function () {
