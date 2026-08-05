@@ -17,20 +17,7 @@ var HARDCODED_QUARANTINE_BASE = [
   "electron",
   "code",
   "spotify",
-  "intellij-idea-ultimate-edition",
-  "intellij-idea-community-edition",
-  "jetbrains-studio-ultimate-edition",
-  "jetbrains-phpstorm-ultimate-edition",
-  "jetbrains-android-studio-ultimate-edition",
-  "jetbrains-clion-ultimate-edition",
-  "jetbrains-pycharm-professional-edition",
-  "jetbrains-goland-professional-edition",
-  "jetbrains-webstorm-professional-edition",
-  "jetbrains-datagrip-professional-edition",
-  "jetbrains-appcode-professional-edition",
-  "jetbrains-rubymine-professional-edition",
-  "jetbrains-rider-professional-edition",
-  "jetbrains-rustrover-professional-edition",
+  "intellij",
   "java"
 ];
 
@@ -142,9 +129,6 @@ function isManageable(w) {
     if (strClass.indexOf("spectacle") !== -1 && w.fullScreen) {
       return false;
     }
-    if (w.fullScreen) {
-      return false;
-    }
     if (!w.normalWindow && !w.dialog && !w.utility) {
       return false;
     }
@@ -168,7 +152,12 @@ function isFloating(w) {
   try {
     if (!w || w.deleted) return true;
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) return true;
-    if (w.fullScreen || w.maximizeMode !== 0 || w.maximized) return true;
+
+    // Fullscreen nativo (YouTube, juegos, etc.) NO es flotante:
+    // se envía como fs=true al motor Rust que le asigna pantalla completa.
+    if (w.fullScreen) return false;
+
+    if (w.maximizeMode !== 0 || w.maximized) return true;
 
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";

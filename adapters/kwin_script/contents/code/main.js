@@ -1,13 +1,4 @@
 /**
- * @fileoverview Punto de entrada principal para el puente de Raven (Raven Bridge) en KDE Plasma 6 (Wayland) — v3.0
- * Orquesta los componentes del adaptador modular (utils, core, services) e inicializa los listeners de KWin.
- *
- * @author Alejandro González Hernández (Vidruck)
- */
-
-// --- Importación / inclusión de módulos en orden de dependencia ---
-// 1. Utilidades base y logs
-/**
  * @fileoverview Modulo de Logger para el puente Raven en KWin (Plasma 6).
  */
 
@@ -31,63 +22,6 @@ var Logger = {
     }
   }
 };
-
-/**
- * @fileoverview Funciones auxiliares de geometría y cálculo de coordenadas para KWin.
- */
-
-/**
- * Normaliza y obtiene un objeto de geometría en coordenadas enteras de pantalla a partir de un Rect.
- *
- * @param {QtRect} rect - Estructura de geometría nativa de Qt.
- * @returns {Object} Objeto con las propiedades normalizadas {x, y, w, h}.
- */
-function getRectGeometry(rect) {
-  if (!rect) {
-    return { x: 0, y: 0, w: 1920, h: 1080 };
-  }
-
-  function getProp(obj, p1, p2, def) {
-    if (typeof obj[p1] === "function") return obj[p1]();
-    if (obj[p1] !== undefined) return obj[p1];
-    if (typeof obj[p2] === "function") return obj[p2]();
-    if (obj[p2] !== undefined) return obj[p2];
-    return def;
-  }
-
-  return {
-    x: Math.round(getProp(rect, "x", "x", 0)),
-    y: Math.round(getProp(rect, "y", "y", 0)),
-    w: Math.round(getProp(rect, "width", "w", 1920)),
-    h: Math.round(getProp(rect, "height", "h", 1080)),
-  };
-}
-
-/**
- * Obtiene de forma segura el área útil de la pantalla (screen geometry) para un escritorio virtual y salida dados.
- *
- * @param {KWin::Output} output - Salida física de pantalla.
- * @param {KWin::VirtualDesktop} desktop - Escritorio virtual.
- * @returns {Object} Geometría útil del área de trabajo.
- */
-function getSafeScreenGeometry(output, desktop) {
-  if (!output) {
-    return { x: 0, y: 0, w: 1920, h: 1080 };
-  }
-  try {
-    var area = workspace.clientArea(0, output, desktop);
-    if (area && area.width > 0 && area.height > 0) {
-      return getRectGeometry(area);
-    }
-  } catch (e) { }
-  try {
-    if (output.geometry) {
-      return getRectGeometry(output.geometry);
-    }
-  } catch (e) { }
-  return { x: 0, y: 0, w: 1920, h: 1080 };
-}
-
 /**
  * @fileoverview Pool estático de timers reutilizables para minimizar la carga del Garbage Collector en QJSEngine.
  */
@@ -159,9 +93,61 @@ function setKWinTimeout(callback, delayMs) {
     return null;
   }
 }
+/**
+ * @fileoverview Funciones auxiliares de geometría y cálculo de coordenadas para KWin.
+ */
 
+/**
+ * Normaliza y obtiene un objeto de geometría en coordenadas enteras de pantalla a partir de un Rect.
+ *
+ * @param {QtRect} rect - Estructura de geometría nativa de Qt.
+ * @returns {Object} Objeto con las propiedades normalizadas {x, y, w, h}.
+ */
+function getRectGeometry(rect) {
+  if (!rect) {
+    return { x: 0, y: 0, w: 1920, h: 1080 };
+  }
 
-// 2. Núcleo de evaluación de ventanas
+  function getProp(obj, p1, p2, def) {
+    if (typeof obj[p1] === "function") return obj[p1]();
+    if (obj[p1] !== undefined) return obj[p1];
+    if (typeof obj[p2] === "function") return obj[p2]();
+    if (obj[p2] !== undefined) return obj[p2];
+    return def;
+  }
+
+  return {
+    x: Math.round(getProp(rect, "x", "x", 0)),
+    y: Math.round(getProp(rect, "y", "y", 0)),
+    w: Math.round(getProp(rect, "width", "w", 1920)),
+    h: Math.round(getProp(rect, "height", "h", 1080)),
+  };
+}
+
+/**
+ * Obtiene de forma segura el área útil de la pantalla (screen geometry) para un escritorio virtual y salida dados.
+ *
+ * @param {KWin::Output} output - Salida física de pantalla.
+ * @param {KWin::VirtualDesktop} desktop - Escritorio virtual.
+ * @returns {Object} Geometría útil del área de trabajo.
+ */
+function getSafeScreenGeometry(output, desktop) {
+  if (!output) {
+    return { x: 0, y: 0, w: 1920, h: 1080 };
+  }
+  try {
+    var area = workspace.clientArea(0, output, desktop);
+    if (area && area.width > 0 && area.height > 0) {
+      return getRectGeometry(area);
+    }
+  } catch (e) { }
+  try {
+    if (output.geometry) {
+      return getRectGeometry(output.geometry);
+    }
+  } catch (e) { }
+  return { x: 0, y: 0, w: 1920, h: 1080 };
+}
 /**
  * @fileoverview Evaluaciones y utilidades de estado de ventanas KWin.
  */
@@ -316,7 +302,12 @@ function isFloating(w) {
   try {
     if (!w || w.deleted) return true;
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) return true;
-    if (w.fullScreen || w.maximizeMode !== 0 || w.maximized) return true;
+
+    // Fullscreen nativo (YouTube, juegos, etc.) NO es flotante:
+    // se envía como fs=true al motor Rust que le asigna pantalla completa.
+    if (w.fullScreen) return false;
+
+    if (w.maximizeMode !== 0 || w.maximized) return true;
 
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
@@ -379,7 +370,6 @@ function isSameDesktop(w1, w2) {
   }
   return false;
 }
-
 /**
  * @fileoverview Lógica de cuarentena para ventanas CSD/Gecko al nacer.
  */
@@ -451,7 +441,6 @@ function processNewWindow(w) {
     requestStateSync();
   }
 }
-
 /**
  * @fileoverview Algoritmo de navegación y foco direccional nativo con resalte visual.
  */
@@ -524,9 +513,6 @@ function focusDirection(dx, dy) {
     Logger.error("focusDirection", "Error enfocando dirección " + dx + "," + dy, e);
   }
 }
-
-
-// 3. Servicios D-Bus y Atajos
 /**
  * @fileoverview Servicios de comunicación D-Bus para sincronización entre KWin y el demonio Rust.
  */
@@ -630,6 +616,7 @@ function syncState() {
         min_h: w.minSize ? Math.round(w.minSize.height) : 0,
         sb: Boolean(w.__raven_strict_birth),
         iq: Boolean(w.__raven_quarantined),
+        fs: Boolean(w.fullScreen),
       });
     } catch (e) {
       Logger.error("syncState", "Error extrayendo geometría/estado de ventana", e);
@@ -688,9 +675,6 @@ function syncWindowDelta(w) {
     if (!w || w.deleted || !isManageable(w) || w.__raven_quarantined) {
       return;
     }
-    if (w.maximizeMode !== 0) {
-      return;
-    }
 
     const safeId = getSafeWindowId(w);
     if (!safeId) {
@@ -721,6 +705,7 @@ function syncWindowDelta(w) {
       min_h: w.minSize ? Math.round(w.minSize.height) : 0,
       sb: Boolean(w.__raven_strict_birth),
       iq: Boolean(w.__raven_quarantined),
+      fs: Boolean(w.fullScreen),
     };
     callDBus(
       "org.kde.raven.Daemon",
@@ -832,7 +817,7 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              if (w.maximizeMode !== 0) {
+              if (w.maximizeMode !== 0 || w.fullScreen) {
                 break;
               }
 
@@ -960,6 +945,20 @@ function bindWindow(w) {
       }
     });
 
+    if (w.fullScreenChanged !== undefined) {
+      w.fullScreenChanged.connect(function () {
+        if (
+          w &&
+          !w.deleted &&
+          !w.__raven_mutating &&
+          !w.interactiveMove &&
+          !w.interactiveResize
+        ) {
+          requestStateSync();
+        }
+      });
+    }
+
     if (w.captionChanged !== undefined) {
       w.captionChanged.connect(function () {
         if (
@@ -1050,7 +1049,6 @@ function bindWindow(w) {
     Logger.error("bindWindow", "Error enlazando eventos de ventana", e);
   }
 }
-
 /**
  * @fileoverview Registro e inyección de accesos directos globales nativos de KWin para Raven.
  */
@@ -1161,159 +1159,129 @@ function registerRavenShortcuts() {
     dispatchToRaven("migrateActiveToPrevDesktop");
   });
 }
+/**
+ * @fileoverview Punto de entrada base (Plantilla) para el puente Raven (Raven Bridge) en KDE Plasma 6.
+ * Este archivo agrupa y carga los submódulos modulares a través de compilación por node o despliegue.
+ */
 
 
 /**
- * Inicializa el script puente de Raven conectando los listeners de KWin y disparando la sincronización inicial.
+ * Inicializa y registra los atajos de teclado globales de Raven en KWin.
  */
-function init() {
-  Logger.info("init", "Inicializando v3.0 (Push-Based Multi-archivo)...");
+function initShortcuts() {
+  registerRavenShortcuts();
+}
 
-  // Inicializar pool de timers estáticos (debe ser lo primero)
+/**
+ * Inicializa el puente D-Bus completo, incluyendo:
+ * - Pool de timers estáticos
+ * - Clases de cuarentena del daemon
+ * - Reglas de ventanas del daemon
+ * - Hooks de ciclo de vida de ventanas (windowAdded, windowRemoved, etc.)
+ * - Seguimiento de ventana activa
+ * - Notificación de bridge listo al daemon Rust
+ * - Primera sincronización completa
+ */
+function initDBusBridge() {
+  // 1. Inicializar pool de timers estáticos
   initTimerPool();
 
-  // Inyectar los atajos nativos de KWin
-  registerRavenShortcuts();
-
-  var initialWindows = workspace.windowList();
-  for (var i = 0; i < initialWindows.length; i++) {
-    bindWindow(initialWindows[i]);
-  }
-
-  // Conectar señales globales
-  workspace.windowAdded.connect(onWindowAdded);
-  workspace.windowRemoved.connect(onWindowRemoved);
-  workspace.currentDesktopChanged.connect(onDesktopChanged);
-  workspace.windowActivated.connect(onWindowActivated);
-
-  // Detección dinámica de monitores (hot-plug)
-  if (workspace.outputAdded) {
-    workspace.outputAdded.connect(requestStateSync);
-  }
-  if (workspace.outputRemoved) {
-    workspace.outputRemoved.connect(requestStateSync);
-  }
-
-  // Detección de tiling nativo de Plasma 6 para evitar conflictos
-  try {
-    var output = workspace.activeScreen || workspace.activeOutput;
-    if (workspace.tilingForScreen && workspace.tilingForScreen(output)) {
-      Logger.warn("init", "Se detectó Tiling Nativo activado para la pantalla. Podrían ocurrir conflictos severos.");
-    }
-  } catch(e) {}
-
-  // Atajos de bordes de pantalla para acciones rápidas
-  try {
-    if (workspace.registerScreenEdge) {
-      // 0 = TopEdge en KWin
-      workspace.registerScreenEdge(0, function() {
-        dispatchToRaven("cycleLayout");
-        if (workspace.activeWindow) highlightWindow(workspace.activeWindow);
-      });
-    }
-  } catch(e) {}
-
+  // 2. Solicitar clases de cuarentena personalizadas del daemon
   try {
     callDBus(
       "org.kde.raven.Daemon",
       "/Events",
       "org.kde.raven.Events",
-      "bridgeReady",
-      function () {
-        // Al estar listo, pedimos las configuraciones dinámicas
-        try {
-          callDBus(
-            "org.kde.raven.Daemon",
-            "/Events",
-            "org.kde.raven.Events",
-            "getQuarantineClasses",
-            function (res) {
-              updateQuarantineClasses(res);
-            }
-          );
-        } catch (e) { }
-        try {
-          callDBus(
-            "org.kde.raven.Daemon",
-            "/Events",
-            "org.kde.raven.Events",
-            "getWindowRules",
-            function (res) {
-              if (res) _window_rules = JSON.parse(res);
-            }
-          );
-        } catch (e) { }
-      },
+      "getQuarantineClasses",
+      function (res) {
+        updateQuarantineClasses(res);
+      }
     );
-  } catch (e) { }
-
-  requestStateSync();
-}
-
-// ---- Manejadores de eventos globales ----
-
-function onWindowAdded(w) {
-  if (!isManageable(w)) {
-    return;
+  } catch (e) {
+    Logger.warn("initDBusBridge", "No se pudo obtener clases de cuarentena del daemon");
   }
 
-  var strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
-  if (strClass !== "") {
+  // 3. Solicitar reglas de ventanas del daemon
+  try {
+    callDBus(
+      "org.kde.raven.Daemon",
+      "/Events",
+      "org.kde.raven.Events",
+      "getWindowRules",
+      function (res) {
+        try {
+          if (res) {
+            _window_rules = JSON.parse(res);
+          }
+        } catch (e) {
+          Logger.warn("initDBusBridge", "Error parseando reglas de ventana");
+        }
+      }
+    );
+  } catch (e) {
+    Logger.warn("initDBusBridge", "No se pudo obtener reglas de ventana del daemon");
+  }
+
+  // 4. Enlazar ventanas existentes al puente
+  var existingWindows = workspace.windowList();
+  for (var i = 0; i < existingWindows.length; i++) {
+    processNewWindow(existingWindows[i]);
+  }
+
+  // 5. Hook: nueva ventana agregada
+  workspace.windowAdded.connect(function (w) {
     processNewWindow(w);
-  } else {
-    var classChangedConn = function() {
-      if (w && !w.deleted) {
-        processNewWindow(w);
-        try {
-          w.windowClassChanged.disconnect(classChangedConn);
-        } catch(e) {}
-      }
-    };
-    w.windowClassChanged.connect(classChangedConn);
+  });
 
-    setKWinTimeout(function () {
-      if (w && !w.deleted) {
-        try {
-          w.windowClassChanged.disconnect(classChangedConn);
-        } catch(e) {}
-        processNewWindow(w);
-      }
-    }, 50);
-  }
-}
+  // 6. Hook: ventana eliminada / cerrada
+  workspace.windowRemoved.connect(function (w) {
+    requestStateSync();
+  });
 
-/** Manejador estático de evento 'windowRemoved'. */
-function onWindowRemoved() {
-  requestStateSync();
-}
-
-/** Manejador estático de evento 'currentDesktopChanged'. */
-function onDesktopChanged() {
-  requestStateSync();
-}
-
-/**
- * Manejador estático de evento 'windowActivated'.
- * @param {KWin::Window} w - Ventana activada.
- */
-function onWindowActivated(w) {
-  if (w && isManageable(w)) {
-    var id = getSafeWindowId(w);
-    if (id) {
+  // 7. Hook: cambio de ventana activa → reportar al daemon para foco
+  workspace.activeWindowChanged.connect(function () {
+    var aw = workspace.activeWindow;
+    var awId = aw ? getSafeWindowId(aw) : "";
+    try {
       callDBus(
         "org.kde.raven.Daemon",
         "/Events",
         "org.kde.raven.Events",
         "windowActivated",
-        id,
-        function () { },
+        awId || ""
       );
+    } catch (e) {
+      Logger.error("activeWindowChanged", "Fallo al reportar ventana activa", e);
     }
+  });
+
+  // 8. Hook: cambio de escritorio virtual activo
+  workspace.currentDesktopChanged.connect(function () {
+    requestStateSync();
+  });
+
+  // 9. Notificar al daemon que el puente está operativo
+  try {
+    callDBus(
+      "org.kde.raven.Daemon",
+      "/Events",
+      "org.kde.raven.Events",
+      "bridgeReady"
+    );
+  } catch (e) {
+    Logger.warn("initDBusBridge", "No se pudo notificar bridgeReady al daemon");
   }
+
+  // 10. Primera sincronización completa de estado
+  requestStateSync();
 }
 
+// Registro inicial de ciclo de vida
 try {
-  init();
+  Logger.info("Main", "Inicializando el puente de Raven Tiling Emulator v3.0");
+  initShortcuts();
+  initDBusBridge();
+  Logger.info("Main", "Puente inicializado exitosamente");
 } catch (e) {
-  Logger.error("Global", "Error crítico inicializando el bridge", e);
+  Logger.error("Main", "Error crítico al inicializar el puente", e);
 }

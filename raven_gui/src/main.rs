@@ -651,29 +651,38 @@ impl eframe::App for RavenGuiApp {
                         ui.add_space(4.0);
 
                         ui.label(egui::RichText::new("🔄 Habilitar / Deshabilitar el Mosaico:").strong());
-                        ui.label("• Alterna el mosaico global con 'Meta + Backspace' o desde el Plasmoid.");
+                        ui.label("• Alterna el mosaico global con 'Meta + Space' o desde el Plasmoide.");
 
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("📊 Ajuste de Proporción & Reinicio Automático:").strong());
-                        ui.label("• Modifica el ratio con 'Meta + H / L'. Al abrir o cerrar ventanas, el ratio se restablece a 0.5.");
+                        ui.label(egui::RichText::new("📊 Ajuste de Proporción & Layouts:").strong());
+                        ui.label("• Modifica el ratio máster con 'Meta + H / L'.");
+                        ui.label("• Cicla entre los 5 algoritmos de layout con 'Meta + Shift + L'.");
 
                         ui.add_space(6.0);
                         ui.label(egui::RichText::new("🗂️ Control de Capacidad (nmaster):").strong());
-                        ui.colored_label(accent, "• Meta + I / D: Incrementa/Decrementa el nº de ventanas en el área central.");
+                        ui.colored_label(accent, "• Meta + ] / [: Incremente/Decremente el nº de ventanas principales.");
 
                         ui.add_space(6.0);
-                        ui.label(egui::RichText::new("🚚 Intercambio & Migración:").strong());
-                        ui.label("• 'Meta + Shift + J / K': Intercambia posición de ventanas.");
-                        ui.label("• 'Meta + Alt + Flechas': Migra la ventana activa a otro monitor/escritorio.");
+                        ui.label(egui::RichText::new("🚚 Navegación, Intercambio & Migración:").strong());
+                        ui.label("• 'Meta + J / K': Siguiente / Anterior ventana.");
+                        ui.label("• 'Meta + Flechas': Foco direccional nativo.");
+                        ui.label("• 'Meta + Shift + J / K': Intercambiar posición de ventanas.");
+                        ui.label("• 'Meta + Shift + M / N': Migrar ventana activa al monitor Siguiente / Anterior.");
+                        ui.label("• 'Meta + Shift + Derecha / Izquierda': Migrar ventana activa al escritorio Siguiente / Anterior.");
 
                         ui.add_space(8.0);
-                        ui.label(egui::RichText::new("⌨️ Atajos de Teclado:").strong());
+                        ui.label(egui::RichText::new("⌨️ Atajos de Teclado del Sistema (KWin):").strong());
                         for (key, desc) in [
-                            ("Meta + H / L",         "Ajustar ratio de la ventana"),
-                            ("Meta + I / D",         "Incrementar/Decrementar nmaster"),
-                            ("Meta + Shift + J / K", "Intercambiar posición de ventanas"),
-                            ("Meta + Alt + Flechas", "Migrar ventana a otro escritorio/monitor"),
-                            ("Meta + G",             "Toggle global del mosaico"),
+                            ("Meta + Space",                "Alternar Mosaico (On / Off)"),
+                            ("Meta + J / K",                "Enfocar ventana Siguiente / Anterior"),
+                            ("Meta + Flechas",              "Foco direccional (Izquierda/Derecha/Arriba/Abajo)"),
+                            ("Meta + Shift + J / K",        "Intercambiar posición Siguiente / Anterior"),
+                            ("Meta + H / L",                "Expandir / Contraer área Master"),
+                            ("Meta + ] / [",                "Incrementar / Decrementar nmaster"),
+                            ("Meta + = / -",                "Incrementar / Decrementar Gaps"),
+                            ("Meta + Shift + L",            "Ciclar estrategia de Layout"),
+                            ("Meta + Shift + M / N",        "Migrar a monitor Siguiente / Anterior"),
+                            ("Meta + Shift + Right / Left", "Migrar a escritorio Siguiente / Anterior"),
                         ] {
                             ui.horizontal(|ui| {
                                 ui.label(egui::RichText::new(key).strong().color(egui::Color32::LIGHT_GRAY));

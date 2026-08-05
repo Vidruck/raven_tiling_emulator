@@ -86,7 +86,10 @@ El proyecto prioriza la eficiencia extrema y el uso mínimo de recursos del sist
     - `utils/`: Módulos del sistema (`logger`, `geometry`, `timer_pool`).
     - `core/`: Reglas de ventanas (`window_utils`), cuarentena CSD (`quarantine`) y foco direccional (`focus`).
     - `services/`: Puente de eventos D-Bus IPC (`dbus_bridge`) e inyección de atajos globales (`shortcuts`).
+    - `index.js`: Punto de entrada que inicializa los atajos y el puente con todos los hooks del ciclo de vida de KWin (`windowAdded`, `windowRemoved`, etc.).
+    - `main.js`: Bundle monolítico compilado que consume KWin Plasma 6.
   - `plasmoid/`: Widget de Plasma 6 para control rápido y estado desde el panel.
+- **`build_kwin_bundle.sh`**: Script compilador independiente en Bash que ensambla automáticamente los submódulos JavaScript de `adapters/kwin_script/contents/code/` en el bundle distribuible `main.js` respetando el orden estricto de dependencias. Se invoca automáticamente durante `./install.sh` y facilita el desarrollo/depuración local.
 
 ---
 
@@ -96,18 +99,22 @@ El proyecto prioriza la eficiencia extrema y el uso mínimo de recursos del sist
 - **KDE Plasma 6** sobre **Wayland**.
 - Compilador de Rust (Cargo) y herramientas base de compilación (`build-essential` / `pkg-config`).
 
-### Pasos de Instalación
+### Pasos de Instalación y Gestión (TUI Suite)
 ```bash
 git clone https://github.com/Vidruck/raven_tiling_emulator.git
 cd raven_tiling_emulator
-./install.sh
+
+# Menú TUI Interactivo Elegante / Instalación
+./raven-setup.sh               # O bien: ./raven-setup.sh --install
+./uninstall.sh                 # Para desinstalación
 ```
 
-El script `./install.sh` se encarga de:
-1. Detectar automáticamente la distribución (ej. Fedora Linux KDE Spin, Arch, Debian/Ubuntu) e instalar dependencias del sistema faltantes vía `dnf` u otros gestores.
-2. Compilar los binarios nativos optimizados en modo `--release`.
-3. Registrar el script de KWin y el Plasmoide en Plasma 6 (`kf6-kpackage`).
-4. Configurar e iniciar el servicio `systemd` del usuario (`raven.service`).
+El script orquestador `./raven-setup.sh` ofrece una interfaz gráfica de consola (TUI) para:
+- 🚀 **Instalación Completa**: Detección de dependencias, compilación de Rust, empaquetado JS, registro de KWin/Plasmoid y activación de Systemd.
+- 🔄 **Recompilación Rápida**: Reconstruir binarios de Rust y reiniciar el servicio de usuario.
+- 🎨 **Reconstruir Bundle KWin**: Invocar `build_kwin_bundle.sh` y actualizar el paquete en Plasma 6.
+- 📊 **Ver Estado del Sistema**: Comprobar la presencia y ejecución del demonio `raven_engine`, KWin Script y Plasmoide.
+- 🗑️ **Desinstalación limpia**: Detención de servicios y purgado selectivo de datos.
 
 > **Nota para Fedora Linux (KDE Plasma Spin)**: El instalador detecta automáticamente Fedora e instala los paquetes necesarios (`kf6-kpackage`, `kde-cli-tools`, `nodejs`, `gcc`, `rsync`) en caso de que no estén presentes.
 
@@ -115,12 +122,16 @@ El script `./install.sh` se encarga de:
 
 | Atajo | Función |
 | :--- | :--- |
-| **`Super + Space`** | Habilitar / Deshabilitar el motor de mosaico |
-| **`Super + Shift + C`** | Ciclar entre los 5 algoritmos de layout |
+| **`Super + Space`** | Habilitar / Deshabilitar el motor de mosaico (On / Off) |
 | **`Super + J` / `Super + K`** | Mover el foco a la ventana Siguiente / Anterior |
-| **`Super + Shift + J` / `Super + Shift + K`** | Intercambiar posición de la ventana activa |
-| **`Super + Equal` / `Super + Minus`** | Incrementar / Decrementar espaciado (Gaps) |
-| **`Super + Shift + Right` / `Left`** | Migrar ventana activa al Monitor siguiente / anterior |
+| **`Super + Flechas`** | Foco direccional nativo (Izquierda / Derecha / Arriba / Abajo) |
+| **`Super + Shift + J` / `Super + Shift + K`** | Intercambiar posición de la ventana activa (Siguiente / Anterior) |
+| **`Super + H` / `Super + L`** | Expandir / Contraer la proporción del área Master |
+| **`Super + ]` / `Super + [`** | Incrementar / Decrementar cantidad de ventanas principales (`nmaster`) |
+| **`Super + =` / `Super + -`** | Incrementar / Decrementar espaciado entre ventanas (Gaps) |
+| **`Super + Shift + L`** | Ciclar entre los 5 algoritmos de Layout |
+| **`Super + Shift + M` / `Super + Shift + N`** | Migrar ventana activa al Monitor Siguiente / Anterior |
+| **`Super + Shift + Right` / `Super + Shift + Left`** | Migrar ventana activa al Escritorio Virtual Siguiente / Anterior |
 
 ---
 
@@ -136,9 +147,10 @@ Los navegadores basados en Gecko (Firefox, Floorp, LibreWolf, Zen) en Wayland ut
 
 ## 🧹 Desinstalación
 
-Para remover completamente Raven y sus componentes del sistema:
+Para remover completamente Raven y sus componentes del sistema sin afectar ningún otro programa:
 ```bash
-./uninstall.sh
+./raven-setup.sh --uninstall
+# O bien seleccionando la opción [5] ejecutando ./raven-setup.sh
 ```
 
 ---

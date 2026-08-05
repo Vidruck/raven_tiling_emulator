@@ -64,6 +64,9 @@ pub struct KWinWindow {
     /// Indica si la ventana se encuentra en cuarentena de estabilización (Gecko/CSD).
     #[serde(default)]
     pub iq: bool,
+    /// Indica si la ventana está en modo pantalla completa nativa.
+    #[serde(default)]
+    pub fs: bool,
 }
 
 /// Representa el estado global de salidas y escritorios virtuales en KWin.
@@ -130,6 +133,7 @@ pub fn parse_payload(
             win.min_h,
             win.sb,
             win.iq,
+            win.fs,
         ));
     }
     Ok((workspaces, windows, payload.topology))

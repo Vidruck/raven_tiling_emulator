@@ -61,6 +61,9 @@ pub struct WindowNode {
     /// Indica si la ventana se encuentra actualmente en cuarentena de estabilización geométrica (Gecko/CSD).
     #[serde(default)]
     pub is_quarantined: bool,
+    /// Indica si la ventana se encuentra en modo pantalla completa nativo.
+    #[serde(default, rename = "fs")]
+    pub is_fullscreen: bool,
 }
 
 impl WindowNode {
@@ -78,6 +81,7 @@ impl WindowNode {
         min_h: i32,
         strict_birth: bool,
         is_quarantined: bool,
+        is_fullscreen: bool,
     ) -> Self {
         WindowNode {
             window_id,
@@ -92,6 +96,7 @@ impl WindowNode {
             min_h,
             strict_birth,
             is_quarantined,
+            is_fullscreen,
         }
     }
 }

@@ -101,6 +101,7 @@ function syncState() {
         min_h: w.minSize ? Math.round(w.minSize.height) : 0,
         sb: Boolean(w.__raven_strict_birth),
         iq: Boolean(w.__raven_quarantined),
+        fs: Boolean(w.fullScreen),
       });
     } catch (e) {
       Logger.error("syncState", "Error extrayendo geometría/estado de ventana", e);
@@ -159,9 +160,6 @@ function syncWindowDelta(w) {
     if (!w || w.deleted || !isManageable(w) || w.__raven_quarantined) {
       return;
     }
-    if (w.maximizeMode !== 0) {
-      return;
-    }
 
     const safeId = getSafeWindowId(w);
     if (!safeId) {
@@ -192,6 +190,7 @@ function syncWindowDelta(w) {
       min_h: w.minSize ? Math.round(w.minSize.height) : 0,
       sb: Boolean(w.__raven_strict_birth),
       iq: Boolean(w.__raven_quarantined),
+      fs: Boolean(w.fullScreen),
     };
     callDBus(
       "org.kde.raven.Daemon",

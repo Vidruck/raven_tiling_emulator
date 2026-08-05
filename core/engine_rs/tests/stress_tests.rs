@@ -31,6 +31,7 @@ async fn test_saturation_flood() {
                 min_h: 0,
                 strict_birth: false,
                 is_quarantined: false,
+                is_fullscreen: false,
             };
             let mut guard = ctrl_clone.lock().await;
             let _ = guard.handle_delta_change(win);
@@ -70,6 +71,7 @@ async fn test_rebellious_window_eviction() {
             min_h: 0,
             strict_birth: false,
             is_quarantined: false,
+            is_fullscreen: false,
         });
     }
 
@@ -156,6 +158,7 @@ async fn test_rebellious_window_flood() {
             min_h: 500,
             strict_birth: true,
             is_quarantined: true,
+            is_fullscreen: false,
         }];
 
         let mut guard = controller.lock().await;
@@ -181,6 +184,7 @@ async fn test_rebellious_window_flood() {
             min_h: 500,
             strict_birth: false,
             is_quarantined: false,
+            is_fullscreen: false,
         },
         WindowNode {
             window_id: "good-app".to_string(),
@@ -195,6 +199,7 @@ async fn test_rebellious_window_flood() {
             min_h: 100,
             strict_birth: false,
             is_quarantined: false,
+            is_fullscreen: false,
         }
     ];
 

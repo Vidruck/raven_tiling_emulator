@@ -43,9 +43,9 @@ pub fn calculate_global_topology(
     let mut global_evicted = Vec::new();
     let mut windows_by_ws: HashMap<String, Vec<WindowNode>> = HashMap::new();
 
-    // 1. Agrupar ventanas no flotantes (o PiP) por workspace
+    // 1. Agrupar ventanas no flotantes (o PiP / Fullscreen) por workspace
     for win in windows {
-        if !win.is_floating || win.is_pip {
+        if !win.is_floating || win.is_pip || win.is_fullscreen {
             windows_by_ws
                 .entry(win.workspace_id.clone())
                 .or_insert_with(Vec::new)
@@ -53,13 +53,20 @@ pub fn calculate_global_topology(
         }
     }
 
-    // 2. Procesar cada workspace con la estrategia elegida y superponer PiP
+    // 2. Procesar cada workspace con la estrategia elegida y superponer PiP / FullScreen
     for (ws_id, ws_windows) in windows_by_ws {
         if let Some(screen_rect) = workspaces.get(&ws_id) {
-            // Instanciar estrategia según el nombre del layout
+            // Filtrar ventanas no-fullscreen para el mosaico de fondo
+            let tiling_windows: Vec<WindowNode> = ws_windows
+                .iter()
+                .filter(|w| !w.is_fullscreen)
+                .cloned()
+                .collect();
+
+            // Instanciar estrategia según el nombre del layout para el fondo
             let strategy = get_strategy(layout_type);
             let (ws_layout, ws_evicted) = strategy.calculate(
-                &ws_windows,
+                &tiling_windows,
                 *screen_rect,
                 nmaster,
                 master_ratio,
@@ -68,6 +75,13 @@ pub fn calculate_global_topology(
             );
             global_layout.extend(ws_layout);
             global_evicted.extend(ws_evicted);
+
+            // Si hay ventanas en modo pantalla completa nativo, asignarles el área completa
+            for win in &ws_windows {
+                if win.is_fullscreen && !win.is_minimized {
+                    global_layout.insert(win.window_id.clone(), *screen_rect);
+                }
+            }
 
             // 3. Dimensionar y superponer ventanas Picture-in-Picture (PiP)
             let pip_w = (screen_rect.width as f32 * 0.22) as i32;
@@ -143,6 +157,7 @@ mod tests {
             Rect::new(0, 0, 0, 0),
             0,
             0,
+            false,
             false,
             false,
         )
