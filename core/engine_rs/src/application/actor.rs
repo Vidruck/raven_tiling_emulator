@@ -138,8 +138,12 @@ impl RavenControllerActor {
                     self.controller.reset_state();
                 }
                 RavenMessage::WindowActivated { window_id } => {
-                    self.active_window_id = window_id.clone();
-                    self.controller.active_window_id = window_id;
+                    if let Some(ref id) = window_id {
+                        if !id.trim().is_empty() {
+                            self.active_window_id = window_id.clone();
+                            self.controller.active_window_id = window_id;
+                        }
+                    }
                 }
                 RavenMessage::GetQuarantineClasses { reply } => {
                     let res = serde_json::to_string(&self.controller.get_config().quarantine_classes)

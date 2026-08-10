@@ -55,7 +55,12 @@ pub fn calculate_global_topology(
 
     // 2. Procesar cada workspace con la estrategia elegida y superponer PiP / FullScreen
     for (ws_id, ws_windows) in windows_by_ws {
-        if let Some(screen_rect) = workspaces.get(&ws_id) {
+        let screen_rect_opt = workspaces.get(&ws_id).copied().or_else(|| {
+            let output_prefix = ws_id.split("||").next()?;
+            workspaces.iter().find(|(k, _)| k.starts_with(output_prefix)).map(|(_, r)| *r)
+        });
+
+        if let Some(screen_rect) = screen_rect_opt {
             // Filtrar ventanas no-fullscreen para el mosaico de fondo
             let tiling_windows: Vec<WindowNode> = ws_windows
                 .iter()
@@ -67,7 +72,7 @@ pub fn calculate_global_topology(
             let strategy = get_strategy(layout_type);
             let (ws_layout, ws_evicted) = strategy.calculate(
                 &tiling_windows,
-                *screen_rect,
+                screen_rect,
                 nmaster,
                 master_ratio,
                 default_gaps,
@@ -79,7 +84,7 @@ pub fn calculate_global_topology(
             // Si hay ventanas en modo pantalla completa nativo, asignarles el área completa
             for win in &ws_windows {
                 if win.is_fullscreen && !win.is_minimized {
-                    global_layout.insert(win.window_id.clone(), *screen_rect);
+                    global_layout.insert(win.window_id.clone(), screen_rect);
                 }
             }
 

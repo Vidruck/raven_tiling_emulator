@@ -472,7 +472,13 @@ impl RavenController {
                         (!is_strict, std::cmp::Reverse(pos))
                     });
 
-                    if let Some(ref active_id) = active_window_id {
+                    let effective_active_id = active_window_id.clone().or_else(|| {
+                        self.engine.window_history.back().cloned().or_else(|| {
+                            active_windows.first().map(|w| w.window_id.clone())
+                        })
+                    });
+
+                    if let Some(ref active_id) = effective_active_id {
                         if let Some(current_idx) = active_windows
                             .iter()
                             .position(|w| &w.window_id == active_id)
@@ -532,7 +538,13 @@ impl RavenController {
             | "migrate_active_to_desktop"
             | "migrate_active_to_prev_screen"
             | "migrate_active_to_prev_desktop" => {
-                if let Some(ref wid) = active_window_id {
+                let target_wid = active_window_id.clone().or_else(|| {
+                    self.engine.window_history.back().cloned().or_else(|| {
+                        windows.iter().find(|w| !w.is_floating && !w.is_minimized).map(|w| w.window_id.clone())
+                    })
+                });
+
+                if let Some(ref wid) = target_wid {
                     if let Some(win_node) = windows.iter().find(|w| &w.window_id == wid) {
                         let is_desktop = action.contains("desktop");
                         let is_prev = action.contains("prev");
