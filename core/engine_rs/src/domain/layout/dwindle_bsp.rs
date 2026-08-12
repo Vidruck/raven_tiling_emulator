@@ -5,7 +5,7 @@
 //!   y Paneles Inferiores (Bottom Panels).
 //! - Adapta proporciones defensivas y distribuye espacios sobrantes respetando restricciones geométricas.
 
-use super::{apply_gaps, distribute_sizes, LayoutStrategy};
+use super::{apply_gaps, distribute_weighted_sizes, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
@@ -161,7 +161,8 @@ impl LayoutStrategy for DwindleBSPStrategy {
             // 8. Posicionar ventanas del Sidebar Izquierdo (Left Group)
             if !left_group.is_empty() {
                 let mins: Vec<i32> = left_group.iter().map(|w| std::cmp::max(w.min_h, 80)).collect();
-                let heights = distribute_sizes(container.height, &mins);
+                let weights: Vec<Option<f32>> = left_group.iter().map(|w| w.custom_h_ratio).collect();
+                let heights = distribute_weighted_sizes(container.height, &mins, &weights);
                 let mut current_y = container.y;
                 for (i, win) in left_group.iter().enumerate() {
                     let rect = Rect {
@@ -178,7 +179,8 @@ impl LayoutStrategy for DwindleBSPStrategy {
             // 9. Posicionar ventanas del Sidebar Derecho (Right Group)
             if !right_group.is_empty() {
                 let mins: Vec<i32> = right_group.iter().map(|w| std::cmp::max(w.min_h, 80)).collect();
-                let heights = distribute_sizes(container.height, &mins);
+                let weights: Vec<Option<f32>> = right_group.iter().map(|w| w.custom_h_ratio).collect();
+                let heights = distribute_weighted_sizes(container.height, &mins, &weights);
                 let mut current_y = container.y;
                 for (i, win) in right_group.iter().enumerate() {
                     let rect = Rect {
@@ -196,7 +198,8 @@ impl LayoutStrategy for DwindleBSPStrategy {
             if !center_group.is_empty() {
                 let main_h = container.height - bottom_height;
                 let mins: Vec<i32> = center_group.iter().map(|w| std::cmp::max(w.min_h, 120)).collect();
-                let heights = distribute_sizes(main_h, &mins);
+                let weights: Vec<Option<f32>> = center_group.iter().map(|w| w.custom_h_ratio).collect();
+                let heights = distribute_weighted_sizes(main_h, &mins, &weights);
                 let mut current_y = container.y;
                 for (i, win) in center_group.iter().enumerate() {
                     let rect = Rect {
@@ -213,7 +216,8 @@ impl LayoutStrategy for DwindleBSPStrategy {
             // 11. Posicionar ventanas del Panel Inferior (Bottom Group)
             if !bottom_group.is_empty() {
                 let mins: Vec<i32> = bottom_group.iter().map(|w| std::cmp::max(w.min_w, 100)).collect();
-                let widths = distribute_sizes(center_width, &mins);
+                let weights: Vec<Option<f32>> = bottom_group.iter().map(|w| w.custom_w_ratio).collect();
+                let widths = distribute_weighted_sizes(center_width, &mins, &weights);
                 let mut current_x = container.x + sidebar_width;
                 for (i, win) in bottom_group.iter().enumerate() {
                     let rect = Rect {

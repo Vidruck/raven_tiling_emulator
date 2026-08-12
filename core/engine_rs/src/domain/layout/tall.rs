@@ -4,7 +4,7 @@
 //! - La columna izquierda contiene las ventanas maestras (`nmaster`).
 //! - La columna derecha contiene el apilamiento vertical (stack) con las demás ventanas.
 
-use super::{apply_gaps, LayoutStrategy};
+use super::{apply_gaps, distribute_weighted_sizes, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
@@ -116,36 +116,37 @@ impl LayoutStrategy for TallStrategy {
             }
 
             // 5. Apilar ventanas de la columna Master a la izquierda
-            let master_h_slot = container.height / nmaster as i32;
-            for i in 0..nmaster {
+            let master_wins = &active_windows[..nmaster];
+            let master_mins: Vec<i32> = master_wins.iter().map(|w| std::cmp::max(w.min_h, 80)).collect();
+            let master_weights: Vec<Option<f32>> = master_wins.iter().map(|w| w.custom_h_ratio).collect();
+            let master_heights = distribute_weighted_sizes(container.height, &master_mins, &master_weights);
+            let mut current_y = container.y;
+            for (i, win) in master_wins.iter().enumerate() {
                 let rect = Rect {
                     x: container.x,
-                    y: container.y + (i as i32 * master_h_slot),
+                    y: current_y,
                     width: master_w,
-                    height: if i == nmaster - 1 {
-                        container.height - (i as i32 * master_h_slot)
-                    } else {
-                        master_h_slot
-                    },
+                    height: master_heights[i],
                 };
-                layout_map.insert(active_windows[i].window_id.clone(), apply_gaps(&rect, half_g));
+                layout_map.insert(win.window_id.clone(), apply_gaps(&rect, half_g));
+                current_y += master_heights[i];
             }
 
             // 6. Apilar ventanas de la columna Stack a la derecha
-            let stack_h_slot = container.height / stack_count as i32;
-            for i in 0..stack_count {
-                let win = &active_windows[nmaster + i];
+            let stack_wins = &active_windows[nmaster..];
+            let stack_mins: Vec<i32> = stack_wins.iter().map(|w| std::cmp::max(w.min_h, 80)).collect();
+            let stack_weights: Vec<Option<f32>> = stack_wins.iter().map(|w| w.custom_h_ratio).collect();
+            let stack_heights = distribute_weighted_sizes(container.height, &stack_mins, &stack_weights);
+            let mut current_y = container.y;
+            for (i, win) in stack_wins.iter().enumerate() {
                 let rect = Rect {
                     x: container.x + master_w,
-                    y: container.y + (i as i32 * stack_h_slot),
+                    y: current_y,
                     width: stack_w,
-                    height: if i == stack_count - 1 {
-                        container.height - (i as i32 * stack_h_slot)
-                    } else {
-                        stack_h_slot
-                    },
+                    height: stack_heights[i],
                 };
                 layout_map.insert(win.window_id.clone(), apply_gaps(&rect, half_g));
+                current_y += stack_heights[i];
             }
         }
 

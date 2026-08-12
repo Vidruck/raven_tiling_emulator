@@ -37,6 +37,7 @@ pub fn calculate_global_topology(
     default_gaps: i32,
     pip_position: &str,
     layout_type: &str,
+    workspace_layouts: &HashMap<String, String>,
     active_window_id: Option<String>,
 ) -> (HashMap<String, Rect>, Vec<String>) {
     let mut global_layout = HashMap::new();
@@ -68,8 +69,14 @@ pub fn calculate_global_topology(
                 .cloned()
                 .collect();
 
+            // Consultar layout específico del workspace o usar el global por defecto
+            let current_layout_type = workspace_layouts
+                .get(&ws_id)
+                .map(|s| s.as_str())
+                .unwrap_or(layout_type);
+
             // Instanciar estrategia según el nombre del layout para el fondo
-            let strategy = get_strategy(layout_type);
+            let strategy = get_strategy(current_layout_type);
             let (ws_layout, ws_evicted) = strategy.calculate(
                 &tiling_windows,
                 screen_rect,

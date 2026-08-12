@@ -32,6 +32,8 @@ async fn test_saturation_flood() {
                 strict_birth: false,
                 is_quarantined: false,
                 is_fullscreen: false,
+                custom_w_ratio: None,
+                custom_h_ratio: None,
             };
             let mut guard = ctrl_clone.lock().await;
             let _ = guard.handle_delta_change(win);
@@ -72,6 +74,8 @@ async fn test_rebellious_window_eviction() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            custom_w_ratio: None,
+            custom_h_ratio: None,
         });
     }
 
@@ -159,6 +163,8 @@ async fn test_rebellious_window_flood() {
             strict_birth: true,
             is_quarantined: true,
             is_fullscreen: false,
+            custom_w_ratio: None,
+            custom_h_ratio: None,
         }];
 
         let mut guard = controller.lock().await;
@@ -185,6 +191,8 @@ async fn test_rebellious_window_flood() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            custom_w_ratio: None,
+            custom_h_ratio: None,
         },
         WindowNode {
             window_id: "good-app".to_string(),
@@ -200,6 +208,8 @@ async fn test_rebellious_window_flood() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            custom_w_ratio: None,
+            custom_h_ratio: None,
         }
     ];
 

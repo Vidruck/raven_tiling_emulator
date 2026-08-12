@@ -91,3 +91,79 @@ pub(crate) fn distribute_sizes(total: i32, minimums: &[i32]) -> Vec<i32> {
     }
     sizes
 }
+
+/// Distribuye un total de espacio lineal (ancho o alto) considerando pesos (weights) opcionales y mínimos.
+pub(crate) fn distribute_weighted_sizes(
+    total: i32,
+    minimums: &[i32],
+    weights: &[Option<f32>],
+) -> Vec<i32> {
+    let n = minimums.len();
+    if n == 0 {
+        return vec![];
+    }
+    if weights.len() != n || weights.iter().all(|w| w.is_none()) {
+        return distribute_sizes(total, minimums);
+    }
+
+    let default_weight = 1.0f32;
+    let effective_weights: Vec<f32> = weights
+        .iter()
+        .map(|w| w.unwrap_or(default_weight).max(0.1))
+        .collect();
+
+    let total_weight: f32 = effective_weights.iter().sum();
+    if total_weight <= 0.0 {
+        return distribute_sizes(total, minimums);
+    }
+
+    let max_min_per_item = std::cmp::max(10, total / n as i32);
+    let sanitized_mins: Vec<i32> = minimums.iter().map(|&m| m.min(max_min_per_item)).collect();
+
+    let mut sizes: Vec<i32> = effective_weights
+        .iter()
+        .map(|&w| ((total as f32) * (w / total_weight)).round() as i32)
+        .collect();
+
+    let current_sum: i32 = sizes.iter().sum();
+    let diff = total - current_sum;
+    if let Some(last) = sizes.last_mut() {
+        *last += diff;
+    }
+
+    let mut unresolved = true;
+    while unresolved {
+        unresolved = false;
+        let mut deficit = 0;
+        let mut flexible_count = 0;
+
+        for i in 0..n {
+            if sizes[i] < sanitized_mins[i] {
+                deficit += sanitized_mins[i] - sizes[i];
+                sizes[i] = sanitized_mins[i];
+                unresolved = true;
+            } else if sizes[i] > sanitized_mins[i] {
+                flexible_count += 1;
+            }
+        }
+
+        if deficit > 0 && flexible_count > 0 {
+            let deduction = deficit / flexible_count;
+            let mut remainder = deficit % flexible_count;
+            for i in 0..n {
+                if sizes[i] > sanitized_mins[i] {
+                    let mut take = deduction;
+                    if remainder > 0 {
+                        take += 1;
+                        remainder -= 1;
+                    }
+                    let actual_take = std::cmp::min(take, sizes[i] - sanitized_mins[i]);
+                    sizes[i] -= actual_take;
+                }
+            }
+        } else if deficit > 0 {
+            break;
+        }
+    }
+    sizes
+}

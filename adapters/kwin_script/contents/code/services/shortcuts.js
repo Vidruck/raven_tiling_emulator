@@ -107,4 +107,17 @@ function registerRavenShortcuts() {
   registerShortcut("RavenMigratePrevDesktop", "Raven: Enviar a Escritorio Anterior", "Meta+Shift+Left", function () {
     dispatchToRaven("migrateActiveToPrevDesktop");
   });
+
+  registerShortcut("RavenResizeWidthInc", "Raven: Aumentar Ancho de Ventana", "Meta+Alt+Right", function () {
+    dispatchToRaven("resize_width_inc");
+  });
+  registerShortcut("RavenResizeWidthDec", "Raven: Reducir Ancho de Ventana", "Meta+Alt+Left", function () {
+    dispatchToRaven("resize_width_dec");
+  });
+  registerShortcut("RavenResizeHeightInc", "Raven: Aumentar Alto de Ventana", "Meta+Alt+Down", function () {
+    dispatchToRaven("resize_height_inc");
+  });
+  registerShortcut("RavenResizeHeightDec", "Raven: Reducir Alto de Ventana", "Meta+Alt+Up", function () {
+    dispatchToRaven("resize_height_dec");
+  });
 }

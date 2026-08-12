@@ -185,6 +185,37 @@ PlasmoidItem {
                 Layout.fillWidth: true
             }
 
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                PlasmaComponents.Label {
+                    text: "Algoritmo:"
+                    font.bold: true
+                    opacity: 0.85
+                    font.pixelSize: Kirigami.Units.gridUnit * 0.75
+                }
+
+                PlasmaComponents.ComboBox {
+                    id: layoutCombo
+                    Layout.fillWidth: true
+                    textRole: "text"
+                    model: ListModel {
+                        ListElement { text: "Raven (Base)"; value: "raven" }
+                        ListElement { text: "Clásico"; value: "tall" }
+                        ListElement { text: "Monóculo"; value: "monocle" }
+                        ListElement { text: "Flujo Avanzado"; value: "strict_dwindle" }
+                        ListElement { text: "Flujo Avanzado (Invertido)"; value: "inverted_strict_dwindle" }
+                        ListElement { text: "Divisor"; value: "divisor" }
+                    }
+
+                    onActivated: function(index) {
+                        var val = model.get(index).value;
+                        executable.exec("qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.setLayoutForCurrentWorkspace " + val);
+                    }
+                }
+            }
+
             Kirigami.Heading {
                 text: "Gestión de Ventanas"
                 level: 4

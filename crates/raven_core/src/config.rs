@@ -40,6 +40,9 @@ pub struct RavenConfig {
     /// Reglas dinámicas por clase de aplicación.
     #[serde(default)]
     pub window_rules: Vec<WindowRule>,
+    /// Mapa dinámico de algoritmos asignados específicamente por área de trabajo / workspace ID.
+    #[serde(default)]
+    pub workspace_layouts: std::collections::HashMap<String, String>,
 }
 
 pub fn default_quarantine() -> Vec<String> {
@@ -76,6 +79,7 @@ impl RavenConfig {
             layout_type: String::from("raven"),
             quarantine_classes: default_quarantine(),
             window_rules: vec![],
+            workspace_layouts: std::collections::HashMap::new(),
         }
     }
 

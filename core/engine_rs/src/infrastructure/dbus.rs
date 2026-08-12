@@ -443,6 +443,21 @@ impl RavenDBusService {
         self.dispatch_shortcut("cycle_layout", 0).await
     }
 
+    /// Asigna directamente el algoritmo de mosaico para el área de trabajo activa.
+    #[zbus(name = "setLayoutForCurrentWorkspace")]
+    async fn set_layout_for_current_workspace(&self, layout_name: String) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = RavenMessage::SetLayoutForCurrentWorkspace {
+            layout_name,
+            reply: reply_tx,
+        };
+        if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        } else {
+            String::from("[]")
+        }
+    }
+
     #[zbus(name = "getTilingState")]
     async fn get_tiling_state(&self) -> bool {
         let (reply_tx, reply_rx) = oneshot::channel();

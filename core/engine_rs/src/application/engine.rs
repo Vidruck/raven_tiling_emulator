@@ -76,6 +76,7 @@ impl TilingEngine {
             config_clone.default_gaps,
             &config_clone.pip_position,
             &config_clone.layout_type,
+            &config_clone.workspace_layouts,
             active_window_id,
         );
         Ok((layout_map, evicted_windows))

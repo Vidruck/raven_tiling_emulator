@@ -64,6 +64,12 @@ pub struct WindowNode {
     /// Indica si la ventana se encuentra en modo pantalla completa nativo.
     #[serde(default, rename = "fs")]
     pub is_fullscreen: bool,
+    /// Proporción dinámica de ancho personalizada (ratio 2D horizontal).
+    #[serde(default)]
+    pub custom_w_ratio: Option<f32>,
+    /// Proporción dinámica de alto personalizada (ratio 2D vertical).
+    #[serde(default)]
+    pub custom_h_ratio: Option<f32>,
 }
 
 impl WindowNode {
@@ -97,6 +103,8 @@ impl WindowNode {
             strict_birth,
             is_quarantined,
             is_fullscreen,
+            custom_w_ratio: None,
+            custom_h_ratio: None,
         }
     }
 }

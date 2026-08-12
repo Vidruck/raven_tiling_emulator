@@ -40,6 +40,10 @@ pub enum RavenMessage {
     GetMonitorCount {
         reply: oneshot::Sender<i32>,
     },
+    SetLayoutForCurrentWorkspace {
+        layout_name: String,
+        reply: oneshot::Sender<String>,
+    },
 }
 
 /// Actor principal que posee (owns) el orquestador de lógica del motor de Raven.
@@ -178,6 +182,24 @@ impl RavenControllerActor {
                         1
                     };
                     let _ = reply.send(count);
+                }
+                RavenMessage::SetLayoutForCurrentWorkspace { layout_name, reply } => {
+                    let current_ws = self.active_window_id.as_ref().and_then(|wid| {
+                        self.controller.get_engine().current_windows.get(wid).map(|w| w.workspace_id.clone())
+                    });
+
+                    if let Some(ws_id) = current_ws {
+                        self.controller.get_engine_mut().config.workspace_layouts.insert(ws_id, layout_name);
+                    } else {
+                        self.controller.get_engine_mut().config.layout_type = layout_name;
+                    }
+
+                    let mut response = String::from("[]");
+                    if let Ok(commands) = self.controller.commit_layout() {
+                        let dbus_commands: Vec<TilingCommand> = commands.into_iter().map(Into::into).collect();
+                        response = serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
+                    }
+                    let _ = reply.send(response);
                 }
             }
         }

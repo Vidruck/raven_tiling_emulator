@@ -108,6 +108,14 @@ impl RavenController {
         self.engine.is_tiling_enabled
     }
 
+    pub fn get_engine(&self) -> &crate::application::engine::TilingEngine {
+        &self.engine
+    }
+
+    pub fn get_engine_mut(&mut self) -> &mut crate::application::engine::TilingEngine {
+        &mut self.engine
+    }
+
     /// Comprueba si una ventana está oscilando rápidamente (flapping) y aplica penalizaciones.
     ///
     /// # Parámetros
@@ -413,13 +421,40 @@ impl RavenController {
                 needs_recalc = true;
             }
             "cycle_layout" => {
-                self.engine.config.layout_type = match self.engine.config.layout_type.as_str() {
-                    "dwindle" => "tall".to_string(),
-                    "tall" => "monocle".to_string(),
-                    "monocle" => "dwindle".to_string(),
-                    _ => "dwindle".to_string(),
-                };
-                info!("[CONTROLLER] Layout cambiado a: {}", self.engine.config.layout_type);
+                let current_ws = self.active_window_id.as_ref().and_then(|wid| {
+                    self.engine.current_windows.get(wid).map(|w| w.workspace_id.clone())
+                });
+
+                if let Some(ws_id) = current_ws {
+                    let current = self.engine.config.workspace_layouts
+                        .get(&ws_id)
+                        .cloned()
+                        .unwrap_or_else(|| self.engine.config.layout_type.clone());
+
+                    let next = match current.as_str() {
+                        "raven" => "tall",
+                        "tall" => "monocle",
+                        "monocle" => "strict_dwindle",
+                        "strict_dwindle" => "inverted_strict_dwindle",
+                        "inverted_strict_dwindle" => "divisor",
+                        "divisor" => "raven",
+                        _ => "raven",
+                    }.to_string();
+
+                    self.engine.config.workspace_layouts.insert(ws_id.clone(), next.clone());
+                    info!("[CONTROLLER] Layout de Workspace {} cambiado a: {}", ws_id, next);
+                } else {
+                    self.engine.config.layout_type = match self.engine.config.layout_type.as_str() {
+                        "raven" => "tall".to_string(),
+                        "tall" => "monocle".to_string(),
+                        "monocle" => "strict_dwindle".to_string(),
+                        "strict_dwindle" => "inverted_strict_dwindle".to_string(),
+                        "inverted_strict_dwindle" => "divisor".to_string(),
+                        "divisor" => "raven".to_string(),
+                        _ => "raven".to_string(),
+                    };
+                    info!("[CONTROLLER] Layout global cambiado a: {}", self.engine.config.layout_type);
+                }
                 needs_recalc = true;
                 config_changed = true;
             }
@@ -453,6 +488,33 @@ impl RavenController {
                     f32::max(0.30, self.engine.config.master_ratio - 0.05);
                 needs_recalc = true;
                 config_changed = true;
+            }
+            "resize_width_inc" | "resize_width_dec" | "resize_height_inc" | "resize_height_dec" => {
+                if let Some(ref wid) = self.active_window_id {
+                    if let Some(win) = self.engine.current_windows.get_mut(wid) {
+                        let delta = 0.05f32;
+                        match action.as_str() {
+                            "resize_width_inc" => {
+                                let cur = win.custom_w_ratio.unwrap_or(1.0);
+                                win.custom_w_ratio = Some((cur + delta).min(3.0));
+                            }
+                            "resize_width_dec" => {
+                                let cur = win.custom_w_ratio.unwrap_or(1.0);
+                                win.custom_w_ratio = Some((cur - delta).max(0.2));
+                            }
+                            "resize_height_inc" => {
+                                let cur = win.custom_h_ratio.unwrap_or(1.0);
+                                win.custom_h_ratio = Some((cur + delta).min(3.0));
+                            }
+                            "resize_height_dec" => {
+                                let cur = win.custom_h_ratio.unwrap_or(1.0);
+                                win.custom_h_ratio = Some((cur - delta).max(0.2));
+                            }
+                            _ => {}
+                        }
+                        needs_recalc = true;
+                    }
+                }
             }
             "swap_next" | "swap_prev" => {
                 let mut active_windows: Vec<_> = windows

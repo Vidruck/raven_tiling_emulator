@@ -251,9 +251,20 @@ do_inject_shortcuts() {
         touch "$SHORTCUTS_FILE"
     fi
 
-    log_info "Configurando combinación de teclas predeterminadas en el grupo [kwin]..."
+    log_info "Limpiando conflictos con scripts de mosaico antiguos (Polonium, Krohnkite, KZones)..."
+    # Limpieza defensiva en kglobalshortcutsrc de asignaciones heredadas
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+        # Liberar combinaciones en conflictos si pertenecían a scripts anteriores desinstalados
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "KZones: Snap all windows" "none,none,KZones: Snap all windows" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "PoloniumRetileWindow" "none,none,Polonium: Retile Window" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "PoloniumInsertAbove" "none,none,Polonium: Insert Above" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "PoloniumInsertBelow" "none,none,Polonium: Insert Below" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "PoloniumInsertLeft" "none,none,Polonium: Insert Left" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "KrohnkiteFloatAll" "none,none,Krohnkite: Toggle Float All" 2>/dev/null || true
+    fi
 
-    # Inyección de atajos usando kwriteconfig6 si está disponible, o sed/append
+    log_info "Configurando combinación de teclas predeterminadas para Raven en [kwin]..."
+
     if command -v kwriteconfig6 >/dev/null 2>&1; then
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenToggleTiling" "Meta+Space,none,Raven: Alternar Mosaico (On/Off)"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenFocusNext" "Meta+J,none,Raven: Siguiente Ventana"
@@ -275,6 +286,10 @@ do_inject_shortcuts() {
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenMigratePrevMonitor" "Meta+Shift+N,none,Raven: Enviar a Monitor Anterior"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenMigrateDesktop" "Meta+Shift+Right,none,Raven: Enviar a Escritorio Siguiente"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenMigratePrevDesktop" "Meta+Shift+Left,none,Raven: Enviar a Escritorio Anterior"
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenResizeWidthInc" "Meta+Alt+Right,none,Raven: Aumentar Ancho de Ventana"
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenResizeWidthDec" "Meta+Alt+Left,none,Raven: Reducir Ancho de Ventana"
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenResizeHeightInc" "Meta+Alt+Down,none,Raven: Aumentar Alto de Ventana"
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenResizeHeightDec" "Meta+Alt+Up,none,Raven: Reducir Alto de Ventana"
     fi
 
     # Notificar y recargar la caché de atajos de KDE Plasma 6
@@ -282,7 +297,7 @@ do_inject_shortcuts() {
     qdbus6 org.kde.kglobalaccel /kglobalaccel reloadConfig >/dev/null 2>&1 || \
     dbus-send --type=method_call --dest=org.kde.kglobalaccel /kglobalaccel org.kde.kglobalaccel.reloadConfig >/dev/null 2>&1 || true
 
-    log_success "Atajos globales inyectados e integrados en KDE Plasma 6"
+    log_success "Atajos globales inyectados e integrados limpiamente en KDE Plasma 6"
 }
 
 # --- Lógica de Reconstrucción del Bundle KWin ---
