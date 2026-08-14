@@ -30,10 +30,52 @@ pub struct PresetDef {
 
 /// Catálogo estático de presets alineados con la lógica del motor en Rust (`raven_engine`).
 pub const PRESETS: &[PresetDef] = &[
-    PresetDef { name: "raven",            display: "Raven (Base)",                 desc: "Esquema dinámico y asimétrico para pantallas panorámicas.", layout_type: "raven", gaps: 6, ratio: 0.5 },
-    PresetDef { name: "clasico",          display: "Clásico",                      desc: "Esquema de panel maestro con pila secundaria.", layout_type: "tall", gaps: 8, ratio: 0.55 },
-    PresetDef { name: "monoculo",         display: "Monóculo",                     desc: "Modo maximizado de una sola ventana.", layout_type: "monocle", gaps: 0, ratio: 1.0 },
-    PresetDef { name: "hyper",            display: "Flujo Avanzado",               desc: "Mosaico fractal estrictamente simétrico en espiral.", layout_type: "strict_dwindle", gaps: 8, ratio: 0.5 },
-    PresetDef { name: "hyper_inverted",   display: "Flujo Avanzado (Invertido)",   desc: "Mosaico fractal en espiral con orden de acomodo invertido.", layout_type: "inverted_strict_dwindle", gaps: 8, ratio: 0.5 },
-    PresetDef { name: "divisor",          display: "Divisor",                      desc: "Disposición equitativa en columnas proporcionales.", layout_type: "divisor", gaps: 8, ratio: 0.5 },
+    PresetDef {
+        name: "raven",
+        display: "Raven (Base)",
+        desc: "Esquema dinámico y asimétrico para pantallas panorámicas.",
+        layout_type: "raven",
+        gaps: 6,
+        ratio: 0.5,
+    },
+    PresetDef {
+        name: "clasico",
+        display: "Clásico",
+        desc: "Esquema de panel maestro con pila secundaria.",
+        layout_type: "tall",
+        gaps: 8,
+        ratio: 0.55,
+    },
+    PresetDef {
+        name: "monoculo",
+        display: "Monóculo",
+        desc: "Modo maximizado de una sola ventana.",
+        layout_type: "monocle",
+        gaps: 0,
+        ratio: 1.0,
+    },
+    PresetDef {
+        name: "hyper",
+        display: "Flujo Avanzado",
+        desc: "Mosaico fractal estrictamente simétrico en espiral.",
+        layout_type: "strict_dwindle",
+        gaps: 8,
+        ratio: 0.5,
+    },
+    PresetDef {
+        name: "hyper_inverted",
+        display: "Flujo Avanzado (Invertido)",
+        desc: "Mosaico fractal en espiral con orden de acomodo invertido.",
+        layout_type: "inverted_strict_dwindle",
+        gaps: 8,
+        ratio: 0.5,
+    },
+    PresetDef {
+        name: "divisor",
+        display: "Divisor",
+        desc: "Disposición equitativa en columnas proporcionales.",
+        layout_type: "divisor",
+        gaps: 8,
+        ratio: 0.5,
+    },
 ];
