@@ -11,7 +11,7 @@ PlasmoidItem {
 
     property bool isEngineEnabled: true
     property int monitorCount: 1
-    property string desktopStatus: " - | Escritorio 1 | - "
+    property string desktopStatus: " - | Escritorio : 1 | - "
 
     property string queryCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getTilingState"
     property string queryMonitorsCmd: "qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.getMonitorCount"
@@ -138,281 +138,403 @@ PlasmoidItem {
     }
 
     fullRepresentation: Kirigami.Page {
-        implicitWidth: Kirigami.Units.gridUnit * 18
-        implicitHeight: Kirigami.Units.gridUnit * 20
+        implicitWidth: Kirigami.Units.gridUnit * 16
+        implicitHeight: Kirigami.Units.gridUnit * 17.5
         background: null
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: Kirigami.Units.largeSpacing
-            spacing: Kirigami.Units.largeSpacing
+            anchors.margins: Kirigami.Units.mediumSpacing
+            spacing: Kirigami.Units.mediumSpacing
 
-            RowLayout {
+            // ── Tarjeta Hero Top (Estado & Toggle Switch) ──
+            Rectangle {
                 Layout.fillWidth: true
-                spacing: Kirigami.Units.mediumSpacing
+                implicitHeight: Kirigami.Units.gridUnit * 2.8
+                radius: 12
+                color: Kirigami.Theme.backgroundColor
+                border.color: root.isEngineEnabled ? Kirigami.Theme.highlightColor : Qt.rgba(1, 1, 1, 0.1)
+                border.width: 1.5
 
-                Kirigami.Icon {
-                    source: "org.kde.raven.tiling"
-                    implicitWidth: Kirigami.Units.iconSizes.medium
-                    implicitHeight: Kirigami.Units.iconSizes.medium
-                }
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.mediumSpacing
+                    spacing: Kirigami.Units.smallSpacing
 
-                ColumnLayout {
-                    spacing: 0
-                    PlasmaComponents.Label {
-                        text: "Raven Engine"
-                        font.bold: true
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.9
+                    Kirigami.Icon {
+                        source: "org.kde.raven.tiling"
+                        implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                        implicitHeight: Kirigami.Units.iconSizes.smallMedium
                     }
-                    PlasmaComponents.Label {
-                        text: "Raven Plasmoid"
-                        opacity: 0.6
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.7
+
+                    ColumnLayout {
+                        spacing: 1
+                        PlasmaComponents.Label {
+                            text: "Raven Tiling Emulator"
+                            font.bold: true
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.75
+                        }
+                        PlasmaComponents.Label {
+                            text: root.isEngineEnabled ? "● Modo Mosaico" : "○ Modo Flotantes"
+                            opacity: 0.8
+                            color: root.isEngineEnabled ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.6
+                        }
                     }
-                }
 
-                Item {
-                    Layout.fillWidth: true
-                }
+                    Item { Layout.fillWidth: true }
 
-                PlasmaComponents.Switch {
-                    checked: root.isEngineEnabled
-                    onClicked: root.toggleRaven()
+                    PlasmaComponents.Switch {
+                        checked: root.isEngineEnabled
+                        onClicked: root.toggleRaven()
+                    }
                 }
             }
 
-            Kirigami.Separator {
-                Layout.fillWidth: true
-            }
-
-            RowLayout {
+            // ── Sección 1: Carrusel Horizontal de Algoritmos (Material Carousel) ──
+            ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
 
                 PlasmaComponents.Label {
-                    text: "Algoritmo:"
+                    text: "Algoritmos"
                     font.bold: true
-                    opacity: 0.85
-                    font.pixelSize: Kirigami.Units.gridUnit * 0.75
+                    opacity: 0.8
+                    font.pixelSize: Kirigami.Units.gridUnit * 0.65
                 }
 
-                PlasmaComponents.ComboBox {
-                    id: layoutCombo
+                Component {
+                    id: layoutCardDelegate
+                    Rectangle {
+                        width: Kirigami.Units.gridUnit * 5.2
+                        height: Kirigami.Units.gridUnit * 3.6
+                        radius: 10
+                        color: layoutListView.currentIndex === index ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.6)
+                        border.color: layoutListView.currentIndex === index ? Kirigami.Theme.highlightColor : Qt.rgba(1, 1, 1, 0.12)
+                        border.width: 1.5
+
+                        Behavior on color { ColorAnimation { duration: Kirigami.Units.shortDuration } }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                layoutListView.currentIndex = index;
+                                var val = model.value;
+                                executable.exec("qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.setLayoutForCurrentWorkspace " + val);
+                            }
+                        }
+
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: 2
+
+                            Kirigami.Icon {
+                                source: model.iconName
+                                Layout.alignment: Qt.AlignHCenter
+                                implicitWidth: Kirigami.Units.iconSizes.small
+                                implicitHeight: Kirigami.Units.iconSizes.small
+                                active: layoutListView.currentIndex === index
+                            }
+
+                            PlasmaComponents.Label {
+                                text: model.text
+                                Layout.alignment: Qt.AlignHCenter
+                                font.bold: layoutListView.currentIndex === index
+                                font.pixelSize: Kirigami.Units.gridUnit * 0.55
+                                color: layoutListView.currentIndex === index ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                                elide: Text.ElideRight
+                                maximumLineCount: 1
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                        }
+                    }
+                }
+
+                ListView {
+                    id: layoutListView
                     Layout.fillWidth: true
-                    textRole: "text"
+                    implicitHeight: Kirigami.Units.gridUnit * 3.8
+                    orientation: ListView.Horizontal
+                    spacing: Kirigami.Units.smallSpacing
+                    clip: true
+                    snapMode: ListView.SnapToItem
+
                     model: ListModel {
-                        ListElement { text: "Raven (Base)"; value: "raven" }
-                        ListElement { text: "Clásico"; value: "tall" }
-                        ListElement { text: "Monóculo"; value: "monocle" }
-                        ListElement { text: "Flujo Avanzado"; value: "strict_dwindle" }
-                        ListElement { text: "Flujo Avanzado (Invertido)"; value: "inverted_strict_dwindle" }
-                        ListElement { text: "Divisor"; value: "divisor" }
+                        ListElement { text: "Raven"; value: "raven"; iconName: "view-grid" }
+                        ListElement { text: "Clásico"; value: "tall"; iconName: "view-split-left-right" }
+                        ListElement { text: "Monóculo"; value: "monocle"; iconName: "view-fullscreen" }
+                        ListElement { text: "Avanzado"; value: "strict_dwindle"; iconName: "view-list-tree" }
+                        ListElement { text: "Invertido"; value: "inverted_strict_dwindle"; iconName: "view-split-top-bottom" }
+                        ListElement { text: "Divisor"; value: "divisor"; iconName: "view-file-columns" }
                     }
 
-                    onActivated: function(index) {
-                        var val = model.get(index).value;
-                        executable.exec("qdbus6 org.kde.raven.Daemon /Events org.kde.raven.Events.setLayoutForCurrentWorkspace " + val);
-                    }
+                    delegate: layoutCardDelegate
                 }
             }
 
-            Kirigami.Heading {
-                text: "Gestión de Ventanas"
-                level: 4
-                opacity: 0.8
-            }
-
+            // ── Sección 2: Gestión de Ventanas y Foco (Icon-Only Pill Buttons) ──
             GridLayout {
                 columns: 2
                 Layout.fillWidth: true
-                rowSpacing: Kirigami.Units.largeSpacing
-                columnSpacing: Kirigami.Units.largeSpacing
+                rowSpacing: Kirigami.Units.smallSpacing
+                columnSpacing: Kirigami.Units.smallSpacing
 
-                ColumnLayout {
+                // Tarjeta Foco
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label {
-                        text: "Foco"
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: 0.8
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.7
-                    }
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button {
-                            icon.name: "go-previous"
-                            Layout.fillWidth: true
-                            onClicked: root.execDbus("focusPrev", "")
+                    implicitHeight: Kirigami.Units.gridUnit * 3.2
+                    radius: 10
+                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                    border.color: Qt.rgba(1, 1, 1, 0.08)
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: Kirigami.Units.smallSpacing
+                        spacing: 2
+
+                        PlasmaComponents.Label {
+                            text: "Foco"
+                            Layout.alignment: Qt.AlignHCenter
+                            opacity: 0.75
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.58
                         }
-                        PlasmaComponents.Button {
-                            icon.name: "go-next"
-                            Layout.fillWidth: true
-                            onClicked: root.execDbus("focusNext", "")
+
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            PlasmaComponents.Button {
+                                icon.name: "go-previous"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("focusPrev", "")
+                                PlasmaComponents.ToolTip.text: "Navegar a ventana anterior"
+                            }
+                            PlasmaComponents.Button {
+                                icon.name: "go-next"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("focusNext", "")
+                                PlasmaComponents.ToolTip.text: "Navegar a ventana siguiente"
+                            }
                         }
                     }
                 }
 
-                ColumnLayout {
+                // Tarjeta Intercambiar
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label {
-                        text: "Intercambiar"
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: 0.8
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.7
-                    }
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button {
-                            icon.name: "go-previous"
-                            Layout.fillWidth: true
-                            onClicked: root.execDbus("swapPrev", "")
+                    implicitHeight: Kirigami.Units.gridUnit * 3.2
+                    radius: 10
+                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                    border.color: Qt.rgba(1, 1, 1, 0.08)
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: Kirigami.Units.smallSpacing
+                        spacing: 2
+
+                        PlasmaComponents.Label {
+                            text: "Intercambiar"
+                            Layout.alignment: Qt.AlignHCenter
+                            opacity: 0.75
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.58
                         }
-                        PlasmaComponents.Button {
-                            icon.name: "go-next"
-                            Layout.fillWidth: true
-                            onClicked: root.execDbus("swapNext", "")
+
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            PlasmaComponents.Button {
+                                icon.name: "edit-undo"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("swapPrev", "")
+                                PlasmaComponents.ToolTip.text: "Intercambiar posición hacia atrás"
+                            }
+                            PlasmaComponents.Button {
+                                icon.name: "edit-redo"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("swapNext", "")
+                                PlasmaComponents.ToolTip.text: "Intercambiar posición hacia adelante"
+                            }
                         }
                     }
                 }
             }
 
-
-            Kirigami.Heading {
-                text: "Ajustes de Espacio"
-                level: 4
-                opacity: 0.8
-            }
-
+            // ── Sección 3: Ajustes de Espacio (Icon-Only Pill Buttons) ──
             GridLayout {
                 columns: 2
                 Layout.fillWidth: true
-                rowSpacing: Kirigami.Units.largeSpacing
-                columnSpacing: Kirigami.Units.largeSpacing
+                rowSpacing: Kirigami.Units.smallSpacing
+                columnSpacing: Kirigami.Units.smallSpacing
 
-                ColumnLayout {
+                // Tarjeta Ratio
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label {
-                        text: "Ratio División"
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: 0.8
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.7
-                    }
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button {
-                            icon.name: "go-previous"
-                            Layout.fillWidth: true
-                            onClicked: root.execDbus("decreaseRatio", "")
+                    implicitHeight: Kirigami.Units.gridUnit * 3.2
+                    radius: 10
+                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                    border.color: Qt.rgba(1, 1, 1, 0.08)
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: Kirigami.Units.smallSpacing
+                        spacing: 2
+
+                        PlasmaComponents.Label {
+                            text: "Ratio Máster"
+                            Layout.alignment: Qt.AlignHCenter
+                            opacity: 0.75
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.58
                         }
-                        PlasmaComponents.Button {
-                            icon.name: "go-next"
-                            Layout.fillWidth: true
-                            onClicked: root.execDbus("increaseRatio", "")
+
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            PlasmaComponents.Button {
+                                icon.name: "format-justify-left"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("decreaseRatio", "")
+                                PlasmaComponents.ToolTip.text: "Contraer tamaño maestro"
+                            }
+                            PlasmaComponents.Button {
+                                icon.name: "format-justify-right"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("increaseRatio", "")
+                                PlasmaComponents.ToolTip.text: "Expandir tamaño maestro"
+                            }
                         }
                     }
                 }
-                ColumnLayout {
+
+                // Tarjeta Márgenes
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label {
-                        text: "Márgenes"
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: 0.8
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.7
-                    }
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button {
-                            icon.name: "zoom-out"
-                            Layout.fillWidth: true
-                            onClicked: root.execDbus("incrementGaps", "-2")
+                    implicitHeight: Kirigami.Units.gridUnit * 3.2
+                    radius: 10
+                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                    border.color: Qt.rgba(1, 1, 1, 0.08)
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: Kirigami.Units.smallSpacing
+                        spacing: 2
+
+                        PlasmaComponents.Label {
+                            text: "Márgenes"
+                            Layout.alignment: Qt.AlignHCenter
+                            opacity: 0.75
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.58
                         }
-                        PlasmaComponents.Button {
-                            icon.name: "zoom-in"
-                            Layout.fillWidth: true
-                            onClicked: root.execDbus("incrementGaps", "2")
+
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            PlasmaComponents.Button {
+                                icon.name: "zoom-out"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("incrementGaps", "-2")
+                                PlasmaComponents.ToolTip.text: "Reducir márgenes (Gaps)"
+                            }
+                            PlasmaComponents.Button {
+                                icon.name: "zoom-in"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("incrementGaps", "2")
+                                PlasmaComponents.ToolTip.text: "Ampliar márgenes (Gaps)"
+                            }
                         }
                     }
                 }
             }
 
-            Kirigami.Heading {
-                text: "Enviar Foco Activo"
-                level: 4
-                opacity: 0.8
-            }
-
+            // ── Sección 4: Migración a Escritorios / Monitores ──
             GridLayout {
                 columns: 2
                 Layout.fillWidth: true
-                rowSpacing: Kirigami.Units.largeSpacing
-                columnSpacing: Kirigami.Units.largeSpacing
+                rowSpacing: Kirigami.Units.smallSpacing
+                columnSpacing: Kirigami.Units.smallSpacing
 
-                ColumnLayout {
+                // Monitor
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label {
-                        text: "Monitor | " + root.monitorCount + " |"
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: 0.8
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.7
-                    }
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button {
-                            icon.name: "go-previous"
-                            Layout.fillWidth: true
-                            enabled: root.monitorCount > 1
-                            onClicked: root.execDbus("migrateActiveToPrevScreen", "")
+                    implicitHeight: Kirigami.Units.gridUnit * 3.2
+                    radius: 10
+                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                    border.color: Qt.rgba(1, 1, 1, 0.08)
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: Kirigami.Units.smallSpacing
+                        spacing: 2
+
+                        PlasmaComponents.Label {
+                            text: "Monitor (" + root.monitorCount + ")"
+                            Layout.alignment: Qt.AlignHCenter
+                            opacity: 0.75
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.58
                         }
-                        PlasmaComponents.Button {
-                            icon.name: "go-next"
-                            Layout.fillWidth: true
-                            enabled: root.monitorCount > 1
-                            onClicked: root.execDbus("migrateActiveToScreen", "")
+
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            PlasmaComponents.Button {
+                                icon.name: "go-previous"
+                                Layout.fillWidth: true
+                                enabled: root.monitorCount > 1
+                                onClicked: root.execDbus("migrateActiveToPrevScreen", "")
+                                PlasmaComponents.ToolTip.text: "Migrar ventana al monitor anterior"
+                            }
+                            PlasmaComponents.Button {
+                                icon.name: "go-next"
+                                Layout.fillWidth: true
+                                enabled: root.monitorCount > 1
+                                onClicked: root.execDbus("migrateActiveToScreen", "")
+                                PlasmaComponents.ToolTip.text: "Migrar ventana al monitor siguiente"
+                            }
                         }
                     }
                 }
-                ColumnLayout {
+
+                // Escritorio
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: Kirigami.Units.smallSpacing
-                    PlasmaComponents.Label {
-                        text: root.desktopStatus
-                        Layout.alignment: Qt.AlignHCenter
-                        opacity: 0.8
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.7
-                    }
-                    RowLayout {
-                        spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Button {
-                            icon.name: "go-up"
-                            Layout.fillWidth: true
-                            enabled: true
+                    implicitHeight: Kirigami.Units.gridUnit * 3.2
+                    radius: 10
+                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                    border.color: Qt.rgba(1, 1, 1, 0.08)
 
-                            onClicked: root.execDbus("migrateActiveToPrevDesktop", "")
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: Kirigami.Units.smallSpacing
+                        spacing: 2
+
+                        PlasmaComponents.Label {
+                            text: root.desktopStatus
+                            Layout.alignment: Qt.AlignHCenter
+                            opacity: 0.75
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.58
+                            elide: Text.ElideRight
                         }
-                        PlasmaComponents.Button {
-                            icon.name: "go-down"
-                            Layout.fillWidth: true
-                            enabled: true
 
-                            onClicked: root.execDbus("migrateActiveToDesktop", "")
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            PlasmaComponents.Button {
+                                icon.name: "go-previous"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("migrateActiveToPrevDesktop", "")
+                                PlasmaComponents.ToolTip.text: "Migrar ventana al escritorio anterior"
+                            }
+                            PlasmaComponents.Button {
+                                icon.name: "go-next"
+                                Layout.fillWidth: true
+                                onClicked: root.execDbus("migrateActiveToDesktop", "")
+                                PlasmaComponents.ToolTip.text: "Migrar ventana al escritorio siguiente"
+                            }
                         }
                     }
                 }
             }
 
-            Item {
-                Layout.fillHeight: true
-            }
+            Item { Layout.fillHeight: true }
 
             PlasmaComponents.Label {
                 text: "© 2026 Vidruck"
                 Layout.alignment: Qt.AlignHCenter
-                opacity: 0.4
-                font.pixelSize: Kirigami.Units.gridUnit * 0.6
+                opacity: 0.35
+                font.pixelSize: Kirigami.Units.gridUnit * 0.55
             }
         }
     }

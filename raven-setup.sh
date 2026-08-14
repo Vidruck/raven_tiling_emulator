@@ -14,7 +14,7 @@ ICON_NAME="org.kde.raven.tiling"
 KWIN_SCRIPT_ID="org.kde.raven.bridge"
 PLASMOID_ID="org.kde.raven.toggle"
 
-# --- Estilos Visuales & Paleta Cyberpunk Dark ---
+# --- Estilos Visuales & Paleta ---
 BOLD='\033[1m'
 DIM='\033[2m'
 ITALIC='\033[3m'
@@ -87,7 +87,7 @@ print_header() {
  | |___  | |  | | |  V  |  | |__   / ___ \  | |   | |_| |  |  _ < 
  |_____| |_|  |_|  \ _ /   |____| /_/   \_\ |_|   \ ___ /  |_| \_\
 EOF
-    echo -e "${PRIMARY}${BOLD} 🐦 Raven Tiling Emulator v3.0 — Interactive Management Suite 🐦${RESET}"
+    echo -e "${PRIMARY}${BOLD} 🐦 Raven Tiling Emulator v3.0 — Suite de Gestión Interactiva 🐦${RESET}"
     echo -e "${MUTED} Engine: Native Rust | Host: KDE Plasma 6 (Wayland) | IPC: Single-Trip D-Bus${RESET}\n"
 }
 

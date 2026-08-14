@@ -15,11 +15,11 @@
 
 **Raven Tiling Emulator** es un gestor de ventanas dinámico en mosaico (Tiling Window Manager) de alto rendimiento diseñado específicamente para **KDE Plasma 6 (Wayland)**. 
 
-Con el lanzamiento de la **Versión 3.0**, implementa una arquitectura modular en Rust nativo, comunicación de ultra-baja latencia **Single-Trip IPC**, 5 algoritmos de ordenamiento espacial y mejora su integración con navegadores web base **Gecko**.
+Con el lanzamiento de la **Versión 3.1**, implementa una nueva **interfaz de usuario en eGUI**, arquitectura modular en Rust nativo, comunicación de ultra-baja latencia **Single-Trip IPC**, multiples algoritmos de ordenamiento espacial y mejora su integración con navegadores web base **Gecko**.
 
 ---
 
-## ⚡ Novedades Principales de la Versión 3.0
+## ⚡ Novedades Principales de la Versión 3.1
 
 ### 📐 1. Módulo de Layouts Rediseñado y Modular (Domain-Driven Architecture)
 El motor geométrico se ha reestructurado por completo en submódulos especializados dentro de `domain/layout/`, ofreciendo desacoplamiento total y 5 algoritmos de distribución seleccionables:
@@ -38,7 +38,11 @@ El motor geométrico se ha reestructurado por completo en submódulos especializ
 - **Reducción del 90% en Bus IPC**: Minimiza el uso de CPU de KWin y elimina cuellos de botella en composiciones complejas.
 
 ### 🎨 3. Centro de Control Nativo (`raven_gui`) con Temática KDE
-- **Interfaz en egui/eframe**: Aplicación gráfica ligera para configurar márgenes (gaps), ratios maestros, posiciones PiP y reglas dinámicas.
+- **Interfaz Modular en egui/eframe**: Aplicación gráfica ligera, dividida en pestañas especializadas para una configuración integral:
+  - **Composición**: Configuración de algoritmos de mosaico, márgenes (gaps), proporciones (`ratio`, `nmaster`) y posiciones de PiP con selección interactiva.
+  - **Reglas y Cuarentena**: Gestión de aplicaciones flotantes/PiP y lista de cuarentena para aislar aplicaciones problemáticas al iniciar.
+  - **Gestión del Servicio**: Control directo del demonio nativo systemd (encendido, apagado, autoinicio) y mini-depurador de logs.
+  - **Atajos**: Referencia integrada de atajos de teclado globales.
 - **Previsualizador de Canvas en Vivo**: Renderiza espacialmente la distribución del layout seleccionado en tiempo real antes de aplicarlo.
 - **Sincronización de Paleta KDE**: Lee dinámicamente la configuración de colores del sistema desde `~/.config/kdeglobals`, adaptando su apariencia a cualquier tema claro u oscuro de Plasma.
 
@@ -76,11 +80,16 @@ El proyecto prioriza la eficiencia extrema y el uso mínimo de recursos del sist
 
 ## 🏗️ Estructura del Proyecto
 
-- **`core/engine_rs/`**: Núcleo principal en Rust nativo (Daemon systemd).
-  - `domain/layout/`: Algoritmos de ordenamiento espacial (`dwindle_bsp`, `tall`, `monocle`, `strict_dwindle`, `divisor`, `topology`, `strategy`, `utils`).
-  - `infrastructure/dbus.rs`: Servicio D-Bus zbus 4 que expone la interfaz `org.kde.raven.Events`.
-- **`crates/raven_core/`**: Biblioteca de entidades de dominio, geometría (`Rect`, `WindowNode`) y configuración JSON.
-- **`raven_gui/`**: Centro de preferencias nativo basado en egui.
+El proyecto está organizado en un **Cargo Workspace** que unifica los componentes en Rust, junto con los adaptadores y scripts para KDE Plasma:
+
+- **Componentes Rust (Workspace)**:
+  - **`crates/raven_core/`**: Biblioteca compartida con las entidades de dominio, geometría (`Rect`, `WindowNode`) y esquemas de configuración JSON.
+  - **`core/engine_rs/`**: Motor principal asíncrono (Daemon systemd).
+    - `domain/layout/`: Algoritmos de ordenamiento espacial (`dwindle_bsp`, `tall`, `monocle`, `strict_dwindle`, `divisor`, `topology`, `strategy`, `utils`).
+    - `infrastructure/dbus.rs`: Servicio D-Bus zbus 4 que expone la interfaz IPC `org.kde.raven.Events`.
+  - **`raven_gui/`**: Centro de control nativo basado en egui.
+    - `src/tabs/`: Pestañas modulares de interfaz (Composición, Reglas, Servicio, Atajos, Acerca de).
+    - `src/components/`: Componentes gráficos independientes (ej. `layout_preview.rs`).
 - **`adapters/`**:
   - `kwin_script/`: Puente liviano para la API de KWin de Plasma 6, organizado en submódulos especializados:
     - `utils/`: Módulos del sistema (`logger`, `geometry`, `timer_pool`).
@@ -135,13 +144,15 @@ El script orquestador `./raven-setup.sh` ofrece una interfaz gráfica de consola
 
 ---
 
-## Recomendación de Configuración para Navegadores (Gecko / CSD) (Opcional)
+## 🛡️ Solución para Aplicaciones que Rompen la Composición
 
-Los navegadores basados en Gecko (Firefox, Floorp, LibreWolf, Zen) en Wayland utilizan por defecto decoraciones en el lado del cliente (CSD). Aunque Raven v3.0 incluye mitigación en cuarentena, para una experiencia 100% fluida se sugiere activar las decoraciones del lado del servidor (SSD):
+Algunas aplicaciones presentan problemas conocidos en sesiones Wayland, como la apertura de múltiples ventanas temporales antes de terminar de inicializarse por completo. Esto provoca que la ventana final no se acomode correctamente en el mosaico o adquiera dimensiones inesperadas. Si notas este comportamiento, puedes mitigar el problema agregando la aplicación a la "Lista de Cuarentena".
 
-1. Abre tu navegador Gecko.
-2. Haz clic derecho en la barra de herramientas o abre **Personalizar barra de herramientas...**
-3. En la esquina inferior izquierda, activa la casilla **Barra de título (Title Bar)**.
+**Pasos para añadir una aplicación a la lista de cuarentena:**
+1. Abre el editor de menús de Plasma, busca la aplicación problemática y copia el texto que aparece en el campo **Programa**.
+2. Abre **Raven Control Center > Reglas y Cuarentena > Lista de Cuarentena** y haz clic en **Añadir a la Lista**.
+3. Pega el nombre que copiaste, guarda los cambios y reinicia la aplicación problemática.
+> **Nota:** El motor es capaz de corregir la geometría y reasignar el tamaño adecuado ante cualquier actualización del entorno (por ejemplo, abrir otra ventana, interactuar con un plasmoide o minimizar y restaurar la aplicación). La recomendación de reiniciarla es únicamente para confirmar que, con la nueva regla de cuarentena, el problema desaparece desde el primer momento.
 
 ---
 
