@@ -28,6 +28,9 @@ pub struct RavenConfig {
     pub master_ratio: f32,
     /// Posición por defecto para ventanas Picture-in-Picture (PiP). Valores: top-left, top-right, bottom-left, bottom-right.
     pub pip_position: String,
+    /// Proporción del ancho de la pantalla que ocupará la ventana PiP (ej. 0.22 = 22%).
+    #[serde(default = "default_pip_size_ratio")]
+    pub pip_size_ratio: f32,
     /// Preset de layout activo. Valores: dense, aesthetic, functional, balanced, simple.
     #[serde(default = "default_preset")]
     pub layout_preset: String,
@@ -59,6 +62,7 @@ pub fn default_quarantine() -> Vec<String> {
 
 pub fn default_preset() -> String { "balanced".to_string() }
 pub fn default_layout_type() -> String { "raven".to_string() }
+pub fn default_pip_size_ratio() -> f32 { 0.22 }
 
 impl Default for RavenConfig {
     fn default() -> Self {
@@ -75,6 +79,7 @@ impl RavenConfig {
             nmaster: 1,
             master_ratio: 0.5,
             pip_position: String::from("bottom-right"),
+            pip_size_ratio: 0.22,
             layout_preset: String::from("balanced"),
             layout_type: String::from("raven"),
             quarantine_classes: default_quarantine(),
@@ -96,6 +101,7 @@ impl RavenConfig {
                 config.nmaster = std::cmp::max(1, config.nmaster);
                 config.master_ratio = config.master_ratio.clamp(0.1, 0.9);
                 config.default_gaps = std::cmp::max(0, config.default_gaps);
+                config.pip_size_ratio = config.pip_size_ratio.clamp(0.10, 0.50);
                 let mut merged_quarantine = default_quarantine();
                 for cls in config.quarantine_classes {
                     let cls_clean = cls.trim().to_lowercase();

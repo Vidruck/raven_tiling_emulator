@@ -39,12 +39,14 @@ El motor geométrico se ha reestructurado por completo en submódulos especializ
 
 ### 🎨 3. Centro de Control Nativo (`raven_gui`) con Temática KDE
 - **Interfaz Modular en egui/eframe**: Aplicación gráfica ligera, dividida en pestañas especializadas para una configuración integral:
-  - **Composición**: Configuración de algoritmos de mosaico, márgenes (gaps), proporciones (`ratio`, `nmaster`) y posiciones de PiP con selección interactiva.
+  - **Composición**: Configuración de algoritmos de mosaico, márgenes (gaps), proporciones (`ratio`, `nmaster`) y **escalabilidad dinámica** de ventanas PiP mediante el nuevo control interactivo.
   - **Reglas y Cuarentena**: Gestión de aplicaciones flotantes/PiP y lista de cuarentena para aislar aplicaciones problemáticas al iniciar.
   - **Gestión del Servicio**: Control directo del demonio nativo systemd (encendido, apagado, autoinicio) y mini-depurador de logs.
   - **Atajos**: Referencia integrada de atajos de teclado globales.
-- **Previsualizador de Canvas en Vivo**: Renderiza espacialmente la distribución del layout seleccionado en tiempo real antes de aplicarlo.
-- **Sincronización de Paleta KDE**: Lee dinámicamente la configuración de colores del sistema desde `~/.config/kdeglobals`, adaptando su apariencia a cualquier tema claro u oscuro de Plasma.
+- **Previsualizador Avanzado en Vivo**: Renderiza espacialmente la distribución del layout seleccionado en tiempo real, ilustrando la estructura fractal hasta la 7ma ventana para demostrar algoritmos complejos como *Raven*.
+- **Posicionamiento PiP de 8 Puntos**: Configura las ventanas Picture-in-Picture a través de un lienzo interactivo con anclaje expandido: esquinas y puntos cardinales (centro-arriba, centro-abajo, etc.).
+- **Reactividad Inmediata y UX Fluida**: Recarga garantizada del motor con el botón de "Guardar y Aplicar" (diseño renovado *pill-shape*) para previsualizar el cambio de forma inmediata.
+- **Sincronización de Paleta KDE y Efecto Glass**: Lee dinámicamente `~/.config/kdeglobals` adaptando la estética a cualquier tema con un ligero diseño Glassmorphism.
 
 ### 🦊 4. Erradicación del Desacomodo Nativo en Navegadores Gecko
 - **Protocolo de Doble Confirmación**: Elimina definitivamente los parpadeos, traslapes y saltos geométricos causados por la inicialización asíncrona de marcos CSD/SSD en navegadores basados en Gecko (Firefox, Zen, Floorp, LibreWolf).

@@ -67,6 +67,12 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, 
                         ui.label("nmaster:");
                         ui.add(egui::Slider::new(&mut config.nmaster, 1..=4));
                     });
+                    ui.add_space(4.0);
+
+                    ui.horizontal(|ui| {
+                        ui.label("Escala PiP:");
+                        ui.add(egui::Slider::new(&mut config.pip_size_ratio, 0.10..=0.50).fixed_decimals(2));
+                    });
                 });
             });
         });
@@ -75,7 +81,7 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, 
             ui.heading(egui::RichText::new("Previsualización Gráfica").strong().size(14.0));
             ui.add_space(6.0);
 
-            draw_layout_preview(ui, &config.layout_type, config.master_ratio, config.default_gaps, &mut config.pip_position, palette);
+            draw_layout_preview(ui, &config.layout_type, config.master_ratio, config.default_gaps, &mut config.pip_position, config.pip_size_ratio, palette);
 
             ui.add_space(10.0);
             ui.group(|ui| {

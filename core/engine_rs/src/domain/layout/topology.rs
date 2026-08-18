@@ -39,6 +39,7 @@ pub fn calculate_global_topology(
     layout_type: &str,
     workspace_layouts: &HashMap<String, String>,
     active_window_id: Option<String>,
+    pip_size_ratio: f32,
 ) -> (HashMap<String, Rect>, Vec<String>) {
     let mut global_layout = HashMap::new();
     let mut global_evicted = Vec::new();
@@ -96,7 +97,7 @@ pub fn calculate_global_topology(
             }
 
             // 3. Dimensionar y superponer ventanas Picture-in-Picture (PiP)
-            let pip_w = (screen_rect.width as f32 * 0.22) as i32;
+            let pip_w = (screen_rect.width as f32 * pip_size_ratio) as i32;
             let pip_h = (pip_w as f32 * 0.56) as i32; // Relación de aspecto ~16:9
             let pip_gap = default_gaps + 10;
             let mut pip_index = 0;
@@ -126,6 +127,24 @@ pub fn calculate_global_topology(
                             x = screen_rect.x + screen_rect.width - final_pip_w - pip_gap;
                             y = screen_rect.y + screen_rect.height - final_pip_h - pip_gap;
                             y -= offset_y; // Apilar hacia arriba
+                        }
+                        "top" => {
+                            x = screen_rect.x + (screen_rect.width - final_pip_w) / 2;
+                            y += offset_y; // Apilar hacia abajo
+                        }
+                        "bottom" => {
+                            x = screen_rect.x + (screen_rect.width - final_pip_w) / 2;
+                            y = screen_rect.y + screen_rect.height - final_pip_h - pip_gap;
+                            y -= offset_y; // Apilar hacia arriba
+                        }
+                        "left" => {
+                            y = screen_rect.y + (screen_rect.height - final_pip_h) / 2;
+                            y += offset_y; // Apilar hacia abajo
+                        }
+                        "right" => {
+                            x = screen_rect.x + screen_rect.width - final_pip_w - pip_gap;
+                            y = screen_rect.y + (screen_rect.height - final_pip_h) / 2;
+                            y += offset_y; // Apilar hacia abajo
                         }
                         _ => {
                             // "top-left" por defecto

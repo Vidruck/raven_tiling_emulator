@@ -23,6 +23,7 @@ pub struct RavenGuiApp {
     pub active_tab: NavTab,
     pub _watcher: Option<notify::RecommendedWatcher>,
     pub rx_theme: Option<Receiver<notify::Result<notify::Event>>>,
+    pub title_toggled: bool,
 }
 
 impl RavenGuiApp {
@@ -59,6 +60,7 @@ impl RavenGuiApp {
             active_tab: NavTab::Layouts,
             _watcher: watcher,
             rx_theme: Some(rx),
+            title_toggled: false,
         }
     }
 }
@@ -93,22 +95,6 @@ impl eframe::App for RavenGuiApp {
 
         let accent = self.kde_palette.selection_bg;
 
-        // ── Panel Inferior de Acciones Principales ──
-        egui::TopBottomPanel::bottom("footer_panel").show(ctx, |ui| {
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                let btn = ui.add_sized(
-                    [170.0, 34.0],
-                    egui::Button::new(egui::RichText::new("💾 Guardar y Aplicar").strong().size(14.0)),
-                );
-                if btn.clicked() {
-                    self.status_msg = self.service_mgr.save_and_restart(&self.config);
-                }
-                ui.add_space(14.0);
-                ui.label(egui::RichText::new(&self.status_msg).size(13.0).strong());
-            });
-            ui.add_space(8.0);
-        });
 
         // ── Panel Lateral Izquierdo ──
         egui::SidePanel::left("navigation_rail")
@@ -185,6 +171,52 @@ impl eframe::App for RavenGuiApp {
 
                     ui.add_space(4.0);
                 }
+                
+                // Posicionar el botón de guardar en la parte inferior del espacio restante
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                    ui.add_space(16.0); // Margen inferior
+                    
+                    let btn_rect = ui.allocate_space(egui::vec2(186.0, 42.0));
+                    let response = ui.interact(btn_rect.1, ui.id().with("save_btn"), egui::Sense::click());
+                    
+                    let bg_color = if response.hovered() {
+                        accent // Color al sobreponer el puntero
+                    } else {
+                        self.kde_palette.button_bg
+                    };
+                    
+                    // Más redondeado (21.0 es la mitad de la altura, haciéndolo tipo píldora)
+                    ui.painter().rect_filled(btn_rect.1, 21.0, bg_color);
+                    
+                    let text_color = if response.hovered() {
+                        egui::Color32::WHITE
+                    } else if self.kde_palette.is_dark {
+                        egui::Color32::from_rgb(230, 230, 230)
+                    } else {
+                        egui::Color32::from_rgb(30, 30, 30)
+                    };
+                    
+                    ui.painter().text(
+                        btn_rect.1.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "💾 Guardar y Aplicar",
+                        egui::FontId::proportional(13.5),
+                        text_color,
+                    );
+                    
+                    if response.clicked() {
+                        self.status_msg = self.service_mgr.save_and_restart(&self.config);
+                        
+                        self.title_toggled = !self.title_toggled;
+                        let title = if self.title_toggled { "Raven Control Center " } else { "Raven Control Center" };
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.to_string()));
+                    }
+                    
+                    if !self.status_msg.is_empty() {
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new(&self.status_msg).size(12.0).weak());
+                    }
+                });
             });
 
         // ── Panel Central ──
@@ -216,5 +248,13 @@ impl eframe::App for RavenGuiApp {
                     }
                 });
             });
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        let bg = self.kde_palette.window_bg;
+        // Adaptamos el efecto "glass" dinámicamente:
+        // Toma el color de fondo del tema actual y le aplica translucidez (~70% opacidad).
+        // Así se ve oscuro en temas dark y claro en temas light.
+        egui::Color32::from_rgba_unmultiplied(bg.r(), bg.g(), bg.b(), 180).to_normalized_gamma_f32()
     }
 }

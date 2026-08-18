@@ -78,6 +78,7 @@ impl TilingEngine {
             &config_clone.layout_type,
             &config_clone.workspace_layouts,
             active_window_id,
+            config_clone.pip_size_ratio,
         );
         Ok((layout_map, evicted_windows))
     }
