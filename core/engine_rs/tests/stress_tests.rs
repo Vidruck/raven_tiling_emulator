@@ -228,3 +228,110 @@ async fn test_rebellious_window_flood() {
     
     assert_eq!(move_count, 2);
 }
+
+#[tokio::test]
+async fn test_all_windows_dynamically_floated_and_restored() {
+    // Escenario de estrés: El usuario invoca Meta+Shift+F sucesivamente en TODAS las ventanas activas.
+    // 1. Verificar que el motor no entre en pánico cuando 0 ventanas quedan en el mosaico.
+    // 2. Verificar que los comandos emitidos sean válidos (SetFloating { floating: true, keep_above: true }).
+    // 3. El puente D-Bus retorna payloads JSON limpios sin colapsar.
+    // 4. Al restaurar todas las ventanas una por una, el mosaico se reconstruye limpiamente sin fugas de estado.
+
+    let config = RavenConfig::default();
+    let engine = TilingEngine::new(config);
+    let mut controller = RavenController::new(engine);
+    let topology = KWinTopology {
+        outputs: vec!["DP-1".to_string()],
+        desktops: vec!["desk_1".to_string()],
+        current_desktop: "desk_1".to_string(),
+    };
+
+    let workspace_id = "DP-1||desk_1".to_string();
+    let mut workspaces = HashMap::new();
+    workspaces.insert(workspace_id.clone(), Rect { x: 0, y: 0, width: 1920, height: 1080 });
+
+    let window_count = 10;
+    let mut windows = Vec::new();
+    for i in 0..window_count {
+        windows.push(WindowNode {
+            window_id: format!("app-{}", i),
+            workspace_id: workspace_id.clone(),
+            output: "DP-1".to_string(),
+            desktops: vec!["desk_1".to_string()],
+            is_floating: false,
+            is_minimized: false,
+            is_pip: false,
+            geometry: Rect { x: 0, y: 0, width: 400, height: 300 },
+            min_w: 100,
+            min_h: 100,
+            strict_birth: false,
+            is_quarantined: false,
+            is_fullscreen: false,
+            custom_w_ratio: None,
+            custom_h_ratio: None,
+        });
+    }
+
+    // Registrar estado inicial de 10 ventanas en mosaico
+    let initial_actions = controller.handle_state_change(workspaces.clone(), windows.clone()).unwrap();
+    assert!(!initial_actions.is_empty(), "El estado inicial de 10 ventanas debe generar layout");
+
+    // 1. El usuario presiona Meta+Shift+F en cada una de las 10 ventanas consecutivamente
+    for i in 0..window_count {
+        let win_id = format!("app-{}", i);
+        let (needs_recalc, shortcut_cmds) = controller
+            .handle_shortcut("toggle_floating".to_string(), 0, Some(win_id.clone()), &topology)
+            .expect("handle_shortcut no debe fallar con toggle_floating");
+
+        assert!(needs_recalc);
+        assert_eq!(shortcut_cmds.len(), 1);
+
+        match &shortcut_cmds[0] {
+            raven_core::action::RavenAction::SetFloating { window_id, floating, keep_above } => {
+                assert_eq!(window_id, &win_id);
+                assert!(*floating);
+                assert!(*keep_above);
+            }
+            _ => panic!("Comando inesperado retornado por toggle_floating"),
+        }
+
+        // Simular que el actor / pipeline ejecuta commit_layout tras needs_recalc
+        let recalc_cmds = controller.commit_layout().expect("commit_layout no debe entrar en pánico");
+        
+        // El número de ventanas restantes en el mosaico disminuye progresivamente: (window_count - 1 - i)
+        let remaining_tiled = window_count - 1 - i;
+        if remaining_tiled == 0 {
+            // Cuando TODAS las ventanas están flotando dinámicamente, el layout de mosaico queda vacío de forma segura
+            assert!(recalc_cmds.is_empty(), "Con 0 ventanas en mosaico no debe haber comandos de movimiento");
+        }
+    }
+
+    // Validar que las 10 ventanas están en dynamic_floating_windows
+    assert_eq!(controller.get_engine().dynamic_floating_windows.len(), window_count);
+
+    // 2. El usuario presiona Meta+Shift+F de nuevo para restaurar todas las ventanas al mosaico
+    for i in 0..window_count {
+        let win_id = format!("app-{}", i);
+        let (needs_recalc, shortcut_cmds) = controller
+            .handle_shortcut("toggle_floating".to_string(), 0, Some(win_id.clone()), &topology)
+            .expect("handle_shortcut debe permitir restaurar ventanas al mosaico");
+
+        assert!(needs_recalc);
+        assert_eq!(shortcut_cmds.len(), 1);
+
+        match &shortcut_cmds[0] {
+            raven_core::action::RavenAction::SetFloating { window_id, floating, keep_above } => {
+                assert_eq!(window_id, &win_id);
+                assert!(!*floating);
+                assert!(!*keep_above);
+            }
+            _ => panic!("Comando inesperado retornado por toggle_floating al restaurar"),
+        }
+
+        let recalc_cmds = controller.commit_layout().expect("commit_layout debe reconstruir el mosaico");
+        assert!(!recalc_cmds.is_empty(), "Al reinsertar ventanas, el motor recalcula geometrías válidas");
+    }
+
+    // Validar que la pila flotante quedó totalmente vacía y limpia
+    assert_eq!(controller.get_engine().dynamic_floating_windows.len(), 0);
+}

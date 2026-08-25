@@ -165,6 +165,12 @@ pub struct TilingCommand {
     /// Dirección del comando.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub direction: Option<String>,
+    /// Estado flotante booleano para comandos set_floating.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub floating: Option<bool>,
+    /// Estado keep_above booleano para comandos set_floating.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keep_above: Option<bool>,
 }
 
 impl From<RavenAction> for TilingCommand {
@@ -186,6 +192,8 @@ impl From<RavenAction> for TilingCommand {
                 height: Some(height),
                 target_ws: None,
                 direction: None,
+                floating: None,
+                keep_above: None,
             },
             RavenAction::FocusWindow { window_id } => TilingCommand {
                 action: "focus".to_string(),
@@ -196,6 +204,8 @@ impl From<RavenAction> for TilingCommand {
                 height: None,
                 target_ws: None,
                 direction: None,
+                floating: None,
+                keep_above: None,
             },
             RavenAction::MigrateToOutput {
                 window_id,
@@ -209,6 +219,8 @@ impl From<RavenAction> for TilingCommand {
                 width: None,
                 height: None,
                 direction: None,
+                floating: None,
+                keep_above: None,
             },
             RavenAction::MigrateToDesktop {
                 window_id,
@@ -222,6 +234,8 @@ impl From<RavenAction> for TilingCommand {
                 width: None,
                 height: None,
                 direction: None,
+                floating: None,
+                keep_above: None,
             },
             RavenAction::MinimizeWindow { window_id } => TilingCommand {
                 action: "minimize".to_string(),
@@ -232,6 +246,8 @@ impl From<RavenAction> for TilingCommand {
                 height: None,
                 target_ws: None,
                 direction: None,
+                floating: None,
+                keep_above: None,
             },
             RavenAction::UnminimizeWindow { window_id } => TilingCommand {
                 action: "unminimize".to_string(),
@@ -242,6 +258,8 @@ impl From<RavenAction> for TilingCommand {
                 height: None,
                 target_ws: None,
                 direction: None,
+                floating: None,
+                keep_above: None,
             },
             RavenAction::RequestFeedback { window_id } => TilingCommand {
                 action: "request_feedback".to_string(),
@@ -252,6 +270,8 @@ impl From<RavenAction> for TilingCommand {
                 height: None,
                 target_ws: None,
                 direction: None,
+                floating: None,
+                keep_above: None,
             },
             RavenAction::SaturationWarning { cmax, active } => TilingCommand {
                 action: "saturation_warning".to_string(),
@@ -262,6 +282,20 @@ impl From<RavenAction> for TilingCommand {
                 height: None,
                 target_ws: None,
                 direction: None,
+                floating: None,
+                keep_above: None,
+            },
+            RavenAction::SetFloating { window_id, floating, keep_above } => TilingCommand {
+                action: "set_floating".to_string(),
+                window_id: Some(window_id),
+                x: None,
+                y: None,
+                width: None,
+                height: None,
+                target_ws: None,
+                direction: None,
+                floating: Some(floating),
+                keep_above: Some(keep_above),
             },
         }
     }
@@ -329,6 +363,12 @@ impl RavenDBusService {
             Some(window_id.clone())
         };
         let _ = self.tx.send(RavenMessage::WindowActivated { window_id: val }).await;
+    }
+
+    /// Alterna el modo flotante temporal (Quick Peek) para la ventana activa.
+    #[zbus(name = "toggleFloating")]
+    async fn toggle_floating(&self) -> String {
+        self.dispatch_shortcut("toggle_floating", 0).await
     }
 
     /// Alterna el estado operativo de activación del motor de mosaico.

@@ -416,6 +416,34 @@ impl RavenController {
         let mut commands = Vec::new();
 
         match action.as_str() {
+            "toggle_floating" => {
+                let target_wid = self.active_window_id.clone().or_else(|| {
+                    self.engine.window_history.back().cloned().or_else(|| {
+                        windows.iter().find(|w| !w.is_floating && !w.is_minimized).map(|w| w.window_id.clone())
+                    })
+                });
+
+                if let Some(wid) = target_wid {
+                    if self.engine.dynamic_floating_windows.contains(&wid) {
+                        self.engine.dynamic_floating_windows.remove(&wid);
+                        info!("[CONTROLLER] Ventana {} devuelta a la pila de mosaico (Tiling)", wid);
+                        commands.push(RavenAction::SetFloating {
+                            window_id: wid,
+                            floating: false,
+                            keep_above: false,
+                        });
+                    } else {
+                        self.engine.dynamic_floating_windows.insert(wid.clone());
+                        info!("[CONTROLLER] Ventana {} añadida a la pila flotante dinámica (Quick Peek)", wid);
+                        commands.push(RavenAction::SetFloating {
+                            window_id: wid,
+                            floating: true,
+                            keep_above: true,
+                        });
+                    }
+                    needs_recalc = true;
+                }
+            }
             "toggle_tiling" => {
                 self.engine.toggle_tiling();
                 needs_recalc = true;

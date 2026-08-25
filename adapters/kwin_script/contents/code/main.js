@@ -301,6 +301,7 @@ const PIP_CAPTION_REGEX = /picture[- ]?in[- ]?picture|imagen[- ]en[- ]imagen|pan
 function isFloating(w) {
   try {
     if (!w || w.deleted) return true;
+    if (w.__raven_dynamic_float) return true;
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) return true;
 
     // Fullscreen nativo (YouTube, juegos, etc.) NO es flotante:
@@ -312,7 +313,7 @@ function isFloating(w) {
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
 
-    let isPip = PIP_CAPTION_REGEX.test(strCap) || w.keepAbove;
+    let isPip = PIP_CAPTION_REGEX.test(strCap);
 
     // Evaluamos reglas dinámicas enviadas desde la interfaz de usuario
     if (_window_rules && _window_rules.length > 0) {
@@ -597,6 +598,8 @@ function syncState() {
         }
       }
 
+      const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
+      const isPipWindow = PIP_CAPTION_REGEX.test(strCap);
       const wsId = getWorkspaceId(w);
       const geom = getRectGeometry(w.frameGeometry);
 
@@ -607,7 +610,7 @@ function syncState() {
         output: outName,
         f: isFloating(w),
         m: Boolean(w.minimized),
-        p: Boolean(w.keepAbove),
+        p: isPipWindow,
         x: geom.x,
         y: geom.y,
         w: geom.w,
@@ -888,17 +891,13 @@ function applyCommands(commandsJson) {
             })(w);
           } else if (cmd.action === "saturation_warning") {
             Logger.warn("Saturation", "Pantalla cerca de saturación: " + cmd.active + "/" + cmd.cmax + " ventanas");
-          } else if (cmd.action === "migrate_to_desktop") {
-            w.__raven_mutating = true;
-            migrateWindow(w, null, cmd.target_ws);
-            (function (cw) {
-              setKWinTimeout(function () {
-                if (cw && !cw.deleted) {
-                  cw.__raven_mutating = false;
-                  requestStateSync();
-                }
-              }, 150);
-            })(w);
+          } else if (cmd.action === "set_floating") {
+            try {
+              w.__raven_dynamic_float = Boolean(cmd.floating);
+              w.keepAbove = Boolean(cmd.keep_above);
+            } catch (e) {
+              Logger.error("applyCommands", "Error asignando estado flotante dinámico", e);
+            }
           }
           break;
         }
@@ -1098,6 +1097,9 @@ function registerRavenShortcuts() {
   registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function () {
     dispatchToRaven("toggleTiling");
   });
+  registerShortcut("RavenToggleFloating", "Raven: Alternar Ventana Flotante Dinámica (Quick Peek)", "Meta+Shift+F", function () {
+    dispatchToRaven("toggleFloating");
+  });
   registerShortcut("RavenFocusNext", "Raven: Siguiente Ventana", "Meta+J", function () {
     dispatchToRaven("focusNext");
   });
@@ -1199,59 +1201,24 @@ function initDBusBridge() {
   // 1. Inicializar pool de timers estáticos
   initTimerPool();
 
-  // 2. Solicitar clases de cuarentena personalizadas del daemon
-  try {
-    callDBus(
-      "org.kde.raven.Daemon",
-      "/Events",
-      "org.kde.raven.Events",
-      "getQuarantineClasses",
-      function (res) {
-        updateQuarantineClasses(res);
-      }
-    );
-  } catch (e) {
-    Logger.warn("initDBusBridge", "No se pudo obtener clases de cuarentena del daemon");
-  }
-
-  // 3. Solicitar reglas de ventanas del daemon
-  try {
-    callDBus(
-      "org.kde.raven.Daemon",
-      "/Events",
-      "org.kde.raven.Events",
-      "getWindowRules",
-      function (res) {
-        try {
-          if (res) {
-            _window_rules = JSON.parse(res);
-          }
-        } catch (e) {
-          Logger.warn("initDBusBridge", "Error parseando reglas de ventana");
-        }
-      }
-    );
-  } catch (e) {
-    Logger.warn("initDBusBridge", "No se pudo obtener reglas de ventana del daemon");
-  }
-
-  // 4. Enlazar ventanas existentes al puente
+  // 2. Enlazar ventanas existentes al puente (sin disparar syncs masivos)
   var existingWindows = workspace.windowList();
   for (var i = 0; i < existingWindows.length; i++) {
-    processNewWindow(existingWindows[i]);
+    var w = existingWindows[i];
+    if (w && !w.deleted && isManageable(w)) {
+      bindWindow(w);
+    }
   }
 
-  // 5. Hook: nueva ventana agregada
+  // 3. Hooks de ciclo de vida de ventanas
   workspace.windowAdded.connect(function (w) {
     processNewWindow(w);
   });
 
-  // 6. Hook: ventana eliminada / cerrada
   workspace.windowRemoved.connect(function (w) {
     requestStateSync();
   });
 
-  // 7. Hook: cambio de ventana activa → reportar al daemon para foco
   workspace.activeWindowChanged.connect(function () {
     var aw = workspace.activeWindow;
     var awId = aw ? getSafeWindowId(aw) : "";
@@ -1263,30 +1230,55 @@ function initDBusBridge() {
         "windowActivated",
         awId || ""
       );
-    } catch (e) {
-      Logger.error("activeWindowChanged", "Fallo al reportar ventana activa", e);
-    }
+    } catch (e) { }
   });
 
-  // 8. Hook: cambio de escritorio virtual activo
   workspace.currentDesktopChanged.connect(function () {
     requestStateSync();
   });
 
-  // 9. Notificar al daemon que el puente está operativo
-  try {
-    callDBus(
-      "org.kde.raven.Daemon",
-      "/Events",
-      "org.kde.raven.Events",
-      "bridgeReady"
-    );
-  } catch (e) {
-    Logger.warn("initDBusBridge", "No se pudo notificar bridgeReady al daemon");
-  }
+  // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (50ms)
+  setKWinTimeout(function () {
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "bridgeReady"
+      );
+    } catch (e) { }
 
-  // 10. Primera sincronización completa de estado
-  requestStateSync();
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "getQuarantineClasses",
+        function (res) {
+          updateQuarantineClasses(res);
+        }
+      );
+    } catch (e) { }
+
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "getWindowRules",
+        function (res) {
+          try {
+            if (res) {
+              _window_rules = JSON.parse(res);
+            }
+          } catch (e) { }
+        }
+      );
+    } catch (e) { }
+
+    // Sincronización inicial única y limpia tras levantar el entorno
+    requestStateSync();
+  }, 100);
 }
 
 // Registro inicial de ciclo de vida

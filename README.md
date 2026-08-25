@@ -15,11 +15,11 @@
 
 **Raven Tiling Emulator** es un gestor de ventanas dinámico en mosaico (Tiling Window Manager) de alto rendimiento diseñado específicamente para **KDE Plasma 6 (Wayland)**. 
 
-Con el lanzamiento de la **Versión 3.1**, implementa una nueva **interfaz de usuario en eGUI**, arquitectura modular en Rust nativo, comunicación de ultra-baja latencia **Single-Trip IPC**, multiples algoritmos de ordenamiento espacial y mejora su integración con navegadores web base **Gecko**.
+Con el lanzamiento de la **Versión 3.2**, implementa una arquitectura insignia optimizada para el algoritmo **Raven Base** con distribución adaptativa ergonómica en pantallas de 14" y 1080p, interfaz de usuario en eGUI, comunicación de ultra-baja latencia **Single-Trip IPC**, múltiples algoritmos de ordenamiento espacial y soporte de ventanas flotantes ancladas (PiP).
 
 ---
 
-## ⚡ Novedades Principales de la Versión 3.1
+## ⚡ Novedades Principales de la Versión 3.2
 
 ### 📐 1. Módulo de Layouts Rediseñado y Modular (Domain-Driven Architecture)
 El motor geométrico se ha reestructurado por completo en submódulos especializados dentro de `domain/layout/`, ofreciendo desacoplamiento total y 5 algoritmos de distribución seleccionables:
@@ -134,6 +134,7 @@ El script orquestador `./raven-setup.sh` ofrece una interfaz gráfica de consola
 | Atajo | Función |
 | :--- | :--- |
 | **`Super + Space`** | Habilitar / Deshabilitar el motor de mosaico (On / Off) |
+| **`Super + Shift + F`** | Alternar Ventana Flotante Dinámica / Quick Peek (On / Off) |
 | **`Super + J` / `Super + K`** | Mover el foco a la ventana Siguiente / Anterior |
 | **`Super + Flechas`** | Foco direccional nativo (Izquierda / Derecha / Arriba / Abajo) |
 | **`Super + Shift + J` / `Super + Shift + K`** | Intercambiar posición de la ventana activa (Siguiente / Anterior) |

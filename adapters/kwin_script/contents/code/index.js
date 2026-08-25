@@ -33,59 +33,24 @@ function initDBusBridge() {
   // 1. Inicializar pool de timers estáticos
   initTimerPool();
 
-  // 2. Solicitar clases de cuarentena personalizadas del daemon
-  try {
-    callDBus(
-      "org.kde.raven.Daemon",
-      "/Events",
-      "org.kde.raven.Events",
-      "getQuarantineClasses",
-      function (res) {
-        updateQuarantineClasses(res);
-      }
-    );
-  } catch (e) {
-    Logger.warn("initDBusBridge", "No se pudo obtener clases de cuarentena del daemon");
-  }
-
-  // 3. Solicitar reglas de ventanas del daemon
-  try {
-    callDBus(
-      "org.kde.raven.Daemon",
-      "/Events",
-      "org.kde.raven.Events",
-      "getWindowRules",
-      function (res) {
-        try {
-          if (res) {
-            _window_rules = JSON.parse(res);
-          }
-        } catch (e) {
-          Logger.warn("initDBusBridge", "Error parseando reglas de ventana");
-        }
-      }
-    );
-  } catch (e) {
-    Logger.warn("initDBusBridge", "No se pudo obtener reglas de ventana del daemon");
-  }
-
-  // 4. Enlazar ventanas existentes al puente
+  // 2. Enlazar ventanas existentes al puente (sin disparar syncs masivos)
   var existingWindows = workspace.windowList();
   for (var i = 0; i < existingWindows.length; i++) {
-    processNewWindow(existingWindows[i]);
+    var w = existingWindows[i];
+    if (w && !w.deleted && isManageable(w)) {
+      bindWindow(w);
+    }
   }
 
-  // 5. Hook: nueva ventana agregada
+  // 3. Hooks de ciclo de vida de ventanas
   workspace.windowAdded.connect(function (w) {
     processNewWindow(w);
   });
 
-  // 6. Hook: ventana eliminada / cerrada
   workspace.windowRemoved.connect(function (w) {
     requestStateSync();
   });
 
-  // 7. Hook: cambio de ventana activa → reportar al daemon para foco
   workspace.activeWindowChanged.connect(function () {
     var aw = workspace.activeWindow;
     var awId = aw ? getSafeWindowId(aw) : "";
@@ -97,30 +62,55 @@ function initDBusBridge() {
         "windowActivated",
         awId || ""
       );
-    } catch (e) {
-      Logger.error("activeWindowChanged", "Fallo al reportar ventana activa", e);
-    }
+    } catch (e) { }
   });
 
-  // 8. Hook: cambio de escritorio virtual activo
   workspace.currentDesktopChanged.connect(function () {
     requestStateSync();
   });
 
-  // 9. Notificar al daemon que el puente está operativo
-  try {
-    callDBus(
-      "org.kde.raven.Daemon",
-      "/Events",
-      "org.kde.raven.Events",
-      "bridgeReady"
-    );
-  } catch (e) {
-    Logger.warn("initDBusBridge", "No se pudo notificar bridgeReady al daemon");
-  }
+  // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (50ms)
+  setKWinTimeout(function () {
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "bridgeReady"
+      );
+    } catch (e) { }
 
-  // 10. Primera sincronización completa de estado
-  requestStateSync();
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "getQuarantineClasses",
+        function (res) {
+          updateQuarantineClasses(res);
+        }
+      );
+    } catch (e) { }
+
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "getWindowRules",
+        function (res) {
+          try {
+            if (res) {
+              _window_rules = JSON.parse(res);
+            }
+          } catch (e) { }
+        }
+      );
+    } catch (e) { }
+
+    // Sincronización inicial única y limpia tras levantar el entorno
+    requestStateSync();
+  }, 100);
 }
 
 // Registro inicial de ciclo de vida

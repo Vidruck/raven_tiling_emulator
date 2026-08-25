@@ -142,10 +142,10 @@ do_install() {
 
     # 3. Creación de Estructura Destino
     log_step "3" "7" "Despliegue de Binarios en Entorno Local"
+    systemctl --user stop raven.service 2>/dev/null || true
     mkdir -p "$TARGET_DIR/bin"
-    cp "$SOURCE_DIR/target/release/raven_engine" "$TARGET_DIR/bin/"
-    cp "$SOURCE_DIR/target/release/raven_gui" "$TARGET_DIR/bin/"
-    chmod +x "$TARGET_DIR/bin/raven_engine" "$TARGET_DIR/bin/raven_gui"
+    install -m 755 "$SOURCE_DIR/target/release/raven_engine" "$TARGET_DIR/bin/raven_engine"
+    install -m 755 "$SOURCE_DIR/target/release/raven_gui" "$TARGET_DIR/bin/raven_gui"
     log_success "Ejecutables instalados en $TARGET_DIR/bin/"
 
     # 4. Iconos y Lanzadores Desktop
@@ -264,6 +264,7 @@ do_inject_shortcuts() {
 
     if command -v kwriteconfig6 >/dev/null 2>&1; then
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenToggleTiling" "Meta+Space,none,Raven: Alternar Mosaico (On/Off)"
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenToggleFloating" "Meta+Shift+F,none,Raven: Alternar Ventana Flotante Dinámica"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenFocusNext" "Meta+J,none,Raven: Siguiente Ventana"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenFocusPrev" "Meta+K,none,Raven: Ventana Anterior"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenFocusLeft" "Meta+Left,none,Raven: Foco Izquierda"
@@ -316,8 +317,10 @@ do_quick_rebuild() {
     print_header
     echo -e "${PRIMARY}${BOLD}🔄 Recompilando Componentes de Raven...${RESET}\n"
     cargo build --release --manifest-path "$SOURCE_DIR/Cargo.toml"
-    cp "$SOURCE_DIR/target/release/raven_engine" "$TARGET_DIR/bin/"
-    cp "$SOURCE_DIR/target/release/raven_gui" "$TARGET_DIR/bin/"
+    systemctl --user stop raven.service 2>/dev/null || true
+    mkdir -p "$TARGET_DIR/bin"
+    install -m 755 "$SOURCE_DIR/target/release/raven_engine" "$TARGET_DIR/bin/raven_engine"
+    install -m 755 "$SOURCE_DIR/target/release/raven_gui" "$TARGET_DIR/bin/raven_gui"
     log_success "Binarios de Rust actualizados en $TARGET_DIR/bin/"
     
     do_rebuild_kwin

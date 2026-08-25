@@ -82,6 +82,8 @@ function syncState() {
         }
       }
 
+      const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
+      const isPipWindow = PIP_CAPTION_REGEX.test(strCap);
       const wsId = getWorkspaceId(w);
       const geom = getRectGeometry(w.frameGeometry);
 
@@ -92,7 +94,7 @@ function syncState() {
         output: outName,
         f: isFloating(w),
         m: Boolean(w.minimized),
-        p: Boolean(w.keepAbove),
+        p: isPipWindow,
         x: geom.x,
         y: geom.y,
         w: geom.w,
@@ -373,17 +375,13 @@ function applyCommands(commandsJson) {
             })(w);
           } else if (cmd.action === "saturation_warning") {
             Logger.warn("Saturation", "Pantalla cerca de saturación: " + cmd.active + "/" + cmd.cmax + " ventanas");
-          } else if (cmd.action === "migrate_to_desktop") {
-            w.__raven_mutating = true;
-            migrateWindow(w, null, cmd.target_ws);
-            (function (cw) {
-              setKWinTimeout(function () {
-                if (cw && !cw.deleted) {
-                  cw.__raven_mutating = false;
-                  requestStateSync();
-                }
-              }, 150);
-            })(w);
+          } else if (cmd.action === "set_floating") {
+            try {
+              w.__raven_dynamic_float = Boolean(cmd.floating);
+              w.keepAbove = Boolean(cmd.keep_above);
+            } catch (e) {
+              Logger.error("applyCommands", "Error asignando estado flotante dinámico", e);
+            }
           }
           break;
         }

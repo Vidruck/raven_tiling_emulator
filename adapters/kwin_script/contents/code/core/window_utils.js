@@ -151,6 +151,7 @@ const PIP_CAPTION_REGEX = /picture[- ]?in[- ]?picture|imagen[- ]en[- ]imagen|pan
 function isFloating(w) {
   try {
     if (!w || w.deleted) return true;
+    if (w.__raven_dynamic_float) return true;
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) return true;
 
     // Fullscreen nativo (YouTube, juegos, etc.) NO es flotante:
@@ -162,7 +163,7 @@ function isFloating(w) {
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
 
-    let isPip = PIP_CAPTION_REGEX.test(strCap) || w.keepAbove;
+    let isPip = PIP_CAPTION_REGEX.test(strCap);
 
     // Evaluamos reglas dinámicas enviadas desde la interfaz de usuario
     if (_window_rules && _window_rules.length > 0) {

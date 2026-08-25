@@ -58,4 +58,13 @@ pub enum RavenAction {
         /// Número actual de ventanas activas.
         active: usize,
     },
+    /// Modifica el estado flotante dinámico de una ventana (Quick Peek) y su elevación.
+    SetFloating {
+        /// Identificador de la ventana.
+        window_id: String,
+        /// Indica si debe flotar (true) o volver al mosaico (false).
+        floating: bool,
+        /// Indica si debe mantenerse por encima (keepAbove).
+        keep_above: bool,
+    },
 }

@@ -79,25 +79,33 @@ impl LayoutStrategy for DwindleBSPStrategy {
             let mut bottom_group = Vec::new();
             let mut center_group = Vec::new();
 
-            for (idx, win) in current_ordered.iter().enumerate() {
-                if idx == 0 {
-                    center_group.push(win.clone()); // Ventana 1: Área Central
-                } else if idx == 1 {
-                    left_group.push(win.clone()); // Ventana 2: Sidebar Izquierdo
-                } else if idx == 2 {
-                    right_group.push(win.clone()); // Ventana 3: Sidebar Derecho
-                } else if idx == 3 {
-                    bottom_group.push(win.clone()); // Ventana 4: Panel Inferior Izquierdo
-                } else if idx == 4 {
-                    bottom_group.push(win.clone()); // Ventana 5: Panel Inferior Derecho
-                } else {
-                    // idx >= 5: Subdivisión jerárquica cíclica (Laterales primero, luego Centro)
-                    if idx % 3 == 2 {
-                        left_group.push(win.clone());
-                    } else if idx % 3 == 0 {
-                        right_group.push(win.clone());
+            let total_count = current_ordered.len();
+            if total_count == 3 {
+                // Caso optimizado v3.2: 3 ventanas (Master Superior + Dúo Inferior)
+                center_group.push(current_ordered[0].clone()); // Ventana 1: Master Superior
+                bottom_group.push(current_ordered[1].clone()); // Ventana 2: Panel Inferior Izquierdo
+                bottom_group.push(current_ordered[2].clone()); // Ventana 3: Panel Inferior Derecho
+            } else {
+                for (idx, win) in current_ordered.iter().enumerate() {
+                    if idx == 0 {
+                        center_group.push(win.clone()); // Ventana 1: Área Central
+                    } else if idx == 1 {
+                        left_group.push(win.clone()); // Ventana 2: Sidebar Izquierdo
+                    } else if idx == 2 {
+                        right_group.push(win.clone()); // Ventana 3: Sidebar Derecho
+                    } else if idx == 3 {
+                        bottom_group.push(win.clone()); // Ventana 4: Panel Inferior Izquierdo
+                    } else if idx == 4 {
+                        bottom_group.push(win.clone()); // Ventana 5: Panel Inferior Derecho
                     } else {
-                        center_group.push(win.clone());
+                        // idx >= 5: Subdivisión jerárquica cíclica (Laterales primero, luego Centro)
+                        if idx % 3 == 2 {
+                            left_group.push(win.clone());
+                        } else if idx % 3 == 0 {
+                            right_group.push(win.clone());
+                        } else {
+                            center_group.push(win.clone());
+                        }
                     }
                 }
             }
@@ -114,7 +122,11 @@ impl LayoutStrategy for DwindleBSPStrategy {
 
             // 6. Calcular proporciones y alturas de paneles
             let central_ratio = master_ratio.clamp(0.35, 0.85);
-            let bottom_ratio = 0.30f32;
+            let bottom_ratio = if left_group.is_empty() && right_group.is_empty() && !bottom_group.is_empty() {
+                1.0 - central_ratio
+            } else {
+                0.30f32
+            };
 
             let mut bottom_height = if !bottom_group.is_empty() {
                 let bh = ((container.height as f32 * bottom_ratio).round()) as i32;
@@ -123,9 +135,9 @@ impl LayoutStrategy for DwindleBSPStrategy {
                 0
             };
 
-            // Garantía defensiva: La altura del panel inferior no debe superar el 50% de la pantalla
-            if bottom_height > container.height / 2 {
-                bottom_height = container.height / 2;
+            // Garantía defensiva: La altura del panel inferior no debe superar el 65% de la pantalla
+            if bottom_height > (container.height as f32 * 0.65) as i32 {
+                bottom_height = (container.height as f32 * 0.65) as i32;
             }
 
             // 7. Calcular anchos de los paneles laterales y del área central

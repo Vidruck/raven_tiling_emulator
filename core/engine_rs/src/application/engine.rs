@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::domain::error::RavenError;
 use crate::domain::geometry::{Rect, WindowNode};
@@ -16,6 +16,8 @@ pub struct TilingEngine {
     pub is_tiling_enabled: bool,
     /// Historial cronológico de ventanas utilizado para la evicción (eviction) FIFO.
     pub window_history: VecDeque<String>,
+    /// Pila dinámica de identificadores de ventanas en modo flotante temporal (Quick Peek).
+    pub dynamic_floating_windows: HashSet<String>,
     /// Mapa de las áreas de trabajo (workspaces) activas y sus geometrías útiles.
     pub current_workspaces: HashMap<String, Rect>,
     /// Mapa de todas las ventanas (windows) actualmente rastreadas por el motor.
@@ -32,6 +34,7 @@ impl TilingEngine {
             is_tiling_enabled: config.tiling_enabled_on_startup,
             config,
             window_history: VecDeque::new(),
+            dynamic_floating_windows: HashSet::new(),
             current_workspaces: HashMap::new(),
             current_windows: HashMap::new(),
         }
@@ -66,10 +69,26 @@ impl TilingEngine {
         if !self.is_tiling_enabled || windows.is_empty() {
             return Ok((HashMap::new(), Vec::new()));
         }
+
+        // Marcar dinámicamente como flotantes las ventanas en la pila Quick Peek y apagar PiP para ellas
+        let effective_windows: Vec<WindowNode> = windows
+            .iter()
+            .map(|w| {
+                if self.dynamic_floating_windows.contains(&w.window_id) {
+                    let mut cloned = w.clone();
+                    cloned.is_floating = true;
+                    cloned.is_pip = false; // Jamás tratar como PiP una ventana de la pila flotante de Rust
+                    cloned
+                } else {
+                    w.clone()
+                }
+            })
+            .collect();
+
         let config_clone = self.config.clone();
 
         let (layout_map, evicted_windows) = calculate_global_topology(
-            windows,
+            &effective_windows,
             workspaces,
             config_clone.nmaster,
             config_clone.master_ratio,
@@ -97,8 +116,13 @@ impl TilingEngine {
         self.window_history
             .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
 
+        // Limpiar de la pila flotante aquellas ventanas que hayan sido cerradas
+        self.dynamic_floating_windows
+            .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
+
         for win in current_windows {
-            if !self.window_history.contains(&win.window_id) && !win.is_floating {
+            let is_dyn_float = self.dynamic_floating_windows.contains(&win.window_id);
+            if !self.window_history.contains(&win.window_id) && !win.is_floating && !is_dyn_float {
                 self.window_history.push_back(win.window_id.clone());
             }
         }

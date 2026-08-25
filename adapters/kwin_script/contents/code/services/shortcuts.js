@@ -47,6 +47,9 @@ function registerRavenShortcuts() {
   registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function () {
     dispatchToRaven("toggleTiling");
   });
+  registerShortcut("RavenToggleFloating", "Raven: Alternar Ventana Flotante Dinámica (Quick Peek)", "Meta+Shift+F", function () {
+    dispatchToRaven("toggleFloating");
+  });
   registerShortcut("RavenFocusNext", "Raven: Siguiente Ventana", "Meta+J", function () {
     dispatchToRaven("focusNext");
   });

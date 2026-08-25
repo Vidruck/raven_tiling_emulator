@@ -26,48 +26,34 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
 
     match layout_type {
         "raven" => {
-            // Algoritmo Raven Base: Master Central (50%) con Pilas Laterales Completas Izquierda (V2, V3) y Derecha (V4, V5)
-            let master_w = w * ratio;
-            let side_w = (w - master_w) / 2.0;
-            let half_h = h / 2.0;
+            // Algoritmo Raven Base v3.2: Master Superior Amplio con Panel Inferior Dúo (V2, V3)
+            let master_h = h * ratio;
+            let bottom_h = h - master_h;
+            let half_w = w / 2.0;
 
-            // Pila Izquierda: Ventana 2 (Arriba) y Ventana 3 (Abajo)
-            let left_top = egui::Rect::from_min_size(
-                rect.min + egui::vec2(gap_f, gap_f),
-                egui::vec2(side_w - gap_f * 2.0, half_h - gap_f * 2.0),
-            );
-            painter.rect_filled(left_top, 6.0, side_color);
-            painter.text(left_top.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(10.0), egui::Color32::WHITE);
-
-            let left_bot = egui::Rect::from_min_size(
-                rect.min + egui::vec2(gap_f, half_h + gap_f),
-                egui::vec2(side_w - gap_f * 2.0, half_h - gap_f * 2.0),
-            );
-            painter.rect_filled(left_bot, 6.0, side_color);
-            painter.text(left_bot.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
-
-            // Panel Central Maestro (Ventana 1 - Master)
+            // Panel Superior Maestro (Ventana 1 - Master Superior)
             let master_rect = egui::Rect::from_min_size(
-                rect.min + egui::vec2(side_w + gap_f, gap_f),
-                egui::vec2(master_w - gap_f * 2.0, h - gap_f * 2.0),
+                rect.min + egui::vec2(gap_f, gap_f),
+                egui::vec2(w - gap_f * 2.0, master_h - gap_f * 2.0),
             );
             painter.rect_filled(master_rect, 6.0, center_color);
-            painter.text(master_rect.center(), egui::Align2::CENTER_CENTER, "1 (Master)", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+            painter.text(master_rect.center(), egui::Align2::CENTER_CENTER, "1 (Master Superior)", egui::FontId::monospace(11.0), egui::Color32::WHITE);
 
-            // Pila Derecha: Ventana 4 (Arriba) y Ventana 5 (Abajo)
-            let right_top = egui::Rect::from_min_size(
-                rect.min + egui::vec2(side_w + master_w + gap_f, gap_f),
-                egui::vec2(side_w - gap_f * 2.0, half_h - gap_f * 2.0),
+            // Panel Inferior Izquierdo (Ventana 2)
+            let bottom_left = egui::Rect::from_min_size(
+                rect.min + egui::vec2(gap_f, master_h + gap_f),
+                egui::vec2(half_w - gap_f * 2.0, bottom_h - gap_f * 2.0),
             );
-            painter.rect_filled(right_top, 6.0, side_color);
-            painter.text(right_top.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.rect_filled(bottom_left, 6.0, side_color);
+            painter.text(bottom_left.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(10.0), egui::Color32::WHITE);
 
-            let right_bot = egui::Rect::from_min_size(
-                rect.min + egui::vec2(side_w + master_w + gap_f, half_h + gap_f),
-                egui::vec2(side_w - gap_f * 2.0, half_h - gap_f * 2.0),
+            // Panel Inferior Derecho (Ventana 3)
+            let bottom_right = egui::Rect::from_min_size(
+                rect.min + egui::vec2(half_w + gap_f, master_h + gap_f),
+                egui::vec2(half_w - gap_f * 2.0, bottom_h - gap_f * 2.0),
             );
-            painter.rect_filled(right_bot, 6.0, side_color);
-            painter.text(right_bot.center(), egui::Align2::CENTER_CENTER, "5", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.rect_filled(bottom_right, 6.0, side_color);
+            painter.text(bottom_right.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
         }
         "tall" => {
             let master_w = w * ratio;

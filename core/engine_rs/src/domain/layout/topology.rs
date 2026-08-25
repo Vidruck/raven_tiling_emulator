@@ -63,10 +63,10 @@ pub fn calculate_global_topology(
         });
 
         if let Some(screen_rect) = screen_rect_opt {
-            // Filtrar ventanas no-fullscreen para el mosaico de fondo
+            // Filtrar ventanas no-fullscreen y no-pip para el mosaico de fondo
             let tiling_windows: Vec<WindowNode> = ws_windows
                 .iter()
-                .filter(|w| !w.is_fullscreen)
+                .filter(|w| !w.is_fullscreen && !w.is_pip && !w.is_floating)
                 .cloned()
                 .collect();
 
@@ -323,5 +323,88 @@ mod tests {
         assert_eq!(r5.x, 500);
         assert_eq!(r5.width, 300);
         assert_eq!(r5.height, 180);
+    }
+
+    #[test]
+    fn test_raven_base_3_windows_layout() {
+        let windows = vec![
+            mock_window("win_1"),
+            mock_window("win_2"),
+            mock_window("win_3"),
+        ];
+
+        let strategy = DwindleBSPStrategy;
+        // Pantalla típica 1920x1080, ratio 0.65 (65% altura master superior, 35% inferior)
+        let (layout, evicted) =
+            strategy.calculate(&windows, Rect::new(0, 0, 1920, 1080), 1, 0.65, 0, None);
+
+        assert!(evicted.is_empty());
+        assert_eq!(layout.len(), 3);
+
+        let r1 = layout.get("win_1").unwrap();
+        let r2 = layout.get("win_2").unwrap();
+        let r3 = layout.get("win_3").unwrap();
+
+        // Ventana 1: Master superior completo en ancho
+        assert_eq!(r1.x, 0);
+        assert_eq!(r1.y, 0);
+        assert_eq!(r1.width, 1920);
+        assert_eq!(r1.height, 702); // 1080 - 378 (35% de 1080)
+
+        // Ventana 2: Inferior izquierda
+        assert_eq!(r2.x, 0);
+        assert_eq!(r2.y, 702);
+        assert_eq!(r2.width, 960);
+        assert_eq!(r2.height, 378);
+
+        // Ventana 3: Inferior derecha
+        assert_eq!(r3.x, 960);
+        assert_eq!(r3.y, 702);
+        assert_eq!(r3.width, 960);
+        assert_eq!(r3.height, 378);
+    }
+
+    #[test]
+    fn test_dynamic_floating_stack_peek() {
+        use crate::application::engine::TilingEngine;
+        use crate::infrastructure::config::RavenConfig;
+
+        let mut engine = TilingEngine::new(RavenConfig::default());
+        let mut workspaces = HashMap::new();
+        workspaces.insert("ws_1".to_string(), Rect::new(0, 0, 1920, 1080));
+
+        let windows = vec![
+            mock_window("ide_window"),
+            mock_window("browser_window"),
+            mock_window("image_viewer"),
+        ];
+
+        // 1. Con las 3 ventanas en tiling (Raven-base v3.2: 1 arriba, 2 abajo)
+        let (layout_3, _) = engine
+            .calculate_from_payload(&workspaces, &windows, None)
+            .unwrap();
+        assert_eq!(layout_3.len(), 3);
+        assert!(layout_3.contains_key("image_viewer"));
+
+        // 2. Activar modo flotante dinámico (Quick Peek) para image_viewer
+        engine.dynamic_floating_windows.insert("image_viewer".to_string());
+
+        let (layout_dyn_float, _) = engine
+            .calculate_from_payload(&workspaces, &windows, None)
+            .unwrap();
+        // image_viewer ahora flota y no ocupa espacio en el mosaico
+        assert_eq!(layout_dyn_float.len(), 2);
+        assert!(!layout_dyn_float.contains_key("image_viewer"));
+        assert!(layout_dyn_float.contains_key("ide_window"));
+        assert!(layout_dyn_float.contains_key("browser_window"));
+
+        // 3. Desactivar modo flotante dinámico (vuelve a la normalidad como nuevo)
+        engine.dynamic_floating_windows.remove("image_viewer");
+
+        let (layout_restored, _) = engine
+            .calculate_from_payload(&workspaces, &windows, None)
+            .unwrap();
+        assert_eq!(layout_restored.len(), 3);
+        assert!(layout_restored.contains_key("image_viewer"));
     }
 }
