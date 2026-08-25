@@ -286,7 +286,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
             egui::Color32::from_white_alpha(140)
         };
         painter.circle_filled(*pos, if is_active { spot_radius } else { spot_radius * 0.7 }, color);
-        painter.circle_stroke(*pos, spot_radius, egui::Stroke::new(1.5, egui::Color32::WHITE));
+        painter.circle_stroke(*pos, spot_radius, egui::Stroke::new(1.5_f32, egui::Color32::WHITE));
     }
 
     // Overlay de la Ventana PiP Flotante en la Esquina Seleccionada
@@ -307,6 +307,6 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
 
     let pip_rect = egui::Rect::from_min_size(pip_pos, pip_size);
     painter.rect_filled(pip_rect, 6.0, pip_color);
-    painter.rect_stroke(pip_rect, 6.0, egui::Stroke::new(1.0, egui::Color32::WHITE));
+    painter.rect_stroke(pip_rect, 6.0, egui::Stroke::new(1.0_f32, egui::Color32::WHITE));
     painter.text(pip_rect.center(), egui::Align2::CENTER_CENTER, "📌 PiP", egui::FontId::monospace(9.5), egui::Color32::WHITE);
 }

@@ -122,10 +122,10 @@ do_install() {
 
     # 1. Comprobación de Requisitos
     log_step "1" "7" "Validación de Entorno y Sistema"
-    if [ "$XDG_CURRENT_DESKTOP" != "KDE" ] && [ "$XDG_SESSION_DESKTOP" != "KDE" ]; then
-        log_warning "No se detectó un entorno KDE Plasma activo. Asegúrate de estar corriendo Plasma 6."
-    else
+    if [[ "$XDG_CURRENT_DESKTOP" =~ KDE|Plasma ]] || [[ "$XDG_SESSION_DESKTOP" =~ KDE|Plasma ]] || [ "$KDE_FULL_SESSION" = "true" ]; then
         log_success "Entorno KDE Plasma detectado"
+    else
+        log_warning "No se detectó un entorno KDE Plasma activo. Asegúrate de estar corriendo Plasma 6."
     fi
 
     if ! command -v cargo >/dev/null 2>&1; then
@@ -204,9 +204,6 @@ ExecStart=$TARGET_DIR/bin/raven_engine
 WorkingDirectory=$TARGET_DIR
 Restart=always
 RestartSec=3
-CPUSchedulingPolicy=rr
-CPUSchedulingPriority=50
-OOMScoreAdjust=-200
 
 [Install]
 WantedBy=graphical-session.target
@@ -247,7 +244,7 @@ do_inject_shortcuts() {
     local SHORTCUTS_FILE="$HOME/.config/kglobalshortcutsrc"
     
     if [ ! -f "$SHORTCUTS_FILE" ]; then
-        log_warning "No se encontró el archivo $SHORTCUTS_FILE. Creando estructura inicial..."
+        mkdir -p "$(dirname "$SHORTCUTS_FILE")"
         touch "$SHORTCUTS_FILE"
     fi
 
