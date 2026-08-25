@@ -407,4 +407,48 @@ mod tests {
         assert_eq!(layout_restored.len(), 3);
         assert!(layout_restored.contains_key("image_viewer"));
     }
+
+    #[test]
+    fn test_pip_detection_and_dynamic_float_precedence() {
+        use crate::application::engine::TilingEngine;
+        use crate::infrastructure::config::{RavenConfig, WindowRule};
+
+        let mut config = RavenConfig::default();
+        config.window_rules.push(WindowRule {
+            class: "vlc".to_string(),
+            action: "pip".to_string(),
+            pip: true,
+        });
+
+        let mut engine = TilingEngine::new(config);
+        let mut workspaces = HashMap::new();
+        workspaces.insert("ws_1".to_string(), Rect::new(0, 0, 1920, 1080));
+
+        let win_normal = mock_window("editor").with_class_and_caption("code".to_string(), "Editor".to_string());
+        let win_pip_by_title = mock_window("firefox_pip").with_class_and_caption("firefox".to_string(), "Picture-in-Picture".to_string());
+        let win_pip_by_rule = mock_window("vlc_video").with_class_and_caption("vlc".to_string(), "Movie.mp4".to_string());
+
+        let windows = vec![win_normal, win_pip_by_title, win_pip_by_rule];
+
+        // 1. Rust clasifica automáticamente a firefox y vlc como PiP sin saturar el mosaico
+        let (layout, _) = engine.calculate_from_payload(&workspaces, &windows, None).unwrap();
+        assert_eq!(layout.len(), 3);
+        
+        // Editor ocupa la pantalla de mosaico completa (1920x1080 menos gaps)
+        let r_editor = layout.get("editor").unwrap();
+        assert!(r_editor.width > 1500);
+
+        // Firefox y VLC se posicionan como PiP de tamaño reducido
+        let r_firefox = layout.get("firefox_pip").unwrap();
+        assert!(r_firefox.width < 600); // 22% PiP scale
+
+        // 2. Si el usuario fuerza a VLC con Quick Peek (Meta+Shift+F), Rust anula su modo PiP
+        engine.dynamic_floating_windows.insert("vlc_video".to_string());
+        let (layout_override, _) = engine.calculate_from_payload(&workspaces, &windows, None).unwrap();
+        
+        // vlc_video sale de la grilla de mosaico y de la lista de layouts forzados
+        assert!(!layout_override.contains_key("vlc_video"));
+        assert!(layout_override.contains_key("editor"));
+        assert!(layout_override.contains_key("firefox_pip"));
+    }
 }

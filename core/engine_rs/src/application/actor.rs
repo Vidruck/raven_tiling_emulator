@@ -105,7 +105,8 @@ impl RavenControllerActor {
                             win.sb,
                             win.iq,
                             win.fs,
-                        );
+                        )
+                        .with_class_and_caption(win.cls, win.cap);
                         
                         self.controller.handle_delta_change(win_node);
                         if let Ok(commands) = self.controller.commit_layout() {

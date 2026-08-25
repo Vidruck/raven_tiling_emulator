@@ -64,6 +64,12 @@ pub struct WindowNode {
     /// Indica si la ventana se encuentra en modo pantalla completa nativo.
     #[serde(default, rename = "fs")]
     pub is_fullscreen: bool,
+    /// Clase WM / Resource class reportada por KWin (e.g. "firefox", "vlc").
+    #[serde(default)]
+    pub resource_class: String,
+    /// Título / Caption de la ventana reportado por KWin.
+    #[serde(default)]
+    pub caption: String,
     /// Proporción dinámica de ancho personalizada (ratio 2D horizontal).
     #[serde(default)]
     pub custom_w_ratio: Option<f32>,
@@ -103,8 +109,17 @@ impl WindowNode {
             strict_birth,
             is_quarantined,
             is_fullscreen,
+            resource_class: String::new(),
+            caption: String::new(),
             custom_w_ratio: None,
             custom_h_ratio: None,
         }
+    }
+
+    /// Añade información de clase y caption para arbitraje de reglas en Rust.
+    pub fn with_class_and_caption(mut self, resource_class: String, caption: String) -> Self {
+        self.resource_class = resource_class;
+        self.caption = caption;
+        self
     }
 }

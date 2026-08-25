@@ -30,6 +30,8 @@ fn create_test_window(
         strict_birth: false,
         is_quarantined: false,
         is_fullscreen: false,
+        resource_class: String::new(),
+        caption: String::new(),
         custom_w_ratio: None,
         custom_h_ratio: None,
     }

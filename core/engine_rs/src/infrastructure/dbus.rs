@@ -67,6 +67,12 @@ pub struct KWinWindow {
     /// Indica si la ventana está en modo pantalla completa nativa.
     #[serde(default)]
     pub fs: bool,
+    /// Clase WM / Resource class reportada por KWin (ej. "firefox", "vlc").
+    #[serde(default)]
+    pub cls: String,
+    /// Título / Caption reportado por KWin.
+    #[serde(default)]
+    pub cap: String,
 }
 
 /// Representa el estado global de salidas y escritorios virtuales en KWin.
@@ -120,21 +126,24 @@ pub fn parse_payload(
 
     let mut windows = Vec::with_capacity(payload.windows.len());
     for win in payload.windows {
-        windows.push(WindowNode::new(
-            win.id,
-            win.ws,
-            win.output,
-            win.desktops,
-            win.f,
-            win.m,
-            win.p,
-            Rect::new(win.x, win.y, win.w, win.h),
-            win.min_w,
-            win.min_h,
-            win.sb,
-            win.iq,
-            win.fs,
-        ));
+        windows.push(
+            WindowNode::new(
+                win.id,
+                win.ws,
+                win.output,
+                win.desktops,
+                win.f,
+                win.m,
+                win.p,
+                Rect::new(win.x, win.y, win.w, win.h),
+                win.min_w,
+                win.min_h,
+                win.sb,
+                win.iq,
+                win.fs,
+            )
+            .with_class_and_caption(win.cls, win.cap),
+        );
     }
     Ok((workspaces, windows, payload.topology))
 }

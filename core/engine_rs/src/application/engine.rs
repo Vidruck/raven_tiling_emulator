@@ -70,18 +70,73 @@ impl TilingEngine {
             return Ok((HashMap::new(), Vec::new()));
         }
 
-        // Marcar dinámicamente como flotantes las ventanas en la pila Quick Peek y apagar PiP para ellas
+        // Evaluación y Arbitraje de Ventanas en Rust (Jerarquía de Precedencia Estricta)
         let effective_windows: Vec<WindowNode> = windows
             .iter()
             .map(|w| {
-                if self.dynamic_floating_windows.contains(&w.window_id) {
-                    let mut cloned = w.clone();
+                let mut cloned = w.clone();
+                let class_lower = cloned.resource_class.to_lowercase();
+                let caption_lower = cloned.caption.to_lowercase();
+
+                // 1. PRIORIDAD MÁXIMA: Pila Flotante Dinámica (Quick Peek)
+                if self.dynamic_floating_windows.contains(&cloned.window_id) {
                     cloned.is_floating = true;
-                    cloned.is_pip = false; // Jamás tratar como PiP una ventana de la pila flotante de Rust
-                    cloned
-                } else {
-                    w.clone()
+                    cloned.is_pip = false;
+                    tracing::debug!(
+                        "[RUST ENGINE] Ventana {} ({}) fijada en Quick Peek Flotante",
+                        cloned.window_id,
+                        cloned.resource_class
+                    );
+                    return cloned;
                 }
+
+                // 2. Reglas de Usuario configuradas en GUI
+                for rule in &self.config.window_rules {
+                    if !rule.class.is_empty() && class_lower.contains(&rule.class.to_lowercase()) {
+                        if rule.pip {
+                            cloned.is_pip = true;
+                            cloned.is_floating = false;
+                            tracing::info!(
+                                "[RUST RULE] Ventana {} ({}) catalogada como PiP por regla de usuario",
+                                cloned.window_id,
+                                cloned.resource_class
+                            );
+                        } else if rule.action == "float" {
+                            cloned.is_floating = true;
+                            cloned.is_pip = false;
+                            tracing::info!(
+                                "[RUST RULE] Ventana {} ({}) catalogada como Flotante por regla de usuario",
+                                cloned.window_id,
+                                cloned.resource_class
+                            );
+                        }
+                        return cloned;
+                    }
+                }
+
+                // 3. Heurística Nativa de Detección PiP por Título (Multilenguaje)
+                let is_pip_caption = caption_lower.contains("picture-in-picture")
+                    || caption_lower.contains("picture in picture")
+                    || caption_lower.contains("imagen en imagen")
+                    || caption_lower.contains("pantalla en pantalla")
+                    || caption_lower.contains("reproductor en miniatura")
+                    || caption_lower.contains("incrustation")
+                    || caption_lower.contains("bild-in-bild")
+                    || caption_lower.contains("imagem em imagem")
+                    || caption_lower == "pip";
+
+                if is_pip_caption {
+                    cloned.is_pip = true;
+                    cloned.is_floating = false;
+                    tracing::info!(
+                        "[RUST DETECT] Ventana {} ({}) detectada como PiP por título '{}'",
+                        cloned.window_id,
+                        cloned.resource_class,
+                        cloned.caption
+                    );
+                }
+
+                cloned
             })
             .collect();
 

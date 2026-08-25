@@ -32,6 +32,8 @@ async fn test_saturation_flood() {
                 strict_birth: false,
                 is_quarantined: false,
                 is_fullscreen: false,
+                resource_class: String::new(),
+                caption: String::new(),
                 custom_w_ratio: None,
                 custom_h_ratio: None,
             };
@@ -74,6 +76,8 @@ async fn test_rebellious_window_eviction() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            resource_class: String::new(),
+            caption: String::new(),
             custom_w_ratio: None,
             custom_h_ratio: None,
         });
@@ -163,6 +167,8 @@ async fn test_rebellious_window_flood() {
             strict_birth: true,
             is_quarantined: true,
             is_fullscreen: false,
+            resource_class: String::new(),
+            caption: String::new(),
             custom_w_ratio: None,
             custom_h_ratio: None,
         }];
@@ -191,6 +197,8 @@ async fn test_rebellious_window_flood() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            resource_class: String::new(),
+            caption: String::new(),
             custom_w_ratio: None,
             custom_h_ratio: None,
         },
@@ -208,6 +216,8 @@ async fn test_rebellious_window_flood() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            resource_class: String::new(),
+            caption: String::new(),
             custom_w_ratio: None,
             custom_h_ratio: None,
         }
@@ -267,6 +277,8 @@ async fn test_all_windows_dynamically_floated_and_restored() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            resource_class: String::new(),
+            caption: String::new(),
             custom_w_ratio: None,
             custom_h_ratio: None,
         });

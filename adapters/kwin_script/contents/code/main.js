@@ -598,8 +598,8 @@ function syncState() {
         }
       }
 
-      const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
-      const isPipWindow = PIP_CAPTION_REGEX.test(strCap);
+      const strCap = w.caption ? w.caption.toString() : "";
+      const strClass = w.resourceClass ? w.resourceClass.toString() : "";
       const wsId = getWorkspaceId(w);
       const geom = getRectGeometry(w.frameGeometry);
 
@@ -610,7 +610,7 @@ function syncState() {
         output: outName,
         f: isFloating(w),
         m: Boolean(w.minimized),
-        p: isPipWindow,
+        p: false, // Rust arbitra PiP de forma nativa
         x: geom.x,
         y: geom.y,
         w: geom.w,
@@ -620,6 +620,8 @@ function syncState() {
         sb: Boolean(w.__raven_strict_birth),
         iq: Boolean(w.__raven_quarantined),
         fs: Boolean(w.fullScreen),
+        cls: strClass,
+        cap: strCap,
       });
     } catch (e) {
       Logger.error("syncState", "Error extrayendo geometría/estado de ventana", e);
@@ -699,7 +701,7 @@ function syncWindowDelta(w) {
       output: w.output ? w.output.name : "default",
       f: isFloating(w),
       m: Boolean(w.minimized),
-      p: Boolean(w.keepAbove),
+      p: false,
       x: geom.x,
       y: geom.y,
       w: geom.w,
@@ -709,6 +711,8 @@ function syncWindowDelta(w) {
       sb: Boolean(w.__raven_strict_birth),
       iq: Boolean(w.__raven_quarantined),
       fs: Boolean(w.fullScreen),
+      cls: w.resourceClass ? w.resourceClass.toString() : "",
+      cap: w.caption ? w.caption.toString() : "",
     };
     callDBus(
       "org.kde.raven.Daemon",
