@@ -263,8 +263,31 @@ function applyCommands(commandsJson) {
     const cmds = JSON.parse(commandsJson);
     const windows = workspace.windowList();
 
+    // Pasada 1: Comandos de mutación de estado/flags (set_floating, etc.)
     for (let i = 0; i < cmds.length; i++) {
       const cmd = cmds[i];
+      if (cmd.action === "set_floating") {
+        for (let j = 0; j < windows.length; j++) {
+          const w = windows[j];
+          if (getSafeWindowId(w) === cmd.window_id) {
+            try {
+              w.__raven_dynamic_float = Boolean(cmd.floating);
+              w.keepAbove = Boolean(cmd.keep_above);
+            } catch (e) {
+              Logger.error("applyCommands", "Error asignando estado flotante dinámico", e);
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    // Pasada 2: Comandos de posicionamiento, foco y migración
+    for (let i = 0; i < cmds.length; i++) {
+      const cmd = cmds[i];
+      if (cmd.action === "set_floating") {
+        continue;
+      }
       if (cmd.action === "request_sync") {
         requestStateSync();
         continue;
@@ -379,13 +402,6 @@ function applyCommands(commandsJson) {
             })(w);
           } else if (cmd.action === "saturation_warning") {
             Logger.warn("Saturation", "Pantalla cerca de saturación: " + cmd.active + "/" + cmd.cmax + " ventanas");
-          } else if (cmd.action === "set_floating") {
-            try {
-              w.__raven_dynamic_float = Boolean(cmd.floating);
-              w.keepAbove = Boolean(cmd.keep_above);
-            } catch (e) {
-              Logger.error("applyCommands", "Error asignando estado flotante dinámico", e);
-            }
           }
           break;
         }

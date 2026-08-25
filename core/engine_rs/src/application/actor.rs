@@ -16,6 +16,12 @@ pub enum RavenMessage {
         delta_json: String,
         reply: oneshot::Sender<String>,
     },
+    /// Despacha una solicitud de atajo de teclado global emitida desde el compositor o interfaz.
+    ///
+    /// * `action` - Nombre de la acción solicitada (ej. `"toggle_floating"`, `"toggle_tiling"`).
+    /// * `payload` - Parámetro numérico opcional (ej. delta de espaciado o factor de escala).
+    /// * `payload_str` - Identificador textual de ventana o parámetro string opcional (ej. `window_id`).
+    /// * `reply` - Canal oneshot para responder de forma síncrona con los comandos resultantes.
     DispatchShortcut {
         action: String,
         payload: i32,

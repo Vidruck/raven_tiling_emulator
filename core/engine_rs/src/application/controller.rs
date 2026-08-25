@@ -124,8 +124,8 @@ impl RavenController {
     /// # Retorno
     /// Verdadero (true) si la ventana está penalizada u oscilando; falso (false) de lo contrario.
     fn is_window_flapping(&mut self, win: &WindowNode) -> bool {
-        if win.strict_birth {
-            return false; // Las apps rebeldes en cuarentena tienen pase libre para intentar acatar la orden
+        if win.strict_birth || self.engine.dynamic_floating_windows.contains(&win.window_id) {
+            return false; // Las apps en cuarentena o en Quick Peek tienen pase libre
         }
         
         let now = SystemTime::now()
@@ -416,7 +416,10 @@ impl RavenController {
         let mut commands = Vec::new();
 
         match action.as_str() {
+            // Alternar estado flotante dinámico (Quick Peek)
             "toggle_floating" => {
+                // Se prioriza la ventana activa explícita provista por KWin o el foco rastreado;
+                // en su defecto, recurre al historial reciente de ventanas no minimizadas.
                 let target_wid = self.active_window_id.clone().or_else(|| {
                     self.engine.window_history.back().cloned().or_else(|| {
                         windows.iter().find(|w| !w.is_minimized).map(|w| w.window_id.clone())
@@ -424,8 +427,13 @@ impl RavenController {
                 });
 
                 if let Some(wid) = target_wid {
+                    self.flap_registry.remove(&wid);
                     if self.engine.dynamic_floating_windows.contains(&wid) {
+                        // Caso A: La ventana ya está en Quick Peek -> Devolverla al layout de mosaico (Tiling)
                         self.engine.dynamic_floating_windows.remove(&wid);
+                        if let Some(win) = self.engine.current_windows.get_mut(&wid) {
+                            win.is_floating = false;
+                        }
                         info!("[CONTROLLER] Ventana {} devuelta a la pila de mosaico (Tiling)", wid);
                         commands.push(RavenAction::SetFloating {
                             window_id: wid,
@@ -433,7 +441,11 @@ impl RavenController {
                             keep_above: false,
                         });
                     } else {
+                        // Caso B: La ventana está en mosaico -> Convertirla en flotante temporal (Quick Peek)
                         self.engine.dynamic_floating_windows.insert(wid.clone());
+                        if let Some(win) = self.engine.current_windows.get_mut(&wid) {
+                            win.is_floating = true;
+                        }
                         info!("[CONTROLLER] Ventana {} añadida a la pila flotante dinámica (Quick Peek)", wid);
                         commands.push(RavenAction::SetFloating {
                             window_id: wid,
