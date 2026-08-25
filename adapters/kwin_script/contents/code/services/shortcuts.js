@@ -48,7 +48,9 @@ function registerRavenShortcuts() {
     dispatchToRaven("toggleTiling");
   });
   registerShortcut("RavenToggleFloating", "Raven: Alternar Ventana Flotante Dinámica (Quick Peek)", "Meta+Shift+F", function () {
-    dispatchToRaven("toggleFloating");
+    var aw = workspace.activeWindow;
+    var awId = aw ? getSafeWindowId(aw) : "";
+    dispatchToRavenArg("toggleFloating", awId);
   });
   registerShortcut("RavenFocusNext", "Raven: Siguiente Ventana", "Meta+J", function () {
     dispatchToRaven("focusNext");

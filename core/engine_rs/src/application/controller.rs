@@ -419,7 +419,7 @@ impl RavenController {
             "toggle_floating" => {
                 let target_wid = self.active_window_id.clone().or_else(|| {
                     self.engine.window_history.back().cloned().or_else(|| {
-                        windows.iter().find(|w| !w.is_floating && !w.is_minimized).map(|w| w.window_id.clone())
+                        windows.iter().find(|w| !w.is_minimized).map(|w| w.window_id.clone())
                     })
                 });
 

@@ -19,6 +19,7 @@ pub enum RavenMessage {
     DispatchShortcut {
         action: String,
         payload: i32,
+        payload_str: Option<String>,
         reply: oneshot::Sender<String>,
     },
     BridgeReady,
@@ -117,12 +118,13 @@ impl RavenControllerActor {
                     }
                     let _ = reply.send(response);
                 }
-                RavenMessage::DispatchShortcut { action, payload, reply } => {
+                RavenMessage::DispatchShortcut { action, payload, payload_str, reply } => {
+                    let effective_active_id = payload_str.filter(|s| !s.trim().is_empty()).or_else(|| self.active_window_id.clone());
                     let mut all_commands = Vec::new();
                     if let Ok((needs_recalc, cmds)) = self.controller.handle_shortcut(
                         action,
                         payload,
-                        self.active_window_id.clone(),
+                        effective_active_id,
                         &self.current_topology,
                     ) {
                         all_commands.extend(cmds);

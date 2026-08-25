@@ -374,10 +374,15 @@ impl RavenDBusService {
         let _ = self.tx.send(RavenMessage::WindowActivated { window_id: val }).await;
     }
 
-    /// Alterna el modo flotante temporal (Quick Peek) para la ventana activa.
+    /// Alterna el modo flotante temporal (Quick Peek) para la ventana activa o la especificada.
     #[zbus(name = "toggleFloating")]
-    async fn toggle_floating(&self) -> String {
-        self.dispatch_shortcut("toggle_floating", 0).await
+    async fn toggle_floating(&self, window_id: String) -> String {
+        let wid = if window_id.trim().is_empty() {
+            None
+        } else {
+            Some(window_id)
+        };
+        self.dispatch_shortcut_with_str("toggle_floating", 0, wid).await
     }
 
     /// Alterna el estado operativo de activación del motor de mosaico.
@@ -543,10 +548,21 @@ impl RavenDBusService {
 impl RavenDBusService {
     /// Despacha de forma asíncrona una acción de atajo de teclado, recalculando el layout si es necesario.
     async fn dispatch_shortcut(&self, action: &str, payload: i32) -> String {
+        self.dispatch_shortcut_with_str(action, payload, None).await
+    }
+
+    /// Despacha de forma asíncrona una acción de atajo con un payload textual (ej. window_id).
+    async fn dispatch_shortcut_with_str(
+        &self,
+        action: &str,
+        payload: i32,
+        payload_str: Option<String>,
+    ) -> String {
         let (reply_tx, reply_rx) = oneshot::channel();
         let msg = RavenMessage::DispatchShortcut {
             action: action.to_string(),
             payload,
+            payload_str,
             reply: reply_tx,
         };
 
