@@ -87,6 +87,7 @@ private:
     QString m_artUrl;
     QString m_playbackStatus = QStringLiteral("Stopped");
     QString m_trackId;
+    QString m_trackUrl;
     qint64 m_position = 0;
     qint64 m_length = 0;
     bool m_canGoNext = true;

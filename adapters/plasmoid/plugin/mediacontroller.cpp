@@ -193,11 +193,26 @@ void MediaController::onPropertiesChanged(const QString &interfaceName, const QV
 void MediaController::updateMetadata(const QVariantMap &metadata)
 {
     QString newTitle = metadata.value(QLatin1String("xesam:title")).toString();
-    // Solo reiniciar si el título realmente cambió y no es un refresco del mismo medio
-    if (!newTitle.isEmpty() && newTitle != m_trackTitle) {
+    QString newTrackId = metadata.value(QLatin1String("mpris:trackid")).toString();
+    QString newTrackUrl = metadata.value(QLatin1String("xesam:url")).toString();
+
+    // Solo reiniciar posición si realmente cambió la pista (trackId o URL diferente, o título significativamente distinto y teníamos anterior)
+    bool isDifferentTrack = false;
+    if (!newTrackUrl.isEmpty() && !m_trackUrl.isEmpty()) {
+        isDifferentTrack = (newTrackUrl != m_trackUrl);
+    } else if (!newTrackId.isEmpty() && !m_trackId.isEmpty() && newTrackId != QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack")) {
+        isDifferentTrack = (newTrackId != m_trackId);
+    } else if (!newTitle.isEmpty() && !m_trackTitle.isEmpty()) {
+        // En YouTube el título puede ganar prefijos como "(1) " o cambiar mínimamente sin ser otra canción
+        isDifferentTrack = (newTitle != m_trackTitle && !newTitle.contains(m_trackTitle) && !m_trackTitle.contains(newTitle));
+    }
+
+    if (isDifferentTrack) {
         m_position = 0;
     }
+
     m_trackTitle = newTitle;
+    m_trackUrl = newTrackUrl;
 
     QVariant artistVar = metadata.value(QLatin1String("xesam:artist"));
     if (artistVar.canConvert<QStringList>()) {
@@ -211,9 +226,8 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
 
     // Fallback: If no artUrl but YouTube URL in xesam:url
     if (m_artUrl.isEmpty()) {
-        QString trackUrl = metadata.value(QLatin1String("xesam:url")).toString();
         QRegularExpression ytRegex(QStringLiteral("(?:v=|/v/|youtu\\.be/)([a-zA-Z0-9_-]{11})"));
-        QRegularExpressionMatch match = ytRegex.match(trackUrl);
+        QRegularExpressionMatch match = ytRegex.match(newTrackUrl);
         if (match.hasMatch()) {
             QString videoId = match.captured(1);
             m_artUrl = QStringLiteral("https://img.youtube.com/vi/%1/hqdefault.jpg").arg(videoId);
@@ -231,10 +245,7 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
     }
     m_length = (lenMicro > 0) ? (lenMicro / 1000000) : 0;
 
-    m_trackId = metadata.value(QLatin1String("mpris:trackid")).toString();
-    if (m_trackId.isEmpty()) {
-        m_trackId = QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack");
-    }
+    m_trackId = newTrackId.isEmpty() ? QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack") : newTrackId;
 
     queryPositionDirect();
 }
@@ -270,8 +281,14 @@ void MediaController::updatePosition()
 
 void MediaController::queryPositionDirect()
 {
-    if (m_currentService.isEmpty() || m_posWatcher) {
+    if (m_currentService.isEmpty()) {
         return;
+    }
+
+    // Si había un watcher anterior pendiente pero no ha respondido en este ciclo, cancelarlo y reintentar
+    if (m_posWatcher) {
+        m_posWatcher->deleteLater();
+        m_posWatcher = nullptr;
     }
 
     QDBusMessage msg = QDBusMessage::createMethodCall(m_currentService,
@@ -280,7 +297,7 @@ void MediaController::queryPositionDirect()
                                                       QStringLiteral("Get"));
     msg << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("Position");
 
-    QDBusPendingCall async = QDBusConnection::sessionBus().asyncCall(msg);
+    QDBusPendingCall async = QDBusConnection::sessionBus().asyncCall(msg, 500);
     m_posWatcher = new QDBusPendingCallWatcher(async, this);
     connect(m_posWatcher, &QDBusPendingCallWatcher::finished, this, &MediaController::onPositionReply);
 }
@@ -298,8 +315,8 @@ void MediaController::onPositionReply(QDBusPendingCallWatcher *watcher)
 
         if (posMicro >= 0) {
             qint64 realPos = posMicro / 1000000;
-            // Solo sincronizar si la diferencia es mayor a 1s o si el usuario hizo seek
-            if (qAbs(m_position - realPos) >= 1) {
+            // Sincronizar posición real recibida de D-Bus si hay desfase
+            if (qAbs(m_position - realPos) >= 1 || (m_position == 0 && realPos > 0)) {
                 m_position = realPos;
                 emit positionChanged();
             }
