@@ -54,6 +54,6 @@ pub fn get_strategy(layout_type: &str) -> Box<dyn LayoutStrategy> {
         "strict_dwindle" => Box::new(StrictDwindleStrategy),
         "inverted_strict_dwindle" => Box::new(InvertedStrictDwindleStrategy),
         "divisor" => Box::new(DivisorStrategy),
-        "raven" | _ => Box::new(DwindleBSPStrategy),
+        _ => Box::new(DwindleBSPStrategy),
     }
 }

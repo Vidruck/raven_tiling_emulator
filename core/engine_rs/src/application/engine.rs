@@ -182,10 +182,6 @@ impl TilingEngine {
             }
         }
 
-        if initial_len != self.window_history.len() || initial_order != self.window_history {
-            true
-        } else {
-            false
-        }
+        initial_len != self.window_history.len() || initial_order != self.window_history
     }
 }

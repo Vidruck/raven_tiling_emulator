@@ -68,7 +68,7 @@ impl LayoutStrategy for StrictDwindleStrategy {
                 break;
             }
 
-            let mut curr = container.clone();
+            let mut curr = container;
 
             // División según la dirección alternante actual
             if split_horizontal {

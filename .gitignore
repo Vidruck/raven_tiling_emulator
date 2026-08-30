@@ -1,6 +1,8 @@
-# === Rust ===
+# === Rust & CMake ===
 target/
 **/target/
+build/
+**/build/
 Cargo.lock
 
 # === Archivos de Sistema Operativo ===
@@ -22,6 +24,8 @@ Thumbs.db
 .directory
 adapters/kwin_script/*.kpackagetool6
 adapters/plasmoid/*.plasmoid
+*.so
+adapters/plasmoid/package/contents/ui/org/
 
 # === Documentación y Reportes (Uso Interno) ===
 *.md

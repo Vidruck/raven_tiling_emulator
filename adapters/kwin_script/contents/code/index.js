@@ -108,6 +108,20 @@ function initDBusBridge() {
       );
     } catch (e) { }
 
+    try {
+      registerDBusSignal(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "tilingCommandsPending",
+        function (commandsJson) {
+          if (commandsJson && commandsJson !== "[]") {
+            applyCommands(commandsJson);
+          }
+        }
+      );
+    } catch (e) { }
+
     // Sincronización inicial única y limpia tras levantar el entorno
     requestStateSync();
   }, 100);

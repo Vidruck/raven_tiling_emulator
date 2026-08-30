@@ -137,7 +137,7 @@ async fn test_simultaneous_fullscreen_across_multiple_monitors() {
                 assert!(width > 1800, "Monitor 1 debe expandirse a cerca de 1920");
             }
             if window_id == "win-m2-2" {
-                assert!(x >= 1920 && x <= 1936, "Monitor 2 debe ubicarse con respecto a x=1920");
+                assert!((1920..=1936).contains(&x), "Monitor 2 debe ubicarse con respecto a x=1920");
                 assert!(width > 2400, "Monitor 2 debe expandirse a cerca de 2560");
             }
         }

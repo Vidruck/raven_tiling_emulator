@@ -68,11 +68,7 @@ impl LayoutStrategy for DwindleBSPStrategy {
 
         let current_ordered = ordered_windows.clone();
 
-        loop {
-            if current_ordered.is_empty() {
-                break;
-            }
-
+        if !current_ordered.is_empty() {
             // 4. Clasificar ventanas en 4 zonas dinámicas: Centro, Izquierda, Derecha e Inferior
             let mut left_group = Vec::new();
             let mut right_group = Vec::new();
@@ -242,8 +238,6 @@ impl LayoutStrategy for DwindleBSPStrategy {
                     current_x += widths[i];
                 }
             }
-
-            break;
         }
 
         (layout_map, evicted_windows)

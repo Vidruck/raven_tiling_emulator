@@ -38,7 +38,7 @@ async fn test_saturation_flood() {
                 custom_h_ratio: None,
             };
             let mut guard = ctrl_clone.lock().await;
-            let _ = guard.handle_delta_change(win);
+            guard.handle_delta_change(win);
         }));
     }
 
@@ -99,8 +99,10 @@ async fn test_rebellious_window_eviction() {
 
 #[tokio::test]
 async fn test_concurrent_settings_conflict() {
-    let mut config = RavenConfig::default();
-    config.default_gaps = 4;
+    let config = RavenConfig {
+        default_gaps: 4,
+        ..Default::default()
+    };
     let engine = TilingEngine::new(config);
     let controller = Arc::new(Mutex::new(RavenController::new(engine)));
 

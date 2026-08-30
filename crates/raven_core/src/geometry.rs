@@ -80,6 +80,7 @@ pub struct WindowNode {
 
 impl WindowNode {
     /// Crea una nueva instancia de un nodo de ventana (`WindowNode`) con sus propiedades iniciales.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         window_id: String,
         workspace_id: String,

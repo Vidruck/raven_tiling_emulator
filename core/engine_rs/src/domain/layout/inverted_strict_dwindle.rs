@@ -47,9 +47,6 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
         // Estado de dirección de partición:
         // 0: Derecha (la ventana ocupa el lado derecho, el contenedor remanente queda a la izquierda)
         // 1: Abajo (la ventana ocupa la parte inferior, el contenedor remanente queda arriba)
-        // 2: Izquierda (la ventana ocupa el lado izquierdo, el contenedor remanente queda a la derecha)
-        // 3: Arriba (la ventana ocupa la parte superior, el contenedor remanente queda abajo)
-        let mut step = 0;
         let count = active_windows.len();
 
         for (i, win) in active_windows.iter().enumerate() {
@@ -58,9 +55,9 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                 break;
             }
 
-            let mut curr = container.clone();
+            let mut curr = container;
 
-            match step % 4 {
+            match i % 4 {
                 0 => {
                     // Partición vertical: la ventana toma el bloque DERECHO de tamaño master_ratio
                     let main_w = (container.width as f32 * master_ratio) as i32;
@@ -90,7 +87,7 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                     container.x += main_w;
                     container.width -= main_w;
                 }
-                3 | _ => {
+                _ => {
                     // Partición horizontal: la ventana toma el bloque SUPERIOR de tamaño master_ratio
                     let main_h = (container.height as f32 * master_ratio) as i32;
                     curr.height = main_h;
@@ -102,7 +99,6 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
             }
 
             layout_map.insert(win.window_id.clone(), apply_gaps(&curr, half_g));
-            step += 1;
         }
 
         (layout_map, evicted_windows)

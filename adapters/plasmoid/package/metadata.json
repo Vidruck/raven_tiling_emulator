@@ -1,0 +1,21 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Alejandro Gonzalez Hernández (Vidruck)"
+            }
+        ],
+        "Category": "Application Launchers",
+        "Description": "Centro de Mando interactivo y lanzador de aplicaciones con control de Mosaico (Tiling) para Plasma 6",
+        "Icon": "start-here-kde",
+        "Id": "org.kde.plasma.ravenlauncher",
+        "Name": "Raven Hub & Launcher",
+        "Version": "3.3.0",
+        "Website": "https://github.com/Vidruck/raven_tiling_emulator"
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-Provides": [
+        "org.kde.plasma.launchermenu"
+    ]
+}

@@ -29,6 +29,7 @@ use super::strategy::get_strategy;
 ///
 /// # Retorno
 /// Tupla `(HashMap<WindowId, Rect>, Vec<EvictedWindowId>)` con las geometrías de todas las ventanas.
+#[allow(clippy::too_many_arguments)]
 pub fn calculate_global_topology(
     windows: &[WindowNode],
     workspaces: &HashMap<String, Rect>,
@@ -50,7 +51,7 @@ pub fn calculate_global_topology(
         if !win.is_floating || win.is_pip || win.is_fullscreen {
             windows_by_ws
                 .entry(win.workspace_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(win.clone());
         }
     }

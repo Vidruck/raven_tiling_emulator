@@ -81,8 +81,8 @@ impl LayoutStrategy for TallStrategy {
 
             // Restricción dinámicas para el área Master
             let mut max_master_min_w = 0;
-            for i in 0..nmaster {
-                let clamped_min = active_windows[i].min_w.min(max_allowed_min_w);
+            for win in active_windows.iter().take(nmaster) {
+                let clamped_min = win.min_w.min(max_allowed_min_w);
                 if clamped_min > max_master_min_w {
                     max_master_min_w = clamped_min;
                 }

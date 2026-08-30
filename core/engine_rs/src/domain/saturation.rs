@@ -1,7 +1,8 @@
-/// # Motor de Composición Predictiva — Saturación de Pantalla
-///
-/// Calcula el número máximo de ventanas que caben en una pantalla antes de que
-/// ocurra colapso visual (Cmax), y modela los estados de saturación del compositor.
+//! # Motor de Composición Predictiva — Saturación de Pantalla
+//!
+//! Calcula el número máximo de ventanas que caben en una pantalla antes de que
+//! ocurra colapso visual (Cmax), y modela los estados de saturación del compositor.
+
 
 /// Estado de saturación de la composición en pantalla.
 #[derive(Debug, Clone, PartialEq)]

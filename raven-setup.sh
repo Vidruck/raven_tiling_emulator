@@ -12,7 +12,7 @@ TARGET_DIR="$HOME/.local/share/raven"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ICON_NAME="org.kde.raven.tiling"
 KWIN_SCRIPT_ID="org.kde.raven.bridge"
-PLASMOID_ID="org.kde.raven.toggle"
+PLASMOID_ID="org.kde.plasma.ravenlauncher"
 
 # --- Estilos Visuales & Paleta ---
 BOLD='\033[1m'
@@ -144,9 +144,12 @@ do_install() {
     log_step "3" "7" "Despliegue de Binarios en Entorno Local"
     systemctl --user stop raven.service 2>/dev/null || true
     mkdir -p "$TARGET_DIR/bin"
+    mkdir -p "$HOME/.local/bin"
     install -m 755 "$SOURCE_DIR/target/release/raven_engine" "$TARGET_DIR/bin/raven_engine"
     install -m 755 "$SOURCE_DIR/target/release/raven_gui" "$TARGET_DIR/bin/raven_gui"
-    log_success "Ejecutables instalados en $TARGET_DIR/bin/"
+    ln -sf "$TARGET_DIR/bin/raven_engine" "$HOME/.local/bin/raven_engine"
+    ln -sf "$TARGET_DIR/bin/raven_gui" "$HOME/.local/bin/raven_gui"
+    log_success "Ejecutables instalados en $TARGET_DIR/bin/ y enlazados en ~/.local/bin/"
 
     # 4. Iconos y Lanzadores Desktop
     log_step "4" "7" "Integración de Escritorio e Iconografía"
@@ -172,12 +175,37 @@ EOF
     log_success "Lanzadores e icono registrados en el sistema"
 
     # 5. Generación de Bundle JS y Registro de Adaptadores KWin / Plasmoid
-    log_step "5" "7" "Empaquetado JS y Despliegue de Adaptadores KDE"
+    log_step "5" "7" "Empaquetado JS, C++ y Despliegue de Adaptadores KDE"
     if [ -f "$SOURCE_DIR/build_kwin_bundle.sh" ]; then
         log_info "Ejecutando build_kwin_bundle.sh..."
         bash "$SOURCE_DIR/build_kwin_bundle.sh" >/dev/null 2>&1
         log_success "Bundle main.js ensamblado exitosamente"
     fi
+
+    log_info "Compilando Plugin Nativo C++ / QML de Raven Hub..."
+    cmake -B "$SOURCE_DIR/adapters/plasmoid/build" -S "$SOURCE_DIR/adapters/plasmoid" -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 || true
+    cmake --build "$SOURCE_DIR/adapters/plasmoid/build" -j"$(nproc 2>/dev/null || echo 2)" >/dev/null 2>&1 || true
+    cmake --install "$SOURCE_DIR/adapters/plasmoid/build" --prefix "$HOME/.local" >/dev/null 2>&1 || true
+
+    # Desplegar módulo en rutas locales de QML
+    local build_qml_dir="$SOURCE_DIR/adapters/plasmoid/build/plugin/org/kde/plasma/ravenlauncher/plugin"
+    if [ -d "$build_qml_dir" ]; then
+        local qml_paths=(
+            "$HOME/.local/lib/qt6/qml/org/kde/plasma/ravenlauncher/plugin"
+            "$HOME/.local/lib64/qt6/qml/org/kde/plasma/ravenlauncher/plugin"
+            "$HOME/.local/share/qml/org/kde/plasma/ravenlauncher/plugin"
+            "$SOURCE_DIR/adapters/plasmoid/package/contents/ui/org/kde/plasma/ravenlauncher/plugin"
+        )
+        cp -a "$SOURCE_DIR/adapters/plasmoid/plugin/RavenTheme.qml" "$build_qml_dir/" 2>/dev/null || true
+        for p in "${qml_paths[@]}"; do
+            mkdir -p "$p"
+            cp -a "$build_qml_dir"/* "$p/" 2>/dev/null || true
+        done
+        local user_qml_path="$HOME/.local/lib/qt6/qml:$HOME/.local/lib64/qt6/qml:$HOME/.local/share/qml"
+        systemctl --user set-environment QML2_IMPORT_PATH="$user_qml_path:$QML2_IMPORT_PATH" 2>/dev/null || true
+        systemctl --user set-environment QML_IMPORT_PATH="$user_qml_path:$QML_IMPORT_PATH" 2>/dev/null || true
+    fi
+    log_success "Plugin C++ / QML de Raven Hub compilado y desplegado"
 
     log_info "Instalando script de KWin '$KWIN_SCRIPT_ID'..."
     kpackagetool6 --type=KWin/Script -i "$SOURCE_DIR/adapters/kwin_script/" >/dev/null 2>&1 || \
@@ -185,9 +213,13 @@ EOF
     log_success "Script de KWin registrado en Plasma 6"
 
     log_info "Instalando Plasmoide para el panel '$PLASMOID_ID'..."
-    kpackagetool6 --type=Plasma/Applet -i "$SOURCE_DIR/adapters/plasmoid/" >/dev/null 2>&1 || \
-    kpackagetool6 --type=Plasma/Applet -u "$SOURCE_DIR/adapters/plasmoid/" >/dev/null 2>&1
-    log_success "Plasmoide de Plasma 6 instalado/actualizado"
+    # Eliminar applet viejo toggle si existiera para evitar duplicados
+    kpackagetool6 --type=Plasma/Applet -r "org.kde.raven.toggle" >/dev/null 2>&1 || true
+    rm -rf "$HOME/.local/share/plasma/plasmoids/org.kde.raven.toggle" 2>/dev/null || true
+
+    kpackagetool6 --type=Plasma/Applet -i "$SOURCE_DIR/adapters/plasmoid/package" >/dev/null 2>&1 || \
+    kpackagetool6 --type=Plasma/Applet -u "$SOURCE_DIR/adapters/plasmoid/package" >/dev/null 2>&1
+    log_success "Plasmoide de Plasma 6 ($PLASMOID_ID) instalado/actualizado"
 
     do_inject_shortcuts
 
