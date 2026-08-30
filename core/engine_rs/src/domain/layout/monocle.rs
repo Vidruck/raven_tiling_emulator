@@ -32,23 +32,22 @@ impl LayoutStrategy for MonocleStrategy {
         default_gaps: i32,
         _active_window_id: Option<String>,
     ) -> (HashMap<String, Rect>, Vec<String>) {
-        let mut layout_map = HashMap::new();
-        let evicted_windows = Vec::new();
-
-        // 1. Filtrar solo ventanas que participan en la cuadrícula
-        let active_windows: Vec<WindowNode> = windows
+        let active_windows: Vec<&WindowNode> = windows
             .iter()
             .filter(|w| !w.is_floating && !w.is_minimized)
-            .cloned()
             .collect();
 
         if active_windows.is_empty() {
-            return (layout_map, evicted_windows);
+            return (HashMap::new(), Vec::new());
         }
+
+        let mut layout_map = HashMap::with_capacity(active_windows.len());
+        let evicted_windows = Vec::new();
+        let target_rect = apply_gaps(&screen_rect, default_gaps);
 
         // 2. Definir el contenedor principal aplicando los gaps configurados
         for win in active_windows {
-            layout_map.insert(win.window_id.clone(), apply_gaps(&screen_rect, default_gaps));
+            layout_map.insert(win.window_id.clone(), target_rect);
         }
 
         (layout_map, evicted_windows)

@@ -33,19 +33,18 @@ impl LayoutStrategy for TallStrategy {
         default_gaps: i32,
         _active_window_id: Option<String>,
     ) -> (HashMap<String, Rect>, Vec<String>) {
-        let mut layout_map = HashMap::new();
-        let evicted_windows = Vec::new();
-
         // 1. Filtrar ventanas activas en el mosaico
-        let active_windows: Vec<WindowNode> = windows
+        let active_windows: Vec<&WindowNode> = windows
             .iter()
             .filter(|w| !w.is_floating && !w.is_minimized)
-            .cloned()
             .collect();
 
         if active_windows.is_empty() {
-            return (layout_map, evicted_windows);
+            return (HashMap::new(), Vec::new());
         }
+
+        let mut layout_map = HashMap::with_capacity(active_windows.len());
+        let evicted_windows = Vec::new();
 
         // 2. Definir el contenedor principal respetando gaps periféricos
         let half_g = default_gaps / 2;

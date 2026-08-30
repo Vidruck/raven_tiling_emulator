@@ -34,28 +34,24 @@ impl LayoutStrategy for DwindleBSPStrategy {
         default_gaps: i32,
         _active_window_id: Option<String>,
     ) -> (HashMap<String, Rect>, Vec<String>) {
-        let mut layout_map = HashMap::new();
-        let evicted_windows = Vec::new();
-
         // 1. Validar que la pantalla tenga un área válida para trabajar
         let total_area = screen_rect.width * screen_rect.height;
         if total_area <= 0 || screen_rect.width <= 0 || screen_rect.height <= 0 {
-            return (layout_map, evicted_windows);
+            return (HashMap::new(), Vec::new());
         }
 
         // 2. Filtrar únicamente ventanas en mosaico (excluye flotantes y minimizadas)
-        let active_windows: Vec<WindowNode> = windows
+        let active_windows: Vec<&WindowNode> = windows
             .iter()
             .filter(|w| !w.is_floating && !w.is_minimized)
-            .cloned()
             .collect();
 
         if active_windows.is_empty() {
-            return (layout_map, evicted_windows);
+            return (HashMap::new(), Vec::new());
         }
 
-        // Mantener orden cronológico estable FIFO sin permutar por foco
-        let ordered_windows = active_windows.clone();
+        let mut layout_map = HashMap::with_capacity(active_windows.len());
+        let evicted_windows = Vec::new();
 
         // 3. Crear el marco del contenedor descontando el espaciado (gap) periférico
         let half_g = default_gaps / 2;
@@ -66,41 +62,41 @@ impl LayoutStrategy for DwindleBSPStrategy {
             height: std::cmp::max(1, screen_rect.height - default_gaps),
         };
 
-        let current_ordered = ordered_windows.clone();
+        let current_ordered = active_windows;
 
         if !current_ordered.is_empty() {
             // 4. Clasificar ventanas en 4 zonas dinámicas: Centro, Izquierda, Derecha e Inferior
-            let mut left_group = Vec::new();
-            let mut right_group = Vec::new();
-            let mut bottom_group = Vec::new();
-            let mut center_group = Vec::new();
-
             let total_count = current_ordered.len();
+            let mut left_group = Vec::with_capacity(total_count);
+            let mut right_group = Vec::with_capacity(total_count);
+            let mut bottom_group = Vec::with_capacity(total_count);
+            let mut center_group = Vec::with_capacity(total_count);
+
             if total_count == 3 {
                 // Caso optimizado v3.2: 3 ventanas (Master Superior + Dúo Inferior)
-                center_group.push(current_ordered[0].clone()); // Ventana 1: Master Superior
-                bottom_group.push(current_ordered[1].clone()); // Ventana 2: Panel Inferior Izquierdo
-                bottom_group.push(current_ordered[2].clone()); // Ventana 3: Panel Inferior Derecho
+                center_group.push(current_ordered[0]); // Ventana 1: Master Superior
+                bottom_group.push(current_ordered[1]); // Ventana 2: Panel Inferior Izquierdo
+                bottom_group.push(current_ordered[2]); // Ventana 3: Panel Inferior Derecho
             } else {
-                for (idx, win) in current_ordered.iter().enumerate() {
+                for (idx, &win) in current_ordered.iter().enumerate() {
                     if idx == 0 {
-                        center_group.push(win.clone()); // Ventana 1: Área Central
+                        center_group.push(win); // Ventana 1: Área Central
                     } else if idx == 1 {
-                        left_group.push(win.clone()); // Ventana 2: Sidebar Izquierdo
+                        left_group.push(win); // Ventana 2: Sidebar Izquierdo
                     } else if idx == 2 {
-                        right_group.push(win.clone()); // Ventana 3: Sidebar Derecho
+                        right_group.push(win); // Ventana 3: Sidebar Derecho
                     } else if idx == 3 {
-                        bottom_group.push(win.clone()); // Ventana 4: Panel Inferior Izquierdo
+                        bottom_group.push(win); // Ventana 4: Panel Inferior Izquierdo
                     } else if idx == 4 {
-                        bottom_group.push(win.clone()); // Ventana 5: Panel Inferior Derecho
+                        bottom_group.push(win); // Ventana 5: Panel Inferior Derecho
                     } else {
                         // idx >= 5: Subdivisión jerárquica cíclica (Laterales primero, luego Centro)
                         if idx % 3 == 2 {
-                            left_group.push(win.clone());
+                            left_group.push(win);
                         } else if idx % 3 == 0 {
-                            right_group.push(win.clone());
+                            right_group.push(win);
                         } else {
-                            center_group.push(win.clone());
+                            center_group.push(win);
                         }
                     }
                 }

@@ -295,8 +295,8 @@ impl From<RavenAction> for TilingCommand {
             RavenAction::SaturationWarning { cmax, active } => TilingCommand {
                 action: "saturation_warning".to_string(),
                 window_id: None,
-                x: Some(cmax as i32),
-                y: Some(active as i32),
+                x: Some(i32::try_from(cmax).unwrap_or(i32::MAX)),
+                y: Some(i32::try_from(active).unwrap_or(i32::MAX)),
                 width: None,
                 height: None,
                 target_ws: None,

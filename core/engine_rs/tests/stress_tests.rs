@@ -19,7 +19,7 @@ async fn test_saturation_flood() {
         let ctrl_clone = controller.clone();
         tasks.push(tokio::spawn(async move {
             let win = WindowNode {
-                window_id: format!("win-{}", i),
+                window_id: format!("win-{i}"),
                 workspace_id: "default||default".to_string(),
                 output: "default".to_string(),
                 desktops: vec![],
@@ -63,7 +63,7 @@ async fn test_rebellious_window_eviction() {
     let mut windows = vec![];
     for i in 0..4 {
         windows.push(WindowNode {
-            window_id: format!("win-{}", i),
+            window_id: format!("win-{i}"),
             workspace_id: "default||default".to_string(),
             output: "default".to_string(),
             desktops: vec![],
@@ -266,7 +266,7 @@ async fn test_all_windows_dynamically_floated_and_restored() {
     let mut windows = Vec::new();
     for i in 0..window_count {
         windows.push(WindowNode {
-            window_id: format!("app-{}", i),
+            window_id: format!("app-{i}"),
             workspace_id: workspace_id.clone(),
             output: "DP-1".to_string(),
             desktops: vec!["desk_1".to_string()],
