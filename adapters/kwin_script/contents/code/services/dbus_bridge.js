@@ -84,17 +84,15 @@ function syncState() {
 
       const strCap = w.caption ? w.caption.toString() : "";
       const strClass = w.resourceClass ? w.resourceClass.toString() : "";
-      const wsId = getWorkspaceId(w);
       const geom = getRectGeometry(w.frameGeometry);
 
       winState.push({
         id: safeId,
-        ws: wsId,
         desktops: deskIds,
         output: outName,
         f: isFloating(w),
         m: Boolean(w.minimized),
-        p: false, // Rust arbitra PiP de forma nativa
+        p: false,
         x: geom.x,
         y: geom.y,
         w: geom.w,
@@ -180,7 +178,6 @@ function syncWindowDelta(w) {
 
     const deltaPayload = {
       id: safeId,
-      ws: getWorkspaceId(w),
       desktops: deskIds,
       output: w.output ? w.output.name : "default",
       f: isFloating(w),

@@ -372,35 +372,11 @@ function isSameDesktop(w1, w2) {
   return false;
 }
 /**
- * @fileoverview Lógica de cuarentena para ventanas CSD/Gecko al nacer.
+ * @fileoverview Lógica de estabilización CSD para ventanas de arranque asíncrono.
  */
 
 /**
- * Calcula el tiempo óptimo de cuarentena para una ventana según la heurística
- * de arranque en frío (Cold Start) o caliente (Warm Start).
- *
- * @param {string} strClass - Nombre en minúsculas de la clase de recurso de la ventana.
- * @returns {number} Duración del temporizador de estabilización en milisegundos.
- */
-function calculateQuarantineDuration(strClass) {
-  if (strClass === "") {
-    return 150; // Sin clase asignada al nacer, dar más margen
-  }
-
-  let similarCount = 0;
-  const allWindows = workspace.windowList();
-  for (let k = 0; k < allWindows.length; k++) {
-    const wc = allWindows[k].resourceClass ? allWindows[k].resourceClass.toString().toLowerCase() : "";
-    if (wc === strClass) {
-      similarCount++;
-    }
-  }
-
-  return similarCount <= 1 ? 120 : 80; // 120ms Cold start, 80ms Warm start
-}
-
-/**
- * Procesa el ingreso de una nueva ventana evaluando si requiere entrar en cuarentena.
+ * Procesa el ingreso de una nueva ventana evaluando si requiere estabilización temporal CSD.
  *
  * @param {KWin::Window} w - Ventana que se está añadiendo.
  */
@@ -410,11 +386,9 @@ function processNewWindow(w) {
   }
 
   const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
-  let needsQuarantine = false;
+  let needsQuarantine = (strClass === "");
 
-  if (strClass === "") {
-    needsQuarantine = true;
-  } else {
+  if (!needsQuarantine && _quarantine_classes) {
     for (let i = 0; i < _quarantine_classes.length; i++) {
       if (strClass.indexOf(_quarantine_classes[i]) !== -1) {
         needsQuarantine = true;
@@ -423,11 +397,11 @@ function processNewWindow(w) {
     }
   }
 
+  bindWindow(w);
+
   if (needsQuarantine) {
     w.__raven_quarantined = true;
-    bindWindow(w);
-
-    const quarantineDurationMs = calculateQuarantineDuration(strClass);
+    const durationMs = (strClass === "") ? 120 : 80;
 
     w.__raven_stab_timer = setKWinTimeout(() => {
       if (w && !w.deleted) {
@@ -436,14 +410,13 @@ function processNewWindow(w) {
         w.__raven_stab_timer = null;
         requestStateSync();
       }
-    }, quarantineDurationMs);
+    }, durationMs);
   } else {
-    bindWindow(w);
     requestStateSync();
   }
 }
 /**
- * @fileoverview Algoritmo de navegación y foco direccional nativo con resalte visual.
+ * @fileoverview Resalte visual con el sistema de Outline de KWin.
  */
 
 /**
@@ -463,57 +436,6 @@ function highlightWindow(w) {
   } catch (e) { }
 }
 
-/**
- * Foco direccional nativo utilizando geometría de KWin.
- *
- * @param {number} dx - Dirección en el eje X (-1 izquierda, 1 derecha, 0 neutro).
- * @param {number} dy - Dirección en el eje Y (-1 arriba, 1 abajo, 0 neutro).
- */
-function focusDirection(dx, dy) {
-  try {
-    const activeWin = workspace.activeWindow;
-    if (!activeWin) return;
-
-    const actRect = getRectGeometry(activeWin.frameGeometry);
-    const cx = actRect.x + actRect.w / 2;
-    const cy = actRect.y + actRect.h / 2;
-
-    let bestWin = null;
-    let bestDist = Infinity;
-
-    const windows = workspace.windowList();
-    for (let i = 0; i < windows.length; i++) {
-      const w = windows[i];
-      if (w === activeWin || !isManageable(w) || w.minimized) continue;
-
-      const desktopMatch = isSameDesktop(w, activeWin);
-      if (!desktopMatch && (!w.onAllDesktops && !activeWin.onAllDesktops)) continue;
-
-      const r = getRectGeometry(w.frameGeometry);
-      const wx = r.x + r.w / 2;
-      const wy = r.y + r.h / 2;
-
-      // Filtrado según dirección solicitada
-      if (dx > 0 && wx <= cx) continue;
-      if (dx < 0 && wx >= cx) continue;
-      if (dy > 0 && wy <= cy) continue;
-      if (dy < 0 && wy >= cy) continue;
-
-      const dist = Math.pow(wx - cx, 2) + Math.pow(wy - cy, 2);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestWin = w;
-      }
-    }
-
-    if (bestWin) {
-      workspace.activeWindow = bestWin;
-      highlightWindow(bestWin);
-    }
-  } catch (e) {
-    Logger.error("focusDirection", "Error enfocando dirección " + dx + "," + dy, e);
-  }
-}
 /**
  * @fileoverview Servicios de comunicación D-Bus para sincronización entre KWin y el demonio Rust.
  */
@@ -600,17 +522,15 @@ function syncState() {
 
       const strCap = w.caption ? w.caption.toString() : "";
       const strClass = w.resourceClass ? w.resourceClass.toString() : "";
-      const wsId = getWorkspaceId(w);
       const geom = getRectGeometry(w.frameGeometry);
 
       winState.push({
         id: safeId,
-        ws: wsId,
         desktops: deskIds,
         output: outName,
         f: isFloating(w),
         m: Boolean(w.minimized),
-        p: false, // Rust arbitra PiP de forma nativa
+        p: false,
         x: geom.x,
         y: geom.y,
         w: geom.w,
@@ -696,7 +616,6 @@ function syncWindowDelta(w) {
 
     const deltaPayload = {
       id: safeId,
-      ws: getWorkspaceId(w),
       desktops: deskIds,
       output: w.output ? w.output.name : "default",
       f: isFloating(w),
@@ -1129,16 +1048,16 @@ function registerRavenShortcuts() {
     dispatchToRaven("focusPrev");
   });
   registerShortcut("RavenFocusLeft", "Raven: Foco Izquierda", "Meta+Left", function () {
-    focusDirection(-1, 0);
+    dispatchToRaven("focusLeft");
   });
   registerShortcut("RavenFocusRight", "Raven: Foco Derecha", "Meta+Right", function () {
-    focusDirection(1, 0);
+    dispatchToRaven("focusRight");
   });
   registerShortcut("RavenFocusUp", "Raven: Foco Arriba", "Meta+Up", function () {
-    focusDirection(0, -1);
+    dispatchToRaven("focusUp");
   });
   registerShortcut("RavenFocusDown", "Raven: Foco Abajo", "Meta+Down", function () {
-    focusDirection(0, 1);
+    dispatchToRaven("focusDown");
   });
   registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function () {
     dispatchToRaven("swapNext");

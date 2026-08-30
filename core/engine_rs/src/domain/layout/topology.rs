@@ -171,6 +171,69 @@ pub fn calculate_global_topology(
     (global_layout, global_evicted)
 }
 
+/// Determina la ventana más cercana en una dirección cardinal (dx, dy) respecto a la ventana activa.
+///
+/// # Parámetros
+/// - `active_id`: Identificador de la ventana actualmente enfocada.
+/// - `layout`: Mapa de geometrías calculadas por el motor.
+/// - `dx`: Dirección horizontal (-1 izquierda, 1 derecha, 0 neutro).
+/// - `dy`: Dirección vertical (-1 arriba, 1 abajo, 0 neutro).
+///
+/// # Retorno
+/// Identificador de la ventana objetivo más cercana en esa dirección, o `None` si no existe.
+pub fn find_directional_focus(
+    active_id: &str,
+    layout: &HashMap<String, Rect>,
+    dx: i32,
+    dy: i32,
+) -> Option<String> {
+    let act_rect = layout.get(active_id)?;
+    let cx = act_rect.x as f32 + (act_rect.width as f32 / 2.0);
+    let cy = act_rect.y as f32 + (act_rect.height as f32 / 2.0);
+
+    let mut best_id = None;
+    let mut best_dist = f32::INFINITY;
+
+    for (win_id, rect) in layout {
+        if win_id == active_id {
+            continue;
+        }
+
+        let wx = rect.x as f32 + (rect.width as f32 / 2.0);
+        let wy = rect.y as f32 + (rect.height as f32 / 2.0);
+
+        // Filtrado estricto por dirección cardinal
+        if dx > 0 && wx <= cx {
+            continue;
+        }
+        if dx < 0 && wx >= cx {
+            continue;
+        }
+        if dy > 0 && wy <= cy {
+            continue;
+        }
+        if dy < 0 && wy >= cy {
+            continue;
+        }
+
+        // Ponderar distancia euclidiana (con penalización suave al eje ortogonal para favorecer el vector principal)
+        let delta_x = wx - cx;
+        let delta_y = wy - cy;
+        let dist = if dx != 0 {
+            delta_x.powi(2) + (delta_y * 1.5).powi(2)
+        } else {
+            (delta_x * 1.5).powi(2) + delta_y.powi(2)
+        };
+
+        if dist < best_dist {
+            best_dist = dist;
+            best_id = Some(win_id.clone());
+        }
+    }
+
+    best_id
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

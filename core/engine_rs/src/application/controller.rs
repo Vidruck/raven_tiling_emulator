@@ -636,6 +636,34 @@ impl RavenController {
                     });
                 }
             }
+            "focus_left" | "focus_right" | "focus_up" | "focus_down" => {
+                let (dx, dy) = match action.as_str() {
+                    "focus_left" => (-1, 0),
+                    "focus_right" => (1, 0),
+                    "focus_up" => (0, -1),
+                    "focus_down" => (0, 1),
+                    _ => (0, 0),
+                };
+
+                let effective_active_id = active_window_id.clone().or_else(|| {
+                    self.engine.window_history.back().cloned().or_else(|| {
+                        windows.iter().find(|w| !w.is_floating && !w.is_minimized).map(|w| w.window_id.clone())
+                    })
+                });
+
+                if let Some(ref act_id) = effective_active_id {
+                    if let Some(target_id) = crate::domain::layout::topology::find_directional_focus(
+                        act_id,
+                        &self.last_known_layout,
+                        dx,
+                        dy,
+                    ) {
+                        commands.push(RavenAction::FocusWindow {
+                            window_id: target_id,
+                        });
+                    }
+                }
+            }
             "migrate_active_to_screen"
             | "migrate_active_to_desktop"
             | "migrate_active_to_prev_screen"

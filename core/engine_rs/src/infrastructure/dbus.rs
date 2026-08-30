@@ -21,21 +21,21 @@ pub struct KWinScreen {
     pub h: i32,
 }
 
-/// Representa el estado de una ventana enviado por el puente de KWin.
-#[derive(Debug, Deserialize)]
+/// Representa una ventana individual recibida en el payload de sincronización de KWin.
+#[derive(Debug, Deserialize, Clone)]
 pub struct KWinWindow {
-    /// Identificador único de la ventana.
+    /// Identificador único de la ventana en KWin.
     pub id: String,
-    /// Identificador del área de trabajo (workspace ID) actual.
+    /// Identificador del espacio de trabajo compuesto ("Output||DesktopId").
     #[serde(default)]
     pub ws: String,
-    /// Nombre de la salida (output) física a la que pertenece.
+    /// Salida (output) física de la ventana.
     #[serde(default)]
     pub output: String,
-    /// Listado de identificadores de escritorios virtuales.
+    /// Lista de escritorios virtuales a los que pertenece la ventana.
     #[serde(default)]
     pub desktops: Vec<String>,
-    /// Indica si la ventana está marcada como flotante (floating).
+    /// Indica si la ventana es flotante.
     #[serde(default)]
     pub f: bool,
     /// Indica si la ventana está minimizada.
@@ -128,10 +128,18 @@ pub fn parse_payload(
 
     let mut windows = Vec::with_capacity(payload.windows.len());
     for win in payload.windows {
+        let ws_id = if !win.ws.is_empty() {
+            win.ws
+        } else {
+            let out_name = if !win.output.is_empty() { win.output.as_str() } else { "default" };
+            let desk_name = win.desktops.first().map(|d| d.as_str()).unwrap_or("default_desk");
+            format!("{}||{}", out_name, desk_name)
+        };
+
         windows.push(
             WindowNode::new(
                 win.id,
-                win.ws,
+                ws_id,
                 win.output,
                 win.desktops,
                 win.f,
@@ -459,6 +467,30 @@ impl RavenDBusService {
     #[zbus(name = "focusPrev")]
     async fn focus_prev(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
         self.dispatch_shortcut(&signal_ctxt, "focus_prev", 0).await
+    }
+
+    /// Envía el foco a la ventana a la izquierda en la topología.
+    #[zbus(name = "focusLeft")]
+    async fn focus_left(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
+        self.dispatch_shortcut(&signal_ctxt, "focus_left", 0).await
+    }
+
+    /// Envía el foco a la ventana a la derecha en la topología.
+    #[zbus(name = "focusRight")]
+    async fn focus_right(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
+        self.dispatch_shortcut(&signal_ctxt, "focus_right", 0).await
+    }
+
+    /// Envía el foco a la ventana superior en la topología.
+    #[zbus(name = "focusUp")]
+    async fn focus_up(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
+        self.dispatch_shortcut(&signal_ctxt, "focus_up", 0).await
+    }
+
+    /// Envía el foco a la ventana inferior en la topología.
+    #[zbus(name = "focusDown")]
+    async fn focus_down(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
+        self.dispatch_shortcut(&signal_ctxt, "focus_down", 0).await
     }
 
     /// Intercambia la ventana activa con la siguiente en la pila.

@@ -1,33 +1,9 @@
 /**
- * @fileoverview Lógica de cuarentena para ventanas CSD/Gecko al nacer.
+ * @fileoverview Lógica de estabilización CSD para ventanas de arranque asíncrono.
  */
 
 /**
- * Calcula el tiempo óptimo de cuarentena para una ventana según la heurística
- * de arranque en frío (Cold Start) o caliente (Warm Start).
- *
- * @param {string} strClass - Nombre en minúsculas de la clase de recurso de la ventana.
- * @returns {number} Duración del temporizador de estabilización en milisegundos.
- */
-function calculateQuarantineDuration(strClass) {
-  if (strClass === "") {
-    return 150; // Sin clase asignada al nacer, dar más margen
-  }
-
-  let similarCount = 0;
-  const allWindows = workspace.windowList();
-  for (let k = 0; k < allWindows.length; k++) {
-    const wc = allWindows[k].resourceClass ? allWindows[k].resourceClass.toString().toLowerCase() : "";
-    if (wc === strClass) {
-      similarCount++;
-    }
-  }
-
-  return similarCount <= 1 ? 120 : 80; // 120ms Cold start, 80ms Warm start
-}
-
-/**
- * Procesa el ingreso de una nueva ventana evaluando si requiere entrar en cuarentena.
+ * Procesa el ingreso de una nueva ventana evaluando si requiere estabilización temporal CSD.
  *
  * @param {KWin::Window} w - Ventana que se está añadiendo.
  */
@@ -37,11 +13,9 @@ function processNewWindow(w) {
   }
 
   const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
-  let needsQuarantine = false;
+  let needsQuarantine = (strClass === "");
 
-  if (strClass === "") {
-    needsQuarantine = true;
-  } else {
+  if (!needsQuarantine && _quarantine_classes) {
     for (let i = 0; i < _quarantine_classes.length; i++) {
       if (strClass.indexOf(_quarantine_classes[i]) !== -1) {
         needsQuarantine = true;
@@ -50,11 +24,11 @@ function processNewWindow(w) {
     }
   }
 
+  bindWindow(w);
+
   if (needsQuarantine) {
     w.__raven_quarantined = true;
-    bindWindow(w);
-
-    const quarantineDurationMs = calculateQuarantineDuration(strClass);
+    const durationMs = (strClass === "") ? 120 : 80;
 
     w.__raven_stab_timer = setKWinTimeout(() => {
       if (w && !w.deleted) {
@@ -63,9 +37,8 @@ function processNewWindow(w) {
         w.__raven_stab_timer = null;
         requestStateSync();
       }
-    }, quarantineDurationMs);
+    }, durationMs);
   } else {
-    bindWindow(w);
     requestStateSync();
   }
 }

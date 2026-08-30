@@ -59,16 +59,16 @@ function registerRavenShortcuts() {
     dispatchToRaven("focusPrev");
   });
   registerShortcut("RavenFocusLeft", "Raven: Foco Izquierda", "Meta+Left", function () {
-    focusDirection(-1, 0);
+    dispatchToRaven("focusLeft");
   });
   registerShortcut("RavenFocusRight", "Raven: Foco Derecha", "Meta+Right", function () {
-    focusDirection(1, 0);
+    dispatchToRaven("focusRight");
   });
   registerShortcut("RavenFocusUp", "Raven: Foco Arriba", "Meta+Up", function () {
-    focusDirection(0, -1);
+    dispatchToRaven("focusUp");
   });
   registerShortcut("RavenFocusDown", "Raven: Foco Abajo", "Meta+Down", function () {
-    focusDirection(0, 1);
+    dispatchToRaven("focusDown");
   });
   registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function () {
     dispatchToRaven("swapNext");
