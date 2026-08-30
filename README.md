@@ -92,7 +92,7 @@ El proyecto prioriza la eficiencia extrema y el uso mínimo de recursos del sist
 | **v1.6** | Híbrida (Python + Rust FFI) | ~25.9 MB | ~18 MB | Medio |
 | **v2.6** | Rust Nativo Asíncrono | ~4.3 MB | 1.4 MB | Continuo |
 | **v3.0** | Rust Nativo (Single-Trip IPC & 5 Layouts) | ~4.9 MB | 1.9 MB | Ultra-bajo (-90%) |
-| **v3.3** | **Rust Nativo + C++/QML Hub (6 Layouts & D-Bus Push)** | **~5.1 MB** | **1.9 MB** | **Tiempo Real Reactivo** |
+| **v3.3** | **Rust Nativo + C++/QML Hub (6 Layouts & D-Bus Push)** | **~5.4 MB** | **1.9 MB** | **Tiempo Real Reactivo** |
 
 ### 💾 Desglose de Almacenamiento e Instalación Local
 
