@@ -61,7 +61,7 @@ pub fn calculate_global_topology(
         let screen_rect_opt = workspaces.get(&ws_id).copied().or_else(|| {
             let output_prefix = ws_id.split("||").next()?;
             workspaces.iter().find(|(k, _)| k.starts_with(output_prefix)).map(|(_, r)| *r)
-        });
+        }).or_else(|| workspaces.values().next().copied());
 
         if let Some(screen_rect) = screen_rect_opt {
             // Filtrar ventanas no-fullscreen y no-pip para el mosaico de fondo

@@ -388,6 +388,7 @@ impl RavenController {
     /// # Retorno
     /// Vector de comandos resultantes de evaluar el cambio en el motor.
     pub fn commit_layout(&mut self) -> Result<Vec<RavenAction>, RavenError> {
+        self.last_known_layout.clear();
         let workspaces = self.engine.current_workspaces.clone();
         let windows: Vec<WindowNode> = self.engine.current_windows.values().cloned().collect();
         self.handle_state_change(workspaces, windows)

@@ -98,9 +98,17 @@ impl RavenControllerActor {
                 RavenMessage::SyncWindowDelta { delta_json, reply } => {
                     let mut response = String::from("[]");
                     if let Ok(win) = serde_json::from_str::<KWinWindow>(&delta_json) {
+                        let ws_id = if !win.ws.is_empty() {
+                            win.ws
+                        } else {
+                            let out_name = if !win.output.is_empty() { win.output.as_str() } else { "default" };
+                            let desk_name = win.desktops.first().map(|d| d.as_str()).unwrap_or("default_desk");
+                            format!("{}||{}", out_name, desk_name)
+                        };
+
                         let win_node = WindowNode::new(
                             win.id,
-                            win.ws,
+                            ws_id,
                             win.output,
                             win.desktops,
                             win.f,
@@ -197,10 +205,13 @@ impl RavenControllerActor {
                         self.controller.get_engine().current_windows.get(wid).map(|w| w.workspace_id.clone())
                     });
 
+                    self.controller.get_engine_mut().config.layout_type = layout_name.clone();
                     if let Some(ws_id) = current_ws {
                         self.controller.get_engine_mut().config.workspace_layouts.insert(ws_id, layout_name);
-                    } else {
-                        self.controller.get_engine_mut().config.layout_type = layout_name;
+                    }
+
+                    if let Err(e) = self.controller.get_engine().config.save() {
+                        tracing::warn!("[ACTOR] Error al persistir configuración tras cambio de layout: {}", e);
                     }
 
                     let mut response = String::from("[]");
