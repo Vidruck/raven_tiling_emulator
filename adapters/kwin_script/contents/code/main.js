@@ -255,6 +255,19 @@ function getWorkspaceId(window) {
  * @param {KWin::Window} w - Objeto de ventana de KWin.
  * @returns {boolean} Verdadero si la ventana debe ser gestionada; de lo contrario, falso.
  */
+// Expresión regular para clases de aplicaciones que son inherentemente flotantes/herramientas
+// Nota: Para Raven, únicamente se filtra la GUI de configuración del emulador (raven_gui / raven config / control center)
+const FLOATING_CLASSES_REGEX = /kcolorchooser|colorpicker|gcolor|eyedropper|spectacle|klipper|plasma\.clipboard|org\.kde\.kclock|org\.kde\.polkit|polkit|pinentry|zenity|kdialog|xdotool|portal|desktopdialog|plasmoidviewer|^raven_gui$|^raven-gui$|^raven config$/i;
+
+// Expresiones regulares para widgets auxiliares o mini-reproductores por caption
+const FLOATING_CAPTION_REGEX = /color picker|selector de color|mini player|mini-player|miniplayer|zuno widget|now playing widget|pip|quick view|raven control center|raven tiling emulator — control center/i;
+
+/**
+ * Determina si una ventana es gestionable (manageable) por el motor de mosaico (tiling engine).
+ *
+ * @param {KWin::Window} w - Objeto de ventana de KWin.
+ * @returns {boolean} Verdadero si la ventana debe ser gestionada; de lo contrario, falso.
+ */
 function isManageable(w) {
   try {
     if (!w || w.deleted || !w.managed) {
@@ -302,9 +315,11 @@ function isFloating(w) {
   try {
     if (!w || w.deleted) return true;
     if (w.__raven_dynamic_float) return true;
+
+    // 1. Tipos de ventana nativos de Wayland / X11 auxiliares o transitorios
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) return true;
 
-    // Fullscreen nativo (YouTube, juegos, etc.) NO es flotante:
+    // 2. Fullscreen nativo (YouTube, juegos, etc.) NO es flotante:
     // se envía como fs=true al motor Rust que le asigna pantalla completa.
     if (w.fullScreen) return false;
 
@@ -315,7 +330,7 @@ function isFloating(w) {
 
     let isPip = PIP_CAPTION_REGEX.test(strCap);
 
-    // Evaluamos reglas dinámicas enviadas desde la interfaz de usuario
+    // 3. Evaluamos reglas dinámicas enviadas desde la interfaz de usuario
     if (_window_rules && _window_rules.length > 0) {
       for (let i = 0; i < _window_rules.length; i++) {
         const rule = _window_rules[i];
@@ -333,25 +348,48 @@ function isFloating(w) {
       w.keepAbove = true;
     }
 
-    const isRaven = strClass.indexOf("raven") !== -1 || strCap.indexOf("raven control center") !== -1;
-    const isSpectacle = strClass.indexOf("spectacle") !== -1;
-    const isKlipper = strClass.indexOf("klipper") !== -1 || strClass.indexOf("plasma.clipboard") !== -1;
-    const isVirtPopup = (strClass.indexOf("qemu") !== -1 || strClass.indexOf("virt-manager") !== -1) && !w.normalWindow;
+    // 4. Filtrado por clase o título de herramientas conocidas
+    if (FLOATING_CLASSES_REGEX.test(strClass) || FLOATING_CAPTION_REGEX.test(strCap)) {
+      return true;
+    }
 
-    // Popups flotantes de aplicaciones pesadas (JetBrains, Zen, Firefox) sin título
-    let isHeavyAppPopup = false;
-    if (strClass.indexOf("jetbrains") !== -1 || strClass.indexOf("idea") !== -1 || strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) {
-      if (!strCap || strCap.trim() === "" || strCap === "win0") {
-        const fg = w.frameGeometry;
-        const wWidth = fg ? fg.width : 0;
-        const wHeight = fg ? fg.height : 0;
-        if (wWidth > 0 && wHeight > 0 && wWidth < 450 && wHeight < 350) {
-          isHeavyAppPopup = true;
-        }
+    const isVirtPopup = (strClass.indexOf("qemu") !== -1 || strClass.indexOf("virt-manager") !== -1) && !w.normalWindow;
+    if (isVirtPopup) {
+      return true;
+    }
+
+    // 5. Heurística de dimensiones fijas / restringidas (ej: widgets de Zuno, micro-selectores)
+    const minS = w.minSize;
+    const maxS = w.maxSize;
+    if (minS && maxS && minS.width > 0 && minS.height > 0) {
+      // Ventana de tamaño completamente rígido (no redimensionable)
+      if (minS.width === maxS.width && minS.height === maxS.height) {
+        return true;
+      }
+      // Rango extremadamente estrecho o panel auxiliar
+      if (maxS.width > 0 && maxS.height > 0 && maxS.width <= 500 && maxS.height <= 450) {
+        return true;
       }
     }
 
-    return Boolean(isPip || isSpectacle || isKlipper || isVirtPopup || isRaven || isHeavyAppPopup);
+    // 6. Heurística geométrica de micro-ventanas / popups flotantes sin título o dimensiones mínimas
+    const fg = w.frameGeometry;
+    const wWidth = fg ? fg.width : 0;
+    const wHeight = fg ? fg.height : 0;
+    if (wWidth > 0 && wHeight > 0) {
+      // Ventanas diminutas creadas como mini-widgets flotantes (ej. Zuno mini-player, color pickers sin clase específica)
+      if (wWidth < 380 && wHeight < 320) {
+        return true;
+      }
+
+      // Popups flotantes de aplicaciones complejas (JetBrains, Zen, Firefox) sin título
+      if ((strClass.indexOf("jetbrains") !== -1 || strClass.indexOf("idea") !== -1 || strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) &&
+          (!strCap || strCap.trim() === "" || strCap === "win0") && (wWidth < 450 && wHeight < 350)) {
+        return true;
+      }
+    }
+
+    return Boolean(isPip);
   } catch (e) {
     return true;
   }

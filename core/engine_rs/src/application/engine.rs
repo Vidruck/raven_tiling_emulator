@@ -134,6 +134,47 @@ impl TilingEngine {
                         cloned.resource_class,
                         cloned.caption
                     );
+                    return cloned;
+                }
+
+                // 4. Heurística Nativa de Herramientas y Micro-Widgets Flotantes por Clase o Título
+                if !class_lower.is_empty() || !caption_lower.is_empty() {
+                    let is_known_float_tool = class_lower.contains("colorchooser")
+                        || class_lower.contains("colorpicker")
+                        || class_lower.contains("gcolor")
+                        || class_lower.contains("eyedropper")
+                        || class_lower.contains("spectacle")
+                        || class_lower.contains("klipper")
+                        || class_lower.contains("polkit")
+                        || class_lower.contains("pinentry")
+                        || class_lower.contains("zenity")
+                        || class_lower.contains("kdialog")
+                        || class_lower == "raven_gui"
+                        || class_lower == "raven-gui"
+                        || class_lower == "raven config"
+                        || caption_lower.contains("color picker")
+                        || caption_lower.contains("selector de color")
+                        || caption_lower.contains("mini player")
+                        || caption_lower.contains("miniplayer")
+                        || caption_lower.contains("zuno widget")
+                        || caption_lower.contains("now playing widget")
+                        || caption_lower.contains("raven control center")
+                        || caption_lower.contains("raven tiling emulator — control center");
+
+                    if is_known_float_tool {
+                        cloned.is_floating = true;
+                        cloned.is_pip = false;
+                        return cloned;
+                    }
+                }
+
+                // 5. Heurística por micro-dimensiones con clase no vacía (ej. widgets dedicados de Zuno)
+                if !class_lower.is_empty() && (class_lower.contains("zuno") || class_lower.contains("electron") || class_lower.contains("widget")) {
+                    if cloned.geometry.width > 0 && cloned.geometry.height > 0 && cloned.geometry.width < 380 && cloned.geometry.height < 320 {
+                        cloned.is_floating = true;
+                        cloned.is_pip = false;
+                        return cloned;
+                    }
                 }
 
                 cloned
