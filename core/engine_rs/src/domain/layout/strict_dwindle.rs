@@ -12,6 +12,13 @@ use std::collections::HashMap;
 pub struct StrictDwindleStrategy;
 
 impl LayoutStrategy for StrictDwindleStrategy {
+    fn predict_capacity(&self, screen_rect: Rect, default_gaps: i32) -> usize {
+        let usable_w = std::cmp::max(1, screen_rect.width - default_gaps);
+        let usable_h = std::cmp::max(1, screen_rect.height - default_gaps);
+        let max_w_splits = (usable_w as f32 / 240.0).log2().max(1.0) as usize;
+        let max_h_splits = (usable_h as f32 / 200.0).log2().max(1.0) as usize;
+        std::cmp::max(3, (max_w_splits + max_h_splits + 1).min(6))
+    }
     /// Calcula las geometrías de las ventanas dividiendo sucesivamente el contenedor en mitades/ratios.
     ///
     /// # Parámetros
@@ -69,17 +76,25 @@ impl LayoutStrategy for StrictDwindleStrategy {
 
             let mut curr = container;
 
-            // División según la dirección alternante actual
+            // División según la dirección alternante actual respetando requerimientos mínimos defensivos
             if split_horizontal {
-                let w = (container.width as f32 * master_ratio) as i32;
+                let win_min_w = std::cmp::max(win.min_w, 120);
+                let min_rem = 120;
+                let max_allowed = std::cmp::max(1, container.width - min_rem);
+                let raw_w = (container.width as f32 * master_ratio) as i32;
+                let w = raw_w.clamp(std::cmp::min(win_min_w, max_allowed), max_allowed);
                 curr.width = w;
                 container.x += w;
-                container.width -= w;
+                container.width = std::cmp::max(1, container.width - w);
             } else {
-                let h = (container.height as f32 * master_ratio) as i32;
+                let win_min_h = std::cmp::max(win.min_h, 100);
+                let min_rem = 100;
+                let max_allowed = std::cmp::max(1, container.height - min_rem);
+                let raw_h = (container.height as f32 * master_ratio) as i32;
+                let h = raw_h.clamp(std::cmp::min(win_min_h, max_allowed), max_allowed);
                 curr.height = h;
                 container.y += h;
-                container.height -= h;
+                container.height = std::cmp::max(1, container.height - h);
             }
             
             // Guardar la posición de la ventana actual recortando gaps

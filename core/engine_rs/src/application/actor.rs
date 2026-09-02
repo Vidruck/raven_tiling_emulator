@@ -203,6 +203,16 @@ impl RavenControllerActor {
                 RavenMessage::SetLayoutForCurrentWorkspace { layout_name, reply } => {
                     let current_ws = self.active_window_id.as_ref().and_then(|wid| {
                         self.controller.get_engine().current_windows.get(wid).map(|w| w.workspace_id.clone())
+                    }).or_else(|| {
+                        self.controller.get_engine().current_windows.values().next().map(|w| w.workspace_id.clone())
+                    }).or_else(|| {
+                        let out = self.current_topology.outputs.first().map(|s| s.as_str()).unwrap_or("default");
+                        let desk = if !self.current_topology.current_desktop.is_empty() {
+                            self.current_topology.current_desktop.as_str()
+                        } else {
+                            "default_desk"
+                        };
+                        Some(format!("{}||{}", out, desk))
                     });
 
                     self.controller.get_engine_mut().config.layout_type = layout_name.clone();

@@ -3,7 +3,7 @@
 //! Implementa una distribución horizontal donde la pantalla se divide en $N$ columnas
 //! de ancho exactamente igual. Cada ventana ocupa una columna completa de arriba a abajo.
 
-use super::{apply_gaps, LayoutStrategy};
+use super::{apply_gaps, distribute_weighted_sizes, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
@@ -55,30 +55,24 @@ impl LayoutStrategy for DivisorStrategy {
             height: std::cmp::max(1, screen_rect.height - default_gaps),
         };
 
-        // 3. Dividir el ancho del contenedor en partes iguales entre el número de ventanas
-        let num_windows = active_windows.len() as i32;
-        let w_slot = container.width / num_windows;
+        // 3. Dividir el ancho del contenedor respetando requerimientos mínimos y ratios horizontales
+        let mins: Vec<i32> = active_windows.iter().map(|w| std::cmp::max(w.min_w, 80)).collect();
+        let weights: Vec<Option<f32>> = active_windows.iter().map(|w| w.custom_w_ratio).collect();
+        let widths = distribute_weighted_sizes(container.width, &mins, &weights);
 
         // 4. Asignar la geometría a cada ventana de izquierda a derecha
+        let mut current_x = container.x;
         for (i, win) in active_windows.iter().enumerate() {
-            let i = i as i32;
-            
-            // La última ventana absorbe cualquier sobrante por división entera para no dejar huecos
-            let slot_width = if i == num_windows - 1 {
-                container.width - (i * w_slot)
-            } else {
-                w_slot
-            };
-
             let rect = Rect {
-                x: container.x + (i * w_slot),
+                x: current_x,
                 y: container.y,
-                width: slot_width,
+                width: widths[i],
                 height: container.height,
             };
 
             // Aplicar espaciado (gaps) y guardar el resultado
             layout_map.insert(win.window_id.clone(), apply_gaps(&rect, half_g));
+            current_x += widths[i];
         }
 
         (layout_map, evicted_windows)

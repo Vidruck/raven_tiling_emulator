@@ -77,10 +77,25 @@ pub fn calculate_global_topology(
                 .map(|s| s.as_str())
                 .unwrap_or(layout_type);
 
-            // Instanciar estrategia según el nombre del layout para el fondo
+            // Instanciar estrategia según el nombre del layout
             let strategy = get_strategy(current_layout_type);
+
+            // Mediador de Composición: Predecir capacidad real (Cmax) específica del algoritmo destino
+            let algo_cmax = strategy.predict_capacity(screen_rect, default_gaps);
+
+            let (effective_tiling, saturation_evicted): (Vec<WindowNode>, Vec<String>) =
+                if tiling_windows.len() > algo_cmax {
+                    let excess = tiling_windows.len() - algo_cmax;
+                    // Las primeras 'excess' ventanas en la cola cronológica compartida se minimizan ordenadamente
+                    let evicted_ids: Vec<String> = tiling_windows.iter().take(excess).map(|w| w.window_id.clone()).collect();
+                    let remaining_wins: Vec<WindowNode> = tiling_windows.into_iter().skip(excess).collect();
+                    (remaining_wins, evicted_ids)
+                } else {
+                    (tiling_windows, Vec::new())
+                };
+
             let (ws_layout, ws_evicted) = strategy.calculate(
-                &tiling_windows,
+                &effective_tiling,
                 screen_rect,
                 nmaster,
                 master_ratio,
@@ -89,6 +104,7 @@ pub fn calculate_global_topology(
             );
             global_layout.extend(ws_layout);
             global_evicted.extend(ws_evicted);
+            global_evicted.extend(saturation_evicted);
 
             // Si hay ventanas en modo pantalla completa nativo, asignarles el área completa
             for win in &ws_windows {

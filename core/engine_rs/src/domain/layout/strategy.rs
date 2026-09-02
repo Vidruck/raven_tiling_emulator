@@ -16,19 +16,6 @@ use super::{
 /// Garantiza la compatibilidad con hilos (`Send + Sync`) para ejecución concurrente segura en Rust.
 pub trait LayoutStrategy: Send + Sync {
     /// Calcula el mapa de geometrías resultantes para una lista dada de ventanas.
-    ///
-    /// # Parámetros
-    /// - `windows`: Lista de ventanas no minimizadas registradas en el workspace.
-    /// - `screen_rect`: Dimensión y posición de la pantalla o área útil de trabajo.
-    /// - `nmaster`: Cantidad de ventanas principales/maestras solicitadas.
-    /// - `master_ratio`: Relación de tamaño entre el área principal y secundaria (ej. 0.50..0.80).
-    /// - `default_gaps`: Espaciado interno en píxeles.
-    /// - `active_window_id`: Identificador opcional de la ventana enfocado en la interfaz.
-    ///
-    /// # Retorno
-    /// Una tupla conteniendo:
-    /// 1. `HashMap<String, Rect>`: Mapa que vincula cada `window_id` con su geometría de pantalla calculada (`Rect`).
-    /// 2. `Vec<String>`: Lista de IDs de ventanas evictadas/minimizadas si la capacidad fue rebasada.
     fn calculate(
         &self,
         windows: &[WindowNode],
@@ -38,6 +25,15 @@ pub trait LayoutStrategy: Send + Sync {
         default_gaps: i32,
         active_window_id: Option<String>,
     ) -> (HashMap<String, Rect>, Vec<String>);
+
+    /// Predice cuántas ventanas puede alojar de forma ergonómica y estable este algoritmo en la pantalla dada.
+    fn predict_capacity(&self, screen_rect: Rect, default_gaps: i32) -> usize {
+        let usable_w = std::cmp::max(1, screen_rect.width - default_gaps);
+        let usable_h = std::cmp::max(1, screen_rect.height - default_gaps);
+        let cols = (usable_w / 300).max(1) as usize;
+        let rows = (usable_h / 250).max(1) as usize;
+        cols * rows
+    }
 }
 
 /// Fábrica para la instanciación dinámica de algoritmos de distribución según su nombre.

@@ -263,11 +263,23 @@ Rectangle {
             }
         }
 
-        // ── FILA 3: ECUALIZADOR ANIMADO (DE ABAJO HACIA ARRIBA DESDE LA BASE) ──
+        // ── FILA 3: ECUALIZADOR DINÁMICO RÍTMICO ARMÓNICO ──
         Item {
+            id: eqContainer
             Layout.fillWidth: true
             Layout.preferredHeight: 34
             clip: true
+
+            property real wavePhase: 0.0
+
+            Timer {
+                interval: 32 // ~30 fps fluidos
+                running: media.isPlaying
+                repeat: true
+                onTriggered: {
+                    eqContainer.wavePhase = (eqContainer.wavePhase + 0.16) % 628.3;
+                }
+            }
 
             RowLayout {
                 anchors.left: parent.left
@@ -284,13 +296,23 @@ Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
 
-                        // Curva espectral: mayor respuesta en graves y medios, atenuación suave en agudos
-                        property real baseWeight: {
-                            if (index < 6) return 0.70 + (index * 0.04);
-                            if (index < 18) return 0.85 + ((index % 4) * 0.03);
-                            return Math.max(0.40, 0.90 - ((index - 18) * 0.035));
+                        // Curva espectral de energía acústica: graves profundos con 'kick', medios dinámicos y caída de agudos
+                        property real bandEnergy: {
+                            if (!media.isPlaying) return 0.05;
+                            var p = eqContainer.wavePhase;
+                            var bandIdx = index;
+                            
+                            // Golpe de percusión / bajo (Bass Kick) en bandas 0..7
+                            var bassBeat = (Math.sin(p * 2.2) + Math.cos(p * 4.4 + bandIdx * 0.2)) * 0.45;
+                            // Envolvente de medios (Voces / Melodía) en bandas 8..20
+                            var midWave = Math.sin(p * 3.1 + bandIdx * 0.45) * 0.35;
+                            // Brillo y armónicos de agudos en bandas 21..30
+                            var trebleShimmer = Math.cos(p * 5.0 - bandIdx * 0.6) * 0.25;
+
+                            var weight = (bandIdx < 8) ? 0.85 : (bandIdx < 20 ? 0.70 : 0.45);
+                            var composite = Math.abs(bassBeat + midWave + trebleShimmer) * weight;
+                            return Math.max(0.12, Math.min(1.0, composite + 0.15));
                         }
-                        property real animScale: 0.0
 
                         Rectangle {
                             id: eqBar
@@ -299,11 +321,11 @@ Rectangle {
                             anchors.bottom: parent.bottom // Anclado a la base inferior
                             radius: 1.5
 
-                            // Al sonar sube desde la base; al pausar colapsa a 2px
+                            // Altura dinámica coordinada por fase armónica
                             height: media.isPlaying
-                                ? Math.max(3, Math.min(barSlot.height, barSlot.height * barSlot.animScale))
+                                ? Math.max(3, Math.min(barSlot.height, barSlot.height * barSlot.bandEnergy))
                                 : 2
-                            Behavior on height { NumberAnimation { duration: 110; easing.type: Easing.OutQuad } }
+                            Behavior on height { NumberAnimation { duration: 60; easing.type: Easing.OutQuad } }
 
                             gradient: Gradient {
                                 GradientStop {
@@ -314,17 +336,6 @@ Rectangle {
                                     position: 1.0
                                     color: Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.25)
                                 }
-                            }
-                        }
-
-                        Timer {
-                            interval: 75 + (index * 17) % 130
-                            running: media.isPlaying
-                            repeat: true
-                            triggeredOnStart: true
-                            onTriggered: {
-                                var r = Math.random();
-                                barSlot.animScale = Math.max(0.15, Math.min(1.0, (barSlot.baseWeight * 0.42) + (r * 0.58)));
                             }
                         }
                     }

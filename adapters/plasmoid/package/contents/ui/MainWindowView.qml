@@ -11,7 +11,18 @@ Item {
     implicitHeight: 880
 
     property bool appletExpanded: false
+    property var currentDate: new Date()
     signal appClicked(string appUrl, string execCmd)
+
+    Timer {
+        interval: 1000
+        running: root.appletExpanded
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            root.currentDate = new Date();
+        }
+    }
 
     // Sincronización al desplegar el launcher
     Component.onCompleted: {
@@ -22,6 +33,7 @@ Item {
     onAppletExpandedChanged: {
         RavenPlugin.SystemStats.active = root.appletExpanded;
         if (root.appletExpanded) {
+            root.currentDate = new Date();
             RavenPlugin.SystemStats.refresh();
             RavenPlugin.RavenController.refreshState();
             if (appGridView) {
@@ -139,30 +151,47 @@ Item {
                         anchors.margins: 10
                         spacing: 8
 
-                        // Cabecera: Marca / Logo, Swap / Config & Switch Maestro On/Off
+                        // ── CABECERA HERO: RELOJ, FECHA, MARCA Y CONTROLES MAESTROS ──
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
 
                             Kirigami.Icon {
                                 source: "window-duplicate"
-                                implicitWidth: 24; implicitHeight: 24
+                                implicitWidth: 26; implicitHeight: 26
                                 color: RavenPlugin.RavenController.tilingEnabled ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.subTextColor
                             }
 
                             ColumnLayout {
                                 spacing: -2
-                                Text {
-                                    text: i18n("RAVEN TILING EMULATOR")
-                                    color: RavenPlugin.RavenTheme.textColor
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    font.letterSpacing: 0.5
+                                RowLayout {
+                                    spacing: 6
+                                    Text {
+                                        text: i18n("RAVEN TILING")
+                                        color: RavenPlugin.RavenTheme.textColor
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.letterSpacing: 0.5
+                                    }
+                                    Rectangle {
+                                        width: 3; height: 3; radius: 1.5
+                                        color: RavenPlugin.RavenTheme.subTextColor
+                                        opacity: 0.6
+                                        Layout.alignment: Qt.AlignVCenter
+                                    }
+                                    Text {
+                                        text: Qt.formatDateTime(root.currentDate, "hh:mm:ss AP")
+                                        color: RavenPlugin.RavenTheme.highlightColor
+                                        font.pixelSize: 12
+                                        font.bold: true
+                                        font.family: "Monospace"
+                                    }
                                 }
                                 Text {
-                                    text: RavenPlugin.RavenController.tilingEnabled ? i18n("Modo Mosaico Activo") : i18n("Modo Flotante Clásico")
+                                    text: Qt.formatDateTime(root.currentDate, "dddd, d 'de' MMMM") + " • " + (RavenPlugin.RavenController.tilingEnabled ? i18n("Modo Mosaico") : i18n("Modo Flotante"))
                                     color: RavenPlugin.RavenController.tilingEnabled ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.subTextColor
                                     font.pixelSize: 10
+                                    font.capitalization: Font.Capitalize
                                 }
                             }
 
@@ -525,48 +554,83 @@ Item {
                     active: root.appletExpanded
                 }
 
-                // ── ISLA 4: RECURSOS DEL SISTEMA ──────────────────────────────
+                // ── ISLA 4: RECURSOS DEL SISTEMA CON RELOJ Y FECHA (FOOTER DASHBOARD) ──
                 Island {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 120
+                    Layout.preferredHeight: 145
 
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 10
-                        spacing: 6
+                        spacing: 8
 
+                        // Cabecera: Distro & Uptime + Reloj y Fecha Dinámica
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
+
                             Kirigami.Icon {
                                 source: (RavenPlugin.SystemStats && RavenPlugin.SystemStats.distroIcon) ? RavenPlugin.SystemStats.distroIcon : "start-here-kde"
                                 fallback: "kde"
-                                implicitWidth: 22
-                                implicitHeight: 22
+                                implicitWidth: 24
+                                implicitHeight: 24
                             }
+
                             ColumnLayout {
                                 spacing: -2
-                                Text {
-                                    text: RavenPlugin.SystemStats.osName || "Linux"
-                                    color: RavenPlugin.RavenTheme.textColor
-                                    font.pixelSize: 11; font.bold: true
+                                RowLayout {
+                                    spacing: 6
+                                    Text {
+                                        text: RavenPlugin.SystemStats.osName || "Linux"
+                                        color: RavenPlugin.RavenTheme.textColor
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                    }
+                                    Rectangle {
+                                        width: 3; height: 3; radius: 1.5
+                                        color: RavenPlugin.RavenTheme.subTextColor
+                                        opacity: 0.6
+                                        Layout.alignment: Qt.AlignVCenter
+                                    }
+                                    Text {
+                                        text: Qt.formatDateTime(root.currentDate, "hh:mm:ss AP")
+                                        color: RavenPlugin.RavenTheme.highlightColor
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                        font.family: "Monospace"
+                                    }
                                 }
                                 Text {
-                                    text: i18n("Tiempo encendido: ") + (RavenPlugin.SystemStats.uptimeString || "0:00")
+                                    text: Qt.formatDateTime(root.currentDate, "dddd, d 'de' MMMM") + " • " + i18n("Encendido: ") + (RavenPlugin.SystemStats.uptimeString || "0:00")
                                     color: RavenPlugin.RavenTheme.subTextColor
                                     font.pixelSize: 9
+                                    font.capitalization: Font.Capitalize
                                 }
                             }
+
                             Item { Layout.fillWidth: true }
-                            Text {
-                                text: i18n("Raven Hub • v3.3")
-                                color: RavenPlugin.RavenTheme.subTextColor
-                                opacity: 0.5
-                                font.pixelSize: 9
-                                Layout.alignment: Qt.AlignVCenter
+
+                            // Badge de Versión
+                            Rectangle {
+                                radius: 4
+                                color: Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.15)
+                                border.width: 1
+                                border.color: Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.35)
+                                implicitWidth: vText.implicitWidth + 8
+                                implicitHeight: 18
+
+                                Text {
+                                    id: vText
+                                    anchors.centerIn: parent
+                                    text: "Raven Hub • v3.4"
+                                    color: RavenPlugin.RavenTheme.highlightColor
+                                    font.pixelSize: 8
+                                    font.bold: true
+                                }
                             }
                         }
 
+                        // Fila de Métricas y Gauges del Sistema
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 16

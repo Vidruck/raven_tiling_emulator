@@ -76,7 +76,20 @@ void RavenController::refreshState()
 void RavenController::sendDbusAction(const QString &action)
 {
     if (m_dbusInterface && m_dbusInterface->isValid()) {
-        m_dbusInterface->call(QDBus::NoBlock, action);
+        QDBusMessage reply = m_dbusInterface->call(action);
+        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+            QString cmds = reply.arguments().first().toString();
+            if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
+                QDBusConnection::sessionBus().send(
+                    QDBusMessage::createMethodCall(
+                        QStringLiteral("org.kde.raven.Daemon"),
+                        QStringLiteral("/Events"),
+                        QStringLiteral("org.kde.raven.Events"),
+                        QStringLiteral("tilingCommandsPending")
+                    ) << cmds
+                );
+            }
+        }
     } else {
         // Fallback vía qdbus CLI si la interfaz directa aún no responde
         QProcess::startDetached(QStringLiteral("qdbus"), {
@@ -90,7 +103,20 @@ void RavenController::sendDbusAction(const QString &action)
 void RavenController::sendDbusActionWithArg(const QString &action, int arg)
 {
     if (m_dbusInterface && m_dbusInterface->isValid()) {
-        m_dbusInterface->call(QDBus::NoBlock, action, arg);
+        QDBusMessage reply = m_dbusInterface->call(action, arg);
+        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+            QString cmds = reply.arguments().first().toString();
+            if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
+                QDBusConnection::sessionBus().send(
+                    QDBusMessage::createMethodCall(
+                        QStringLiteral("org.kde.raven.Daemon"),
+                        QStringLiteral("/Events"),
+                        QStringLiteral("org.kde.raven.Events"),
+                        QStringLiteral("tilingCommandsPending")
+                    ) << cmds
+                );
+            }
+        }
     } else {
         QProcess::startDetached(QStringLiteral("qdbus"), {
             QStringLiteral("org.kde.raven.Daemon"),
@@ -128,7 +154,21 @@ void RavenController::setLayout(const QString &layoutName)
     }
     
     if (m_dbusInterface && m_dbusInterface->isValid()) {
-        m_dbusInterface->call(QDBus::NoBlock, QStringLiteral("setLayoutForCurrentWorkspace"), layoutName);
+        QDBusMessage reply = m_dbusInterface->call(QStringLiteral("setLayoutForCurrentWorkspace"), layoutName);
+        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+            QString cmds = reply.arguments().first().toString();
+            if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
+                // Notificar directamente al servicio de KWin como reaseguro en tiempo real
+                QDBusConnection::sessionBus().send(
+                    QDBusMessage::createMethodCall(
+                        QStringLiteral("org.kde.raven.Daemon"),
+                        QStringLiteral("/Events"),
+                        QStringLiteral("org.kde.raven.Events"),
+                        QStringLiteral("tilingCommandsPending")
+                    ) << cmds
+                );
+            }
+        }
     } else {
         QProcess::startDetached(QStringLiteral("qdbus"), {
             QStringLiteral("org.kde.raven.Daemon"),

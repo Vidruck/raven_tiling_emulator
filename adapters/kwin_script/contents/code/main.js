@@ -823,7 +823,7 @@ function applyCommands(commandsJson) {
                   if (capturedWindow && !capturedWindow.deleted) {
                     capturedWindow.__raven_mutating = false;
                   }
-                }, 400);
+                }, 120);
               })(w);
             } catch (e) { }
           } else if (cmd.action === "focus") {

@@ -12,6 +12,14 @@ use std::collections::HashMap;
 pub struct InvertedStrictDwindleStrategy;
 
 impl LayoutStrategy for InvertedStrictDwindleStrategy {
+    fn predict_capacity(&self, screen_rect: Rect, default_gaps: i32) -> usize {
+        let usable_w = std::cmp::max(1, screen_rect.width - default_gaps);
+        let usable_h = std::cmp::max(1, screen_rect.height - default_gaps);
+        // Cada paso divide por 2 alternando W y H. La profundidad máxima estable es cuando el lado < 200px
+        let max_w_splits = (usable_w as f32 / 240.0).log2().max(1.0) as usize;
+        let max_h_splits = (usable_h as f32 / 200.0).log2().max(1.0) as usize;
+        std::cmp::max(3, (max_w_splits + max_h_splits + 1).min(6))
+    }
     fn calculate(
         &self,
         windows: &[WindowNode],
@@ -59,8 +67,13 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
             match i % 4 {
                 0 => {
                     // Partición vertical: la ventana toma el bloque DERECHO de tamaño master_ratio
-                    let main_w = (container.width as f32 * master_ratio) as i32;
-                    let rem_w = container.width - main_w;
+                    let win_min_w = std::cmp::max(win.min_w, 120);
+                    let min_rem = 120;
+                    let max_allowed = std::cmp::max(1, container.width - min_rem);
+                    let raw_w = (container.width as f32 * master_ratio) as i32;
+                    let main_w = raw_w.clamp(std::cmp::min(win_min_w, max_allowed), max_allowed);
+                    let rem_w = std::cmp::max(1, container.width - main_w);
+                    
                     curr.x = container.x + rem_w;
                     curr.width = main_w;
 
@@ -69,8 +82,13 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                 }
                 1 => {
                     // Partición horizontal: la ventana toma el bloque INFERIOR de tamaño master_ratio
-                    let main_h = (container.height as f32 * master_ratio) as i32;
-                    let rem_h = container.height - main_h;
+                    let win_min_h = std::cmp::max(win.min_h, 100);
+                    let min_rem = 100;
+                    let max_allowed = std::cmp::max(1, container.height - min_rem);
+                    let raw_h = (container.height as f32 * master_ratio) as i32;
+                    let main_h = raw_h.clamp(std::cmp::min(win_min_h, max_allowed), max_allowed);
+                    let rem_h = std::cmp::max(1, container.height - main_h);
+                    
                     curr.y = container.y + rem_h;
                     curr.height = main_h;
 
@@ -79,21 +97,31 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                 }
                 2 => {
                     // Partición vertical: la ventana toma el bloque IZQUIERDO de tamaño master_ratio
-                    let main_w = (container.width as f32 * master_ratio) as i32;
+                    let win_min_w = std::cmp::max(win.min_w, 120);
+                    let min_rem = 120;
+                    let max_allowed = std::cmp::max(1, container.width - min_rem);
+                    let raw_w = (container.width as f32 * master_ratio) as i32;
+                    let main_w = raw_w.clamp(std::cmp::min(win_min_w, max_allowed), max_allowed);
+                    
                     curr.width = main_w;
 
                     // El contenedor remanente se desplaza a la DERECHA
                     container.x += main_w;
-                    container.width -= main_w;
+                    container.width = std::cmp::max(1, container.width - main_w);
                 }
                 _ => {
                     // Partición horizontal: la ventana toma el bloque SUPERIOR de tamaño master_ratio
-                    let main_h = (container.height as f32 * master_ratio) as i32;
+                    let win_min_h = std::cmp::max(win.min_h, 100);
+                    let min_rem = 100;
+                    let max_allowed = std::cmp::max(1, container.height - min_rem);
+                    let raw_h = (container.height as f32 * master_ratio) as i32;
+                    let main_h = raw_h.clamp(std::cmp::min(win_min_h, max_allowed), max_allowed);
+                    
                     curr.height = main_h;
 
                     // El contenedor remanente se desplaza hacia ABAJO
                     container.y += main_h;
-                    container.height -= main_h;
+                    container.height = std::cmp::max(1, container.height - main_h);
                 }
             }
 

@@ -25,6 +25,15 @@ MediaController::MediaController(QObject *parent)
     m_positionTimer->setInterval(1000);
     connect(m_positionTimer, &QTimer::timeout, this, &MediaController::updatePosition);
 
+    QTimer *discoveryTimer = new QTimer(this);
+    discoveryTimer->setInterval(3000);
+    connect(discoveryTimer, &QTimer::timeout, this, [this]() {
+        if (!m_hasPlayer || !isPlaying()) {
+            findActivePlayer();
+        }
+    });
+    discoveryTimer->start();
+
     findActivePlayer();
 }
 
@@ -196,15 +205,12 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
     QString newTrackId = metadata.value(QLatin1String("mpris:trackid")).toString();
     QString newTrackUrl = metadata.value(QLatin1String("xesam:url")).toString();
 
-    // Solo reiniciar posición si realmente cambió la pista (trackId o URL diferente, o título significativamente distinto y teníamos anterior)
+    // Determinamos si es una pista completamente nueva antes de actualizar
     bool isDifferentTrack = false;
     if (!newTrackUrl.isEmpty() && !m_trackUrl.isEmpty()) {
         isDifferentTrack = (newTrackUrl != m_trackUrl);
     } else if (!newTrackId.isEmpty() && !m_trackId.isEmpty() && newTrackId != QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack")) {
         isDifferentTrack = (newTrackId != m_trackId);
-    } else if (!newTitle.isEmpty() && !m_trackTitle.isEmpty()) {
-        // En YouTube el título puede ganar prefijos como "(1) " o cambiar mínimamente sin ser otra canción
-        isDifferentTrack = (newTitle != m_trackTitle && !newTitle.contains(m_trackTitle) && !m_trackTitle.contains(newTitle));
     }
 
     if (isDifferentTrack) {
@@ -268,7 +274,7 @@ void MediaController::updatePosition()
 {
     if (!m_active || m_currentService.isEmpty()) return;
 
-    // Extrapolación suave de 1 segundo mientras se consulta la posición real
+    // Extrapolación suave de 1 segundo mientras se reproduce, acotada al tamaño de la pista
     if (isPlaying()) {
         if (m_length <= 0 || m_position < m_length) {
             m_position += 1;
@@ -285,7 +291,6 @@ void MediaController::queryPositionDirect()
         return;
     }
 
-    // Si había un watcher anterior pendiente pero no ha respondido en este ciclo, cancelarlo y reintentar
     if (m_posWatcher) {
         m_posWatcher->deleteLater();
         m_posWatcher = nullptr;
@@ -315,8 +320,8 @@ void MediaController::onPositionReply(QDBusPendingCallWatcher *watcher)
 
         if (posMicro >= 0) {
             qint64 realPos = posMicro / 1000000;
-            // Sincronizar posición real recibida de D-Bus si hay desfase
-            if (qAbs(m_position - realPos) >= 1 || (m_position == 0 && realPos > 0)) {
+            // Solo sincronizamos si hay un desvío apreciable de más de 2 segundos o al reanudar/arrancar
+            if (qAbs(m_position - realPos) > 2 || (m_position == 0 && realPos > 0)) {
                 m_position = realPos;
                 emit positionChanged();
             }

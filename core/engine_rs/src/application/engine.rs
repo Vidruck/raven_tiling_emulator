@@ -169,12 +169,14 @@ impl TilingEngine {
                 }
 
                 // 5. Heurística por micro-dimensiones con clase no vacía (ej. widgets dedicados de Zuno)
-                if !class_lower.is_empty() && (class_lower.contains("zuno") || class_lower.contains("electron") || class_lower.contains("widget")) {
-                    if cloned.geometry.width > 0 && cloned.geometry.height > 0 && cloned.geometry.width < 380 && cloned.geometry.height < 320 {
-                        cloned.is_floating = true;
-                        cloned.is_pip = false;
-                        return cloned;
-                    }
+                if !class_lower.is_empty()
+                    && (class_lower.contains("zuno") || class_lower.contains("electron") || class_lower.contains("widget"))
+                    && cloned.geometry.width > 0 && cloned.geometry.height > 0
+                    && cloned.geometry.width < 380 && cloned.geometry.height < 320
+                {
+                    cloned.is_floating = true;
+                    cloned.is_pip = false;
+                    return cloned;
                 }
 
                 cloned
