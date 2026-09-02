@@ -1,8 +1,13 @@
-//! # Orquestador de Topología Global y Soporte PiP
+//! # Orquestador de Topología Global, Mediador de Capacidad y Soporte PiP
 //!
-//! Coordina la distribución de ventanas a través de múltiples workspaces y pantallas,
-//! ejecutando la estrategia de layout correspondiente por workspace y superponiendo
-//! las ventanas flotantes Picture-in-Picture (PiP) en sus esquinas configuradas.
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Coordina la distribución espacial de ventanas a través de múltiples monitores físicos
+//! y escritorios virtuales en KWin Wayland/X11. Integra el **Mediador de Capacidad** para
+//! evitar la sobrecarga y desalojar (`evict`) de forma atómica ventanas excedentes hacia minimización,
+//! y posiciona ventanas flotantes Picture-in-Picture (PiP) y pantallas completas.
 
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;

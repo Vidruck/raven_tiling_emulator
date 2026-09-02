@@ -1,8 +1,11 @@
-// ============================================================================
-// RAVEN GUI — COMPONENTE CANVAS PREVIEW 2D (components/layout_preview.rs)
-// ============================================================================
-// Proporciona la representación gráfica vectorial interactiva de la distribución
-// de las ventanas en pantalla de acuerdo al algoritmo de mosaico seleccionado.
+//! # Previsualización Gráfica Vectorial 2D (`layout_preview.rs`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Renderiza sobre un canvas vectorial interactivo de `egui` la partición matemática en tiempo real
+//! de los algoritmos (Raven BSP, Tall, Monocle, Strict Dwindle, Inverted Dwindle, Divisor) y PiP.
 
 use eframe::egui;
 use crate::kde_theme::KdePalette;

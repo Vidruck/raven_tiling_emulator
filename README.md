@@ -16,7 +16,7 @@
 
 **Raven Tiling Emulator** es un gestor de ventanas dinámico en mosaico (Tiling Window Manager) de alto rendimiento diseñado específicamente para **KDE Plasma 6 (Wayland)**. 
 
-Con el lanzamiento de la **Versión 3.3**, Raven evoluciona hacia una suite completa que fusiona el motor de composición en Rust con un **Lanzador de Aplicaciones y Centro de Mando Integrado (Raven Command Hub)** en el panel de Plasma: control de sesión, monitorización de hardware en vivo, reproductor multimedia con ecualizador animado, navegación espacial instantánea en sub-islas, buscador de aplicaciones y sidebar de selección rápida para los 6 algoritmos de distribución.
+Con el lanzamiento de la **Versión 3.4**, Raven consolida su suite completa que fusiona el motor de composición en Rust con un **Lanzador de Aplicaciones y Centro de Mando Integrado (Raven Hub v3.4)** en el panel de Plasma: reloj digital monospaced y fecha localizada en tiempo real, control de sesión, monitorización de hardware en vivo, reproductor multimedia con ecualizador animado armónico, mediador predictivo de capacidad entre algoritmos ($C_{max}$), navegación espacial instantánea en sub-islas, buscador de aplicaciones y sidebar de selección rápida para los 6 algoritmos de distribución.
 
 ---
 
@@ -244,11 +244,21 @@ Para remover completamente Raven y sus componentes del sistema sin afectar ning�
 
 ---
 
+---
+
+## 📄 Licencia y Autoría
+
+Este proyecto es software libre y de código abierto desarrollado y mantenido por **Alejandro González Hernández (Vidruck)** bajo los términos de la **GNU General Public License Version 3 (GPL-3.0)**.
+
+Puedes consultar los términos legales completos en el archivo [LICENSE.txt](LICENSE.txt).
+
+---
+
 ## ⚠️ Descargo de Responsabilidad (Disclaimer)
 
 **Este software se proporciona "tal cual" (AS IS), sin garantía de ningún tipo.** Raven interactúa directamente con el compositor KWin y el bus D-Bus de Plasma. El usuario asume la responsabilidad de su uso.
 
 ---
 
-*Desarrollado por **Alejandro González Hernández (Vidruck)**. Licencia **GPL-3.0**.*  
+*Desarrollado por **Alejandro González Hernández (Vidruck)** — Licencia **GPL-3.0**.*  
 *¡Huélum!*

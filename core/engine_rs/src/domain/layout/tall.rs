@@ -1,8 +1,12 @@
-//! # Estrategia de Disposición Tall (Master + Stack Vertical)
+//! # Algoritmo Clásico Master-Stack (`TallStrategy`)
 //!
-//! Implementa la distribución clásica "Tall": la pantalla se divide verticalmente en dos columnas.
-//! - La columna izquierda contiene las ventanas maestras (`nmaster`).
-//! - La columna derecha contiene el apilamiento vertical (stack) con las demás ventanas.
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Implementa la distribución tradicional de dos columnas:
+//! - Columna izquierda: Área Maestra con capacidad configurable (`nmaster`) y proporción de corte (`master_ratio`).
+//! - Columna derecha: Pila vertical secundaria (Stack) con distribución ponderada de alturas.
 
 use super::{apply_gaps, distribute_weighted_sizes, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};

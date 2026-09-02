@@ -1,12 +1,21 @@
 /**
- * @fileoverview Registro e inyección de accesos directos globales nativos de KWin para Raven.
+ * @file shortcuts.js
+ * @brief Registro e integración de atajos de teclado globales nativos de KWin en KDE Plasma 6.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
 /**
- * Registra los atajos globales nativos de KWin para controlar a Raven.
- * Expone las acciones del gestor de ventanas al panel de preferencias del sistema.
+ * @brief Registra todos los atajos de teclado globales de Raven en el subsistema de accesos rápidos de KWin.
+ *
+ * Expone las acciones del gestor de mosaico en la sección "KWin" del panel de Preferencias del Sistema.
+ * Cada combinación despacha un método D-Bus hacia `org.kde.raven.Daemon` y ejecuta inmediatamente los comandos retornados.
  */
 function registerRavenShortcuts() {
+  /**
+   * @brief Envía una acción sin parámetros al demonio de Raven vía D-Bus.
+   * @param {string} actionStr Nombre del método D-Bus.
+   */
   function dispatchToRaven(actionStr) {
     try {
       callDBus(
@@ -25,6 +34,11 @@ function registerRavenShortcuts() {
     }
   }
 
+  /**
+   * @brief Envía una acción con un argumento al demonio de Raven vía D-Bus.
+   * @param {string} actionStr Nombre del método D-Bus.
+   * @param {number|string} arg Valor del parámetro.
+   */
   function dispatchToRavenArg(actionStr, arg) {
     try {
       callDBus(
@@ -44,6 +58,7 @@ function registerRavenShortcuts() {
     }
   }
 
+  // ── GESTIÓN DE ESTADO Y FLOTACIÓN ──
   registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function () {
     dispatchToRaven("toggleTiling");
   });
@@ -52,6 +67,8 @@ function registerRavenShortcuts() {
     var awId = aw ? getSafeWindowId(aw) : "";
     dispatchToRavenArg("toggleFloating", awId);
   });
+
+  // ── NAVEGACIÓN Y FOCO VISUAL ──
   registerShortcut("RavenFocusNext", "Raven: Siguiente Ventana", "Meta+J", function () {
     dispatchToRaven("focusNext");
   });
@@ -70,6 +87,8 @@ function registerRavenShortcuts() {
   registerShortcut("RavenFocusDown", "Raven: Foco Abajo", "Meta+Down", function () {
     dispatchToRaven("focusDown");
   });
+
+  // ── INTERCAMBIO Y RATIOS DE COMPOSICIÓN ──
   registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function () {
     dispatchToRaven("swapNext");
   });
@@ -82,29 +101,13 @@ function registerRavenShortcuts() {
   registerShortcut("RavenDecreaseRatio", "Raven: Contraer Master", "Meta+L", function () {
     dispatchToRaven("decreaseRatio");
   });
-  registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Otro Monitor", "Meta+Shift+M", function () {
-    dispatchToRaven("migrateActiveToScreen");
-  });
 
-  // Shortcuts para uso desde Plasmoid / Externo
-  registerShortcut("RavenIncrementGaps", "Raven: Incrementar Gaps", "Meta+=", function () {
-    dispatchToRavenArg("incrementGaps", 2);
-  });
-  registerShortcut("RavenDecrementGaps", "Raven: Decrementar Gaps", "Meta+-", function () {
-    dispatchToRavenArg("incrementGaps", -2);
-  });
-  registerShortcut("RavenIncrementMaster", "Raven: Incrementar Master", "Meta+]", function () {
-    dispatchToRaven("incrementMaster");
-  });
-  registerShortcut("RavenDecrementMaster", "Raven: Decrementar Master", "Meta+[", function () {
-    dispatchToRaven("decrementMaster");
+  // ── MIGRACIÓN ENTRE MONITORES Y ESCRITORIOS ──
+  registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Monitor Siguiente", "Meta+Shift+M", function () {
+    dispatchToRaven("migrateActiveToScreen");
   });
   registerShortcut("RavenMigratePrevMonitor", "Raven: Enviar a Monitor Anterior", "Meta+Shift+N", function () {
     dispatchToRaven("migrateActiveToPrevScreen");
-  });
-  registerShortcut("RavenCycleLayout", "Raven: Ciclar Layout", "Meta+Shift+L", function() {
-    dispatchToRaven("cycleLayout");
-    if (workspace.activeWindow) highlightWindow(workspace.activeWindow);
   });
   registerShortcut("RavenMigrateDesktop", "Raven: Enviar a Escritorio Siguiente", "Meta+Shift+Right", function () {
     dispatchToRaven("migrateActiveToDesktop");
@@ -113,6 +116,25 @@ function registerRavenShortcuts() {
     dispatchToRaven("migrateActiveToPrevDesktop");
   });
 
+  // ── MÁRGENES, CAPACIDAD Y CICLADO DE ALGORITMOS ──
+  registerShortcut("RavenIncrementGaps", "Raven: Incrementar Gaps", "Meta+=", function () {
+    dispatchToRavenArg("incrementGaps", 2);
+  });
+  registerShortcut("RavenDecrementGaps", "Raven: Decrementar Gaps", "Meta+-", function () {
+    dispatchToRavenArg("incrementGaps", -2);
+  });
+  registerShortcut("RavenIncrementMaster", "Raven: Incrementar Capacidad Master", "Meta+]", function () {
+    dispatchToRaven("incrementMaster");
+  });
+  registerShortcut("RavenDecrementMaster", "Raven: Decrementar Capacidad Master", "Meta+[", function () {
+    dispatchToRaven("decrementMaster");
+  });
+  registerShortcut("RavenCycleLayout", "Raven: Ciclar Algoritmo de Disposición", "Meta+Shift+L", function() {
+    dispatchToRaven("cycleLayout");
+    if (workspace.activeWindow) highlightWindow(workspace.activeWindow);
+  });
+
+  // ── REDIMENSIONAMIENTO FINO POR VENTANA ──
   registerShortcut("RavenResizeWidthInc", "Raven: Aumentar Ancho de Ventana", "Meta+Alt+Right", function () {
     dispatchToRaven("resize_width_inc");
   });

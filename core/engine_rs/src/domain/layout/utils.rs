@@ -1,7 +1,12 @@
-//! # Módulo de Utilidades Geométricas de Layout
+//! # Utilidades Geométricas y Distribución Ponderada
 //!
-//! Contiene funciones auxiliares para la manipulación de espaciados (gaps) y la
-//! distribución proporcional de dimensiones sujetas a restricciones mínimas.
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Provee funciones auxiliares de bajo nivel para la aplicación simétrica de márgenes
+//! (`apply_gaps`) y el algoritmo de distribución de dimensiones con pesos relativos
+//! y restricciones mínimas innegociables (`distribute_weighted_sizes`).
 
 use crate::domain::geometry::Rect;
 

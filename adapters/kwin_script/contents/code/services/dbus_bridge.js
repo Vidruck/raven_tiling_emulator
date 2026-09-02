@@ -1,11 +1,17 @@
 /**
- * @fileoverview Servicios de comunicación D-Bus para sincronización entre KWin y el demonio Rust.
+ * @file dbus_bridge.js
+ * @brief Orquestador de comunicación D-Bus bidireccional entre el compositor KWin y el demonio Rust.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
+/** @type {QTimer|null} Temporizador de anti-rebote (debounce) para agrupar ráfagas de eventos de ventana. */
 var _debounceTimer = null;
 
 /**
- * Solicita de forma asíncrona la sincronización de estado (state sync) con filtrado de rebotes (debouncing).
+ * @brief Solicita una sincronización global de estado con amortiguación temporal (debouncing de 50 ms).
+ *
+ * Agrupa múltiples eventos simultáneos de KWin (ej. cambio de escritorio + foco) en un único payload D-Bus.
  */
 function requestStateSync() {
   try {
@@ -28,7 +34,9 @@ function requestStateSync() {
 }
 
 /**
- * Sincroniza el estado completo del compositor enviándolo al demonio (daemon) de Rust vía D-Bus.
+ * @brief Extrae la topología completa de pantallas, escritorios y ventanas activas y la despacha al demonio Rust vía D-Bus.
+ *
+ * Invoca el método `syncStateAndUpdateLayout` en `org.kde.raven.Events` y aplica de inmediato los comandos geométricos devueltos.
  */
 function syncState() {
   const windows = workspace.windowList();
@@ -153,9 +161,11 @@ function syncState() {
 }
 
 /**
- * Sincroniza de forma incremental el cambio de geometría o estado (delta sync) de una única ventana.
+ * @brief Sincroniza de forma incremental el cambio de geometría o estado (delta sync) de una única ventana.
  *
- * @param {KWin::Window} w - Objeto de ventana modificado.
+ * Utilizado tras el redimensionamiento o movimiento manual de una ventana por el usuario para actualizar el modelo espacial de Rust.
+ *
+ * @param {KWin::Window} w Instancia de la ventana modificada.
  */
 function syncWindowDelta(w) {
   try {
@@ -213,11 +223,11 @@ function syncWindowDelta(w) {
 }
 
 /**
- * Migra nativamente una ventana a una pantalla (output) o escritorio virtual específico.
+ * @brief Migra nativamente una ventana a un monitor o escritorio virtual especificado.
  *
- * @param {KWin::Window} win - Objeto de ventana.
- * @param {string|null} target_output_name - Nombre de la salida destino o null.
- * @param {string|null} target_desktop_id - Identificador del escritorio virtual destino o null.
+ * @param {KWin::Window} win Instancia de la ventana a desplazar.
+ * @param {string|null} target_output_name Nombre del monitor destino o null si permanece en el mismo.
+ * @param {string|null} target_desktop_id Identificador del escritorio virtual destino o null.
  */
 function migrateWindow(win, target_output_name, target_desktop_id) {
   if (!win || win.deleted) {
@@ -248,9 +258,14 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
 }
 
 /**
- * Procesa y aplica los comandos JSON recibidos desde el demonio (daemon) de Rust.
+ * @brief Procesa y aplica en KWin la lista atómica de comandos JSON calculados por el demonio Rust.
  *
- * @param {string} commandsJson - Carga de comandos serializada en JSON.
+ * Ejecuta en dos pasadas:
+ * 1. Mutaciones de estado y flotación (`set_floating`, `keepAbove`).
+ * 2. Transformaciones geométricas (`move`, `focus`, `minimize`, `unminimize`, `migrate_to_output`).
+ * Incorpora banderas `__raven_mutating` para suprimir ciclos recursivos de feedback con KWin.
+ *
+ * @param {string} commandsJson Cadena JSON con el vector de RavenAction devuelto por el demonio.
  */
 function applyCommands(commandsJson) {
   if (!commandsJson) {
@@ -410,9 +425,17 @@ function applyCommands(commandsJson) {
 }
 
 /**
- * Enlaza (binds) los eventos principales de una ventana a las funciones de sincronización del puente de Raven.
+ * @brief Enlaza los eventos y señales reactivas del ciclo de vida de una ventana con el puente de Raven.
  *
- * @param {KWin::Window} w - Objeto de ventana.
+ * Suscribe escuchadores para:
+ * - Minimización y restauración (`minimizedChanged`).
+ * - Maximización y desmaximización (`maximizedChanged`).
+ * - Pantalla completa (`fullScreenChanged`).
+ * - Cambio de título (`captionChanged` para refresco PiP).
+ * - Migración de pantalla o escritorio virtual (`outputChanged`, `desktopsChanged`).
+ * - Modificación geométrica interactiva (`frameGeometryChanged`, `interactiveMoveResizeFinished`).
+ *
+ * @param {KWin::Window} w Instancia de la ventana a enlazar.
  */
 function bindWindow(w) {
   try {

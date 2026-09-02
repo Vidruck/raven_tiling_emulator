@@ -1,7 +1,11 @@
-//! # Estrategia de Disposición Monóculo (Pantalla Completa / Monocle)
+//! # Algoritmo de Enfoque Total (`MonocleStrategy`)
 //!
-//! Implementa una distribución donde cada ventana no flotante ocupa el 100% del área
-//! del contenedor disponible, superponiéndose en capas (estilo pestañas o fullscreen).
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Implementa la distribución monóculo (Monocle): cada ventana activa ocupa el 100%
+//! del contenedor disponible con márgenes aplicados, superponiéndose en capas tipo pestañas.
 
 use super::{apply_gaps, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};

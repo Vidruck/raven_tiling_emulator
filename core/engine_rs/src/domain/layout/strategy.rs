@@ -1,7 +1,11 @@
-//! # Módulo de Estrategias y Fábrica de Layouts
+//! # Estrategias de Layout y Fábrica Polimórfica
 //!
-//! Define la interfaz abstracta `LayoutStrategy` que implementa cada algoritmo de ordenamiento
-//! y proporciona el patrón Fábrica (`get_strategy`) para instanciar dinámicamente el layout deseado.
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Define el contrato (`trait`) [`LayoutStrategy`] que gobierna todos los algoritmos
+//! matemáticos de partición espacial y provee la fábrica dinámica [`get_strategy`].
 
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
@@ -11,7 +15,7 @@ use super::{
     StrictDwindleStrategy, TallStrategy,
 };
 
-/// Interfaz (Trait) común para todos los algoritmos de distribución de ventanas (Layout Strategies).
+/// Rasgo común para todos los algoritmos de distribución de ventanas.
 ///
 /// Garantiza la compatibilidad con hilos (`Send + Sync`) para ejecución concurrente segura en Rust.
 pub trait LayoutStrategy: Send + Sync {

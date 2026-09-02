@@ -1,10 +1,11 @@
-// ============================================================================
-// RAVEN TILING EMULATOR — CENTRO DE CONTROL GRÁFICO (raven_gui)
-// ============================================================================
-// Interfaz nativa desarrollada en Rust usando `egui` y `eframe`. Proporciona un
-// panel de configuración moderno con estética Material You / GNOME Adwaita.
-// Arquitectura modular multiarchivo limpia y mantenible.
-// ============================================================================
+//! # Centro de Control Gráfico de Raven (`raven_gui`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Interfaz nativa desarrollada en Rust usando `egui` y `eframe`. Proporciona un
+//! panel de configuración avanzado con estética glassmorphic / Material You adaptado a KDE Plasma 6.
 
 use eframe::egui;
 

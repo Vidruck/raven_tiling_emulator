@@ -1,19 +1,23 @@
-//! # Geometría y Estructuras de Datos
+//! # Geometría y Estructuras de Datos Espaciales
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
 //!
 //! Este submódulo define las estructuras de datos fundamentales utilizadas por el motor
-//! para representar dimensiones de pantalla y propiedades de las ventanas.
+//! para representar dimensiones de pantalla y propiedades de estado de las ventanas.
 
 use serde::{Deserialize, Serialize};
 
-/// Representa un rectángulo en el espacio 2D de la pantalla.
+/// Representa un rectángulo en el espacio bidimensional (2D) de la pantalla.
 ///
-/// Se utiliza para definir tanto el área total de la pantalla como el área
-/// asignada a cada ventana después de calcular el layout.
+/// Se utiliza para definir tanto el área total de los monitores físicos como el marco
+/// geométrico asignado a cada ventana tras el cálculo de partición del layout.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Rect {
-    /// Posición en el eje X (horizontal).
+    /// Posición en el eje X (horizontal en píxeles).
     pub x: i32,
-    /// Posición en el eje Y (vertical).
+    /// Posición en el eje Y (vertical en píxeles).
     pub y: i32,
     /// Ancho del rectángulo en píxeles.
     pub width: i32,

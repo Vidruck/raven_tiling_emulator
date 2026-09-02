@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-#  🐦 RAVEN TILING EMULATOR — Interactive TUI Management Suite (v3.0)
+#  🐦 RAVEN TILING EMULATOR — Interactive TUI Management Suite (v3.4)
 #  Autor: Alejandro González Hernández (Vidruck)
 #  Licencia: GPL-3.0
 # ==============================================================================
@@ -137,8 +137,21 @@ do_install() {
     # 2. Compilación del Motor Rust
     log_step "2" "7" "Compilación del Motor Nativo Rust (Release)"
     log_info "Compilando raven_engine y raven_gui en modo --release..."
-    cargo build --release --manifest-path "$SOURCE_DIR/Cargo.toml"
-    log_success "Binarios de Rust compilados con éxito"
+    
+    if cargo build --release --manifest-path "$SOURCE_DIR/Cargo.toml" 2>&1 | while read -r line; do
+        if [[ "$line" =~ Compiling[[:space:]]+([^[:space:]]+) ]]; then
+            echo -ne "\r\033[K ${SECONDARY}⚙${RESET} ${MUTED}Compilando crate:${RESET} ${PRIMARY}${BOLD}${BASH_REMATCH[1]}${RESET}"
+        elif [[ "$line" =~ Finished ]]; then
+            echo -ne "\r\033[K"
+        fi
+    done; then
+        echo -ne "\r\033[K"
+        log_success "Binarios de Rust (raven_engine y raven_gui) compilados con éxito"
+    else
+        echo -ne "\r\033[K"
+        log_error "Fallo en la compilación de Rust. Ejecuta 'cargo build --release' para ver los errores."
+        exit 1
+    fi
 
     # 3. Creación de Estructura Destino
     log_step "3" "7" "Despliegue de Binarios en Entorno Local"
@@ -177,15 +190,35 @@ EOF
     # 5. Generación de Bundle JS y Registro de Adaptadores KWin / Plasmoid
     log_step "5" "7" "Empaquetado JS, C++ y Despliegue de Adaptadores KDE"
     if [ -f "$SOURCE_DIR/build_kwin_bundle.sh" ]; then
-        log_info "Ejecutando build_kwin_bundle.sh..."
+        log_info "Ensamblando bundle monolítico de KWin (build_kwin_bundle.sh)..."
         bash "$SOURCE_DIR/build_kwin_bundle.sh" >/dev/null 2>&1
         log_success "Bundle main.js ensamblado exitosamente"
     fi
 
-    log_info "Compilando Plugin Nativo C++ / QML de Raven Hub..."
+    log_info "Configurando proyecto C++ / Qt 6 con CMake..."
     cmake -B "$SOURCE_DIR/adapters/plasmoid/build" -S "$SOURCE_DIR/adapters/plasmoid" -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 || true
-    cmake --build "$SOURCE_DIR/adapters/plasmoid/build" -j"$(nproc 2>/dev/null || echo 2)" >/dev/null 2>&1 || true
-    cmake --install "$SOURCE_DIR/adapters/plasmoid/build" --prefix "$HOME/.local" >/dev/null 2>&1 || true
+    
+    log_info "Compilando Plugin Nativo C++ / QML de Raven Hub (CMake Build)..."
+    local num_cores=$(nproc 2>/dev/null || echo 2)
+    if cmake --build "$SOURCE_DIR/adapters/plasmoid/build" -j"$num_cores" 2>&1 | while read -r line; do
+        if [[ "$line" =~ \[([0-9]+)%\][[:space:]]+Building[[:space:]]+CXX[[:space:]]+object[[:space:]]+(.*) ]]; then
+            local pct="${BASH_REMATCH[1]}"
+            local obj="${BASH_REMATCH[2]##*/}"
+            echo -ne "\r\033[K ${SECONDARY}⚙${RESET} ${MUTED}[${pct}%] Compilando C++:${RESET} ${ACCENT}${BOLD}${obj}${RESET}"
+        elif [[ "$line" =~ \[([0-9]+)%\][[:space:]]+Linking[[:space:]]+CXX[[:space:]]+shared[[:space:]]+module[[:space:]]+(.*) ]]; then
+            local pct="${BASH_REMATCH[1]}"
+            local mod="${BASH_REMATCH[2]##*/}"
+            echo -ne "\r\033[K ${SUCCESS}🔗${RESET} ${MUTED}[${pct}%] Enlazando módulo:${RESET} ${PRIMARY}${BOLD}${mod}${RESET}"
+        fi
+    done; then
+        echo -ne "\r\033[K"
+        cmake --install "$SOURCE_DIR/adapters/plasmoid/build" --prefix "$HOME/.local" >/dev/null 2>&1 || true
+        log_success "Plugin C++ / QML compilado e instalado con éxito"
+    else
+        echo -ne "\r\033[K"
+        log_error "Fallo en la compilación de C++. Ejecuta 'cmake --build build' para depurar."
+        exit 1
+    fi
 
     # Desplegar módulo en rutas locales de QML
     local build_qml_dir="$SOURCE_DIR/adapters/plasmoid/build/plugin/org/kde/plasma/ravenlauncher/plugin"
@@ -205,7 +238,7 @@ EOF
         systemctl --user set-environment QML2_IMPORT_PATH="$user_qml_path:$QML2_IMPORT_PATH" 2>/dev/null || true
         systemctl --user set-environment QML_IMPORT_PATH="$user_qml_path:$QML_IMPORT_PATH" 2>/dev/null || true
     fi
-    log_success "Plugin C++ / QML de Raven Hub compilado y desplegado"
+    log_success "Módulos QML de Raven Hub sincronizados"
 
     log_info "Instalando script de KWin '$KWIN_SCRIPT_ID'..."
     kpackagetool6 --type=KWin/Script -i "$SOURCE_DIR/adapters/kwin_script/" >/dev/null 2>&1 || \
@@ -380,19 +413,24 @@ do_uninstall() {
         log_success "Servicio Systemd y D-Bus eliminados"
     fi
 
-    log_step "2" "5" "Removiendo Adaptadores KDE (KWin Script & Plasmoid)"
+    log_step "2" "5" "Removiendo Adaptadores KDE (KWin Script, Plasmoide & Módulos QML)"
     kpackagetool6 --type=KWin/Script --remove "$KWIN_SCRIPT_ID" >/dev/null 2>&1 || true
     kpackagetool6 --type=Plasma/Applet --remove "$PLASMOID_ID" >/dev/null 2>&1 || true
     rm -rf "$HOME/.local/share/kwin/scripts/$KWIN_SCRIPT_ID"
     rm -rf "$HOME/.local/share/plasma/plasmoids/$PLASMOID_ID"
-    log_success "Adaptadores de Plasma 6 removidos"
+    rm -rf "$HOME/.local/lib/qt6/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
+    rm -rf "$HOME/.local/lib64/qt6/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
+    rm -rf "$HOME/.local/share/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
+    log_success "Adaptadores y módulos QML de Plasma 6 removidos"
 
-    log_step "3" "5" "Limpiando Accesos Directos e Iconos"
+    log_step "3" "5" "Limpiando Accesos Directos, Enlaces e Iconos"
     rm -f "$HOME/.local/share/applications/raven.desktop"
     rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/${ICON_NAME}.svg"
+    rm -f "$HOME/.local/bin/raven_engine"
+    rm -f "$HOME/.local/bin/raven_gui"
     update-desktop-database "$HOME/.local/share/applications/" 2>/dev/null || true
     kbuildsycoca6 --noincremental > /dev/null 2>&1 || true
-    log_success "Archivos de escritorio limpios"
+    log_success "Archivos de escritorio, iconos y enlaces en ~/.local/bin/ limpios"
 
     log_step "4" "5" "Eliminando Binarios y Caché Local"
     if [ -d "$TARGET_DIR" ]; then

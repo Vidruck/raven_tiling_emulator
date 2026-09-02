@@ -1,8 +1,11 @@
 /**
- * @fileoverview Evaluaciones y utilidades de estado de ventanas KWin.
+ * @file window_utils.js
+ * @brief Funciones de clasificación, filtrado y evaluación heurística de ventanas de KWin.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
-// Lista de clases de ventana base (Gecko / CSD conocidas) inamovibles.
+/** @type {string[]} Lista inmutable de clases base de navegadores Gecko y aplicaciones CSD que requieren estabilización. */
 var HARDCODED_QUARANTINE_BASE = [
   "firefox",
   "zen",
@@ -21,14 +24,15 @@ var HARDCODED_QUARANTINE_BASE = [
   "java"
 ];
 
-// Lista activa fusionada y deduplicada de clases en cuarentena.
+/** @type {string[]} Lista combinada y activa de clases en periodo de cuarentena. */
 var _quarantine_classes = HARDCODED_QUARANTINE_BASE.slice();
 
-// Lista de reglas de ventanas enviadas desde la UI.
+/** @type {Array<{class: string, action: string, pip?: boolean}>} Reglas de comportamiento personalizadas recibidas del demonio Rust. */
 var _window_rules = [];
 
 /**
- * Fusiona la lista base de cuarentena con las personalizaciones enviadas desde la UI.
+ * @brief Fusiona la lista base de cuarentena con las reglas personalizadas provistas por la configuración de usuario.
+ * @param {string} res JSON serializado con la lista de clases adicionales.
  */
 function updateQuarantineClasses(res) {
   if (!res) return;
@@ -57,10 +61,9 @@ function updateQuarantineClasses(res) {
 }
 
 /**
- * Obtiene de forma segura el identificador único (ID) de una ventana.
- *
- * @param {KWin::Window} w - Objeto de ventana de KWin.
- * @returns {string|null} Identificador único en formato cadena de texto (string) o null si es inválido.
+ * @brief Obtiene de forma segura el identificador único (internalId) de una ventana.
+ * @param {KWin::Window} w Instancia de la ventana de KWin.
+ * @returns {string|null} Identificador textual único o null si no es válida.
  */
 function getSafeWindowId(w) {
   try {
@@ -74,11 +77,12 @@ function getSafeWindowId(w) {
 }
 
 /**
- * Obtiene el identificador único del área de trabajo (workspace ID) para una ventana.
- * Combina el nombre de la salida (output) y el identificador del escritorio virtual (virtual desktop ID).
+ * @brief Obtiene el identificador compuesto del área de trabajo (workspace ID) para una ventana.
  *
- * @param {KWin::Window} window - Objeto de ventana de KWin.
- * @returns {string} Identificador único del área de trabajo en formato "salida||escritorio".
+ * Formato: `"nombre_salida||id_escritorio"` (ej. `"DP-1||1"`).
+ *
+ * @param {KWin::Window} window Instancia de la ventana.
+ * @returns {string} Identificador único del espacio de trabajo.
  */
 function getWorkspaceId(window) {
   try {
@@ -99,24 +103,19 @@ function getWorkspaceId(window) {
   }
 }
 
-/**
- * Determina si una ventana es gestionable (manageable) por el motor de mosaico (tiling engine).
- *
- * @param {KWin::Window} w - Objeto de ventana de KWin.
- * @returns {boolean} Verdadero si la ventana debe ser gestionada; de lo contrario, falso.
- */
-// Expresión regular para clases de aplicaciones que son inherentemente flotantes/herramientas
-// Nota: Para Raven, únicamente se filtra la GUI de configuración del emulador (raven_gui / raven config / control center)
+/** @type {RegExp} Expresión regular para clases de aplicaciones que deben mantenerse siempre flotantes (herramientas, selectores, GUI de Raven). */
 const FLOATING_CLASSES_REGEX = /kcolorchooser|colorpicker|gcolor|eyedropper|spectacle|klipper|plasma\.clipboard|org\.kde\.kclock|org\.kde\.polkit|polkit|pinentry|zenity|kdialog|xdotool|portal|desktopdialog|plasmoidviewer|^raven_gui$|^raven-gui$|^raven config$/i;
 
-// Expresiones regulares para widgets auxiliares o mini-reproductores por caption
+/** @type {RegExp} Expresión regular para títulos descriptivos de mini-widgets y selectores auxiliares. */
 const FLOATING_CAPTION_REGEX = /color picker|selector de color|mini player|mini-player|miniplayer|zuno widget|now playing widget|pip|quick view|raven control center|raven tiling emulator — control center/i;
 
 /**
- * Determina si una ventana es gestionable (manageable) por el motor de mosaico (tiling engine).
+ * @brief Evalúa si una ventana debe ser administrada por el ciclo de vida de Raven.
  *
- * @param {KWin::Window} w - Objeto de ventana de KWin.
- * @returns {boolean} Verdadero si la ventana debe ser gestionada; de lo contrario, falso.
+ * Excluye paneles, tooltips, notificaciones, menús emergentes (popups) y ventanas de escritorio.
+ *
+ * @param {KWin::Window} w Instancia de la ventana.
+ * @returns {boolean} true si la ventana es apta para ser gestionada.
  */
 function isManageable(w) {
   try {
@@ -152,14 +151,22 @@ function isManageable(w) {
   }
 }
 
-// Expresión regular para detectar títulos Picture-in-Picture en múltiples idiomas
+/** @type {RegExp} Expresión regular multilingüe para detectar reproductores flotantes Picture-in-Picture (PiP). */
 const PIP_CAPTION_REGEX = /picture[- ]?in[- ]?picture|imagen[- ]en[- ]imagen|pantalla en pantalla|reproductor en miniatura|incrustation|bild[- ]in[- ]bild|imagem em imagem|immagine nell'immagine|^pip$/i;
 
 /**
- * Determina si una ventana debe comportarse como flotante (floating).
+ * @brief Evalúa si una ventana debe flotar libremente sin someterse a la división en mosaico.
  *
- * @param {KWin::Window} w - Objeto de ventana de KWin.
- * @returns {boolean} Verdadero si es flotante; de lo contrario, falso.
+ * Aplica un análisis de 6 fases:
+ * 1. Tipo nativo (diálogos modales, utilidades transitorias).
+ * 2. Pantalla completa nativa (delegada a control espacial de pantalla completa).
+ * 3. Detección y anclaje superior de Picture-in-Picture (PiP).
+ * 4. Filtrado por lista de exclusión (FLOATING_CLASSES_REGEX).
+ * 5. Heurística de tamaño fijo (minSize === maxSize).
+ * 6. Micro-dimensiones (< 380x320 px) para widgets dedicados.
+ *
+ * @param {KWin::Window} w Instancia de la ventana.
+ * @returns {boolean} true si debe flotar libremente.
  */
 function isFloating(w) {
   try {
@@ -246,7 +253,10 @@ function isFloating(w) {
 }
 
 /**
- * Determina si dos ventanas comparten al menos un escritorio virtual activo.
+ * @brief Determina si dos ventanas coexisten en el mismo escritorio virtual.
+ * @param {KWin::Window} w1 Primera ventana.
+ * @param {KWin::Window} w2 Segunda ventana.
+ * @returns {boolean} true si comparten al menos un escritorio virtual.
  */
 function isSameDesktop(w1, w2) {
   if (!w1.desktops || !w2.desktops || w1.desktops.length === 0 || w2.desktops.length === 0) {

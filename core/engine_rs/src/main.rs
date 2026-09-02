@@ -1,3 +1,13 @@
+//! # Demonio Principal de Raven Tiling (`raven_engine`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Punto de entrada del binario del demonio Rust. Inicializa la configuración,
+//! levanta el motor de cálculo en un actor asíncrono sobre Tokio y registra
+//! el servicio `org.kde.raven.Daemon` en el bus de sesión D-Bus.
+
 use std::error::Error;
 use tracing::info;
 use zbus::ConnectionBuilder;
@@ -8,10 +18,7 @@ use raven_core::config::RavenConfig;
 
 use raven_engine::infrastructure::dbus::RavenDBusService;
 
-/// Punto de entrada principal del demonio (daemon) Raven Tiling Emulator.
-///
-/// Inicializa las capas de configuración, dominio e infraestructura, y registra
-/// el servicio en el bus de sesión de D-Bus para comenzar la orquestación.
+/// Función principal de arranque del demonio.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Inicializar tracing: nivel configurable via RUST_LOG (e.g. RUST_LOG=debug)
@@ -23,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .compact()
         .init();
 
-    info!("🐦 Iniciando Raven Tiling Emulator (Motor Nativo Rust v2.9)...");
+    info!("🐦 Iniciando Raven Tiling Emulator (Motor Nativo Rust v3.4)...");
 
     let app_config = RavenConfig::load();
     let engine = TilingEngine::new(app_config);

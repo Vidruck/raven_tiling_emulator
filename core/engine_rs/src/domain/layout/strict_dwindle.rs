@@ -1,8 +1,12 @@
-//! # Estrategia de Disposición Strict Dwindle (Espiral Recursiva Tradicional)
+//! # Algoritmo de Espiral Recursiva Clásica (`StrictDwindleStrategy`)
 //!
-//! Implementa una división binaria en espiral secuencial estricta (Dwindle clásico).
-//! Con cada ventana agregada, divide iterativamente el espacio restante alternando
-//! entre una división horizontal y una división vertical.
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Implementa la división binaria áurea en espiral secuencial estricta (estilo Fibonacci/Bspwm).
+//! Alterna cortes horizontales y verticales manteniendo un piso de seguridad `min_rem` para evitar
+//! colapsos dimensionales en resoluciones reducidas.
 
 use super::{apply_gaps, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};

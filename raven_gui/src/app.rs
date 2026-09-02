@@ -1,6 +1,11 @@
-// ============================================================================
-// RAVEN GUI — ESTRUCTURA Y CICLO DE VIDA DE LA APLICACIÓN (app.rs)
-// ============================================================================
+//! # Estructura y Ciclo de Vida de la Aplicación (`RavenGuiApp`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Administra el estado global de la GUI, carga de configuración JSON,
+//! monitoreo de temas de KDE en vivo vía `notify` y despacho de renderizado por pestañas.
 
 use eframe::egui;
 use raven_core::config::RavenConfig;
@@ -15,6 +20,7 @@ use crate::kde_theme::KdePalette;
 use crate::services::ServiceManager;
 use crate::tabs;
 
+/// Estado principal de la aplicación gráfica Raven Control Center.
 pub struct RavenGuiApp {
     pub config: RavenConfig,
     pub service_mgr: ServiceManager,

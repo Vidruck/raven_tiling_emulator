@@ -1,9 +1,15 @@
-// ============================================================================
-// RAVEN GUI — PESTAÑA DE GUÍA DE ATAJOS GLOBALES (tabs/shortcuts_tab.rs)
-// ============================================================================
+//! # Pestaña de Guía de Atajos de Teclado (`shortcuts_tab.rs`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Presenta el catálogo visual interactivo de atajos de teclado globales de KWin
+//! (foco direccional, swaps, migración de pantallas/escritorios, Quick Peek y márgenes).
 
 use eframe::egui;
 
+/// Renderiza la vista de referencia interactiva de atajos de teclado globales.
 pub fn show(ui: &mut egui::Ui, accent: egui::Color32) {
     ui.heading(egui::RichText::new("⌨️ Guía Completa de Atajos de Teclado Globales").strong().size(18.0).color(accent));
     ui.label(egui::RichText::new("Atajos nativos integrados en KDE Plasma (kglobalshortcutsrc) para controlar a Raven en tiempo real.").weak());

@@ -1,15 +1,18 @@
-//! # Algoritmo de Disposición Principal: Dwindle BSP Adaptativo (Aspect-Ratio Aware)
+//! # Algoritmo Insignia: Dwindle BSP Adaptativo (*Raven Tiling Core*)
 //!
-//! Implementa la arquitectura de cuadrícula insignia de Raven Engine:
-//! - Distribuye dinámicamente las ventanas entre un Área Central (Master), Paneles Laterales (Sidebars)
-//!   y Paneles Inferiores (Bottom Panels).
-//! - Adapta proporciones defensivas y distribuye espacios sobrantes respetando restricciones geométricas.
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Implementa la arquitectura de partición espacial insignia de Raven:
+//! - Distribución tripartita dinámica entre Área Maestra Central, Paneles Laterales y Paneles Inferiores.
+//! - Ratios 2D personalizados y soporte de restricciones geométricas de hardware.
 
 use super::{apply_gaps, distribute_weighted_sizes, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
-/// Estrategia principal "Dwindle BSP": disposición adaptativa multitramo.
+/// Estrategia principal "Raven Dwindle BSP": disposición adaptativa multitramo.
 pub struct DwindleBSPStrategy;
 
 impl LayoutStrategy for DwindleBSPStrategy {

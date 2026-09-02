@@ -1,14 +1,25 @@
 /**
- * @fileoverview Pool estático de timers reutilizables para minimizar la carga del Garbage Collector en QJSEngine.
+ * @file timer_pool.js
+ * @brief Pool estático de temporizadores reutilizables para optimización del recolector de basura (GC) en QJSEngine.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
+/** @type {number} Capacidad máxima de temporizadores preasignados en el pool. */
 var TIMER_POOL_SIZE = 10;
+
+/** @type {Array<{timer: QTimer, busy: boolean, callback: Function|null}>} Lista de slots de temporizadores. */
 var _timer_pool = [];
+
+/** @type {boolean} Indica si el pool ha completado su inicialización. */
 var _timer_pool_ready = false;
 
 /**
- * Inicializa el pool de timers estáticos preasignados.
- * Debe llamarse una sola vez durante init().
+ * @brief Inicializa el pool de temporizadores estáticos preasignados.
+ *
+ * Crea instancias persistentes de QTimer para evitar la creación y destrucción constante
+ * de objetos durante eventos masivos de redimensionamiento o movimiento.
+ * Debe invocarse una única vez durante el ciclo de arranque `initDBusBridge()`.
  */
 function initTimerPool() {
   try {
@@ -33,12 +44,14 @@ function initTimerPool() {
 }
 
 /**
- * Ejecuta un callback después de un retardo de tiempo especificado en milisegundos,
- * reutilizando un QTimer estático del pool si está disponible.
+ * @brief Ejecuta un callback después de un retardo temporal en milisegundos.
  *
- * @param {Function} callback - Función que se ejecutará al vencer el temporizador.
- * @param {number} delayMs - Tiempo de espera en milisegundos.
- * @returns {Object|null} El slot de timer asignado o null en caso de fallo.
+ * Reutiliza un slot libre de QTimer del pool estático. Si todos los slots están ocupados,
+ * recurre a una asignación dinámica de reserva (*fallback*).
+ *
+ * @param {Function} callback Función a ejecutar al expirar el tiempo.
+ * @param {number} delayMs Tiempo de espera en milisegundos.
+ * @returns {Object|QTimer|null} Referencia al temporizador asignado o null en caso de fallo crítico.
  */
 function setKWinTimeout(callback, delayMs) {
   if (_timer_pool_ready && _timer_pool.length > 0) {
@@ -54,7 +67,7 @@ function setKWinTimeout(callback, delayMs) {
     }
   }
 
-  // Fallback a asignación dinámica
+  // Fallback a asignación dinámica si el pool se encuentra saturado
   try {
     var fallbackTimer = new QTimer();
     fallbackTimer.singleShot = true;

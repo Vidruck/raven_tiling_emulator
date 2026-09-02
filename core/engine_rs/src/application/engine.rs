@@ -1,3 +1,12 @@
+//! # Núcleo del Motor de Mosaico (`TilingEngine`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Mantiene el estado en memoria de ventanas gestionadas, geometrías de pantalla,
+//! historial FIFO de ventanas (`window_history`) para desalojo atómico en saturación y flotación dinámica.
+
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::domain::error::RavenError;

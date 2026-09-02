@@ -1,11 +1,19 @@
 /**
- * @fileoverview Lógica de estabilización CSD para ventanas de arranque asíncrono.
+ * @file quarantine.js
+ * @brief Lógica de estabilización temporal (cuarentena CSD) para ventanas de arranque asíncrono en Wayland.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
 /**
- * Procesa el ingreso de una nueva ventana evaluando si requiere estabilización temporal CSD.
+ * @brief Evalúa y procesa la incorporación de una nueva ventana al sistema de mosaico.
  *
- * @param {KWin::Window} w - Ventana que se está añadiendo.
+ * Determina si la ventana requiere un periodo de cuarentena temporal para estabilizar
+ * sus dimensiones iniciales antes de ser empaquetada por el motor de cálculo:
+ * - Ventanas sin `resourceClass` definido en su primer ciclo de vida (120 ms).
+ * - Aplicaciones basadas en Gecko, Electron, JVM o CSD conocidas (80 ms).
+ *
+ * @param {KWin::Window} w Instancia de la ventana naciente.
  */
 function processNewWindow(w) {
   if (!w || w.deleted || !isManageable(w)) {

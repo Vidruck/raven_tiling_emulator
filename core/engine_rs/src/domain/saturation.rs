@@ -1,8 +1,12 @@
-//! # Motor de Composición Predictiva — Saturación de Pantalla
+//! # Motor de Composición Predictiva — Detección y Mitigación de Saturación
 //!
-//! Calcula el número máximo de ventanas que caben en una pantalla antes de que
-//! ocurra colapso visual (Cmax), y modela los estados de saturación del compositor.
-
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Modela matemáticamente el umbral crítico de capacidad de pantalla ($C_{max}$)
+//! para prevenir el colapso visual o encimamiento de ventanas en particiones complejas,
+//! controlando los estados `Fluid`, `PreSaturation`, `Saturated` y `Overloaded`.
 
 /// Estado de saturación de la composición en pantalla.
 #[derive(Debug, Clone, PartialEq)]

@@ -1,9 +1,14 @@
-// ============================================================================
-// RAVEN GUI — PESTAÑA DE INFORMACIÓN Y CRÉDITOS (tabs/about_tab.rs)
-// ============================================================================
+//! # Pestaña de Información, Autoría y Licencia (`about_tab.rs`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Presenta los créditos oficiales, enlaces al repositorio GitHub, información del desarrollador y términos de licencia GPL-3.0.
 
 use eframe::egui;
 
+/// Renderiza la vista de información general, autoría y licencia del proyecto.
 pub fn show(ui: &mut egui::Ui, accent: egui::Color32) {
     ui.heading(egui::RichText::new("ℹ️ Acerca de Raven Tiling Emulator").strong().size(18.0).color(accent));
     ui.label(egui::RichText::new("Bienvenido al Centro de Configuracion del Motor nativo de mosaico dinámico para KDE Plasma 6.").weak());

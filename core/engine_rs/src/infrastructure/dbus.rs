@@ -1,3 +1,14 @@
+//! # Interfaz y Servicio D-Bus (`org.kde.raven.Daemon` / `org.kde.raven.Events`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Implementa los puntos finales D-Bus expuestos para la comunicación con KDE Plasma 6:
+//! - Recepción de payloads de estado de KWin (`syncStateAndUpdateLayout`, `syncWindowDelta`).
+//! - Despacho de atajos y acciones de usuario (`toggleTiling`, `cycleLayout`, `incrementGaps`, etc.).
+//! - Emisión de señales reactivas (`tilingCommandsPending`).
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};

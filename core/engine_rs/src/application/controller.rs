@@ -1,3 +1,13 @@
+//! # Controlador de Aplicación y Mitigador de Inestabilidad (`RavenController`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Orquesta las mutaciones de estado, transiciones de layout, navegación de foco,
+//! intercambio de ventanas (*swap*), ajustes interactivos de márgenes/ratios y detección
+//! de bucles infinitos de oscilación geométrica (*FlapTracker*).
+
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{info, warn};
@@ -25,10 +35,7 @@ struct FlapTracker {
     last_minimized: bool,
 }
 
-/// Orquestador principal de la lógica de Raven - v2.9 Master-Stack con soporte de intercambio de ventanas.
-///
-/// Administra el ciclo de vida del motor de mosaico (tiling engine), coordina
-/// la sincronización de estados del compositor y detecta situaciones de inestabilidad.
+/// Orquestador principal de la lógica de Raven Hub v3.4 con soporte de pila compartida y mitigación de saturación.
 pub struct RavenController {
     /// Motor de mosaico central de la aplicación.
     engine: TilingEngine,

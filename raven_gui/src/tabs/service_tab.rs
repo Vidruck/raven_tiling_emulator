@@ -1,11 +1,17 @@
-// ============================================================================
-// RAVEN GUI — PESTAÑA DE SERVICIO MOTOR SYSTEMD (tabs/service_tab.rs)
-// ============================================================================
+//! # Pestaña de Gestión del Servicio Systemd (`service_tab.rs`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Proporciona controles interactivos para iniciar, detener, reiniciar y consultar
+//! el estado en vivo del servicio `raven.service` administrado por systemd en la sesión de usuario.
 
 use eframe::egui;
 use raven_core::config::RavenConfig;
 use crate::services::ServiceManager;
 
+/// Renderiza la vista de gestión del servicio de usuario `raven.service`.
 pub fn show(
     config: &mut RavenConfig,
     ui: &mut egui::Ui,

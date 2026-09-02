@@ -1,6 +1,8 @@
 /**
- * @fileoverview Punto de entrada base (Plantilla) para el puente Raven (Raven Bridge) en KDE Plasma 6.
- * Este archivo agrupa y carga los submódulos modulares a través de compilación por node o despliegue.
+ * @file index.js
+ * @brief Punto de entrada modular y orquestador del puente Raven (Raven Bridge) en KDE Plasma 6.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
 //@include "utils/logger.js"
@@ -13,21 +15,21 @@
 //@include "services/shortcuts.js"
 
 /**
- * Inicializa y registra los atajos de teclado globales de Raven en KWin.
+ * @brief Registra los atajos de teclado globales en el gestor de accesos directos de KWin.
  */
 function initShortcuts() {
   registerRavenShortcuts();
 }
 
 /**
- * Inicializa el puente D-Bus completo, incluyendo:
- * - Pool de timers estáticos
- * - Clases de cuarentena del daemon
- * - Reglas de ventanas del daemon
- * - Hooks de ciclo de vida de ventanas (windowAdded, windowRemoved, etc.)
- * - Seguimiento de ventana activa
- * - Notificación de bridge listo al daemon Rust
- * - Primera sincronización completa
+ * @brief Inicializa el ciclo de vida del puente D-Bus y enlaza las señales del compositor KWin.
+ *
+ * Secuencia de arranque:
+ * 1. Inicializa el pool estático de temporizadores (`initTimerPool`).
+ * 2. Enlaza todas las ventanas gestionables ya presentes en el espacio de trabajo (`bindWindow`).
+ * 3. Registra ganchos de eventos del compositor (`windowAdded`, `windowRemoved`, `activeWindowChanged`, `currentDesktopChanged`).
+ * 4. Suscribe la señal D-Bus `tilingCommandsPending` y notifica `bridgeReady` al demonio Rust.
+ * 5. Ejecuta la primera sincronización de estado global (`requestStateSync`).
  */
 function initDBusBridge() {
   // 1. Inicializar pool de timers estáticos
@@ -69,7 +71,7 @@ function initDBusBridge() {
     requestStateSync();
   });
 
-  // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (50ms)
+  // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (100ms)
   setKWinTimeout(function () {
     try {
       callDBus(
@@ -127,9 +129,9 @@ function initDBusBridge() {
   }, 100);
 }
 
-// Registro inicial de ciclo de vida
+// Registro e inicialización de ciclo de vida en el motor de scripting de KWin
 try {
-  Logger.info("Main", "Inicializando el puente de Raven Tiling Emulator v3.0");
+  Logger.info("Main", "Inicializando el puente de Raven Tiling Emulator v3.4");
   initShortcuts();
   initDBusBridge();
   Logger.info("Main", "Puente inicializado exitosamente");

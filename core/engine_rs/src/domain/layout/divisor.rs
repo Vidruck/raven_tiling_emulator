@@ -1,7 +1,11 @@
-//! # Estrategia de Disposición Divisor (Columnas Equitativas)
+//! # Algoritmo de Columnas Equitativas (`DivisorStrategy`)
 //!
-//! Implementa una distribución horizontal donde la pantalla se divide en $N$ columnas
-//! de ancho exactamente igual. Cada ventana ocupa una columna completa de arriba a abajo.
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Implementa una partición horizontal donde la pantalla se divide en $N$ columnas
+//! paralelas de ancho equitativo, ocupando la altura total disponible.
 
 use super::{apply_gaps, distribute_weighted_sizes, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};

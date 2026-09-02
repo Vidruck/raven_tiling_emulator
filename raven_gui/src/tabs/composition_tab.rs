@@ -1,10 +1,16 @@
-// ============================================================================
-// RAVEN GUI — PESTAÑA DE COMPOSICIÓN, GEOMETRÍA Y PIP (tabs/composition_tab.rs)
-// ============================================================================
+//! # Pestaña de Reglas de Ventana y Cuarentena CSD (`composition_tab.rs`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Administra la creación interactiva de reglas de exclusión por clase WM (`WindowRule`),
+//! anclaje permanente a modo Picture-in-Picture (PiP) y configuración de clases en cuarentena.
 
 use eframe::egui;
 use raven_core::config::RavenConfig;
 
+/// Renderiza la vista de administración de reglas de ventana y cuarentenas CSD.
 pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32) {
     ui.heading(egui::RichText::new("🛡️ Reglas de Ventanas & Cuarentena").strong().size(18.0).color(accent));
     ui.label(egui::RichText::new("Gestiona Aplicaciones problematicas o que quieras definir como flotantes/Pip's.").weak());

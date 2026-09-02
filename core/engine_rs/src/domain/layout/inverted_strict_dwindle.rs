@@ -1,8 +1,12 @@
-//! # Estrategia de Disposición Inverted Strict Dwindle (Espiral Invertida Geométricamente)
+//! # Algoritmo de Espiral Recursiva Invertida (`InvertedStrictDwindleStrategy`)
 //!
-//! Implementa una división binaria en espiral secuencial invertida en geometría:
-//! La primera ventana (más grande / principal) toma el bloque del lado DERECHO.
-//! Luego, el espacio restante (lado izquierdo) se subdivide sucesivamente alternando divisiones hacia arriba / izquierda.
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Implementa una partición espiral espejada geométricamente: la ventana principal
+//! toma el panel derecho y las subsecuentes se subdividen de forma recursiva hacia
+//! el cuadrante izquierdo con protecciones de contorno `min_rem`.
 
 use super::{apply_gaps, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};

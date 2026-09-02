@@ -1,6 +1,11 @@
-// ============================================================================
-// RAVEN GUI — PESTAÑA DE ALGORITMOS Y PRESETS (tabs/layouts_tab.rs)
-// ============================================================================
+//! # Pestaña de Algoritmos y Presets de Mosaico (`layouts_tab.rs`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Proporciona la interfaz interactiva para selección de algoritmos (Raven, Tall, Monocle,
+//! Fibonacci Dwindle, Inverted Dwindle, Divisor) y carga de presets estilísticos predefinidos.
 
 use eframe::egui;
 use raven_core::config::RavenConfig;
@@ -8,6 +13,7 @@ use crate::kde_theme::KdePalette;
 use crate::models::PRESETS;
 use crate::components::layout_preview::draw_layout_preview;
 
+/// Renderiza la vista de selección de algoritmos y presets de composición.
 pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, palette: &KdePalette) {
     ui.heading(egui::RichText::new("🎨 Composición").strong().size(18.0).color(accent));
     ui.label(egui::RichText::new("Personaliza la disposición geométrica, márgenes y anclaje PiP en tiempo real.").weak());

@@ -1,12 +1,17 @@
 /**
- * @fileoverview Funciones auxiliares de geometría y cálculo de coordenadas para KWin.
+ * @file geometry.js
+ * @brief Funciones auxiliares de cálculo y normalización geométrica de pantallas y ventanas en KWin.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
 /**
- * Normaliza y obtiene un objeto de geometría en coordenadas enteras de pantalla a partir de un Rect.
+ * @brief Normaliza un rectángulo nativo de Qt/KWin a un objeto de coordenadas enteras estándar.
  *
- * @param {QtRect} rect - Estructura de geometría nativa de Qt.
- * @returns {Object} Objeto con las propiedades normalizadas {x, y, w, h}.
+ * Resuelve polimorfismos entre métodos de acceso `x()`/`width()` y propiedades directas `x`/`width`.
+ *
+ * @param {QtRect|Object} rect Estructura geométrica provista por el compositor.
+ * @returns {{x: number, y: number, w: number, h: number}} Objeto normalizado con enteros redondeados.
  */
 function getRectGeometry(rect) {
   if (!rect) {
@@ -30,11 +35,12 @@ function getRectGeometry(rect) {
 }
 
 /**
- * Obtiene de forma segura el área útil de la pantalla (screen geometry) para un escritorio virtual y salida dados.
+ * @brief Obtiene de forma segura el área útil de trabajo (excluyendo paneles y docks de Plasma)
+ * para un monitor y escritorio virtual especificados.
  *
- * @param {KWin::Output} output - Salida física de pantalla.
- * @param {KWin::VirtualDesktop} desktop - Escritorio virtual.
- * @returns {Object} Geometría útil del área de trabajo.
+ * @param {KWin::Output} output Salida física o monitor reportado por KWin.
+ * @param {KWin::VirtualDesktop} desktop Escritorio virtual activo.
+ * @returns {{x: number, y: number, w: number, h: number}} Geometría utilizable del espacio de trabajo.
  */
 function getSafeScreenGeometry(output, desktop) {
   if (!output) {

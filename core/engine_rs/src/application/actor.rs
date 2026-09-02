@@ -1,3 +1,13 @@
+//! # Modelo de Actores de Concurrencia (`RavenControllerActor`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Implementa el patrón Actor sobre canales asíncronos Tokio (`mpsc` y `oneshot`)
+//! para garantizar el acceso secuencial, seguro y libre de condiciones de carrera (*race conditions*)
+//! sobre el estado mutable del motor de ventanas.
+
 use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 use tracing::info;

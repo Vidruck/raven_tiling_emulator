@@ -1,7 +1,17 @@
+//! # Sincronización del Esquema de Colores de KDE Plasma (`KdePalette`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Lee y parsea directamente el archivo `~/.config/kdeglobals` para sincronizar
+//! de forma idéntica los colores de fondo, texto, botones y acento de Plasma en `egui`.
+
 use eframe::egui::Color32;
 use std::fs;
 use std::path::PathBuf;
 
+/// Paleta cromática nativa extraída de la sesión de KDE Plasma.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KdePalette {
     pub window_bg: Color32,

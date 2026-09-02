@@ -1,7 +1,17 @@
+//! # Catálogo de Acciones de Dominio (`RavenAction`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Este módulo define las acciones atómicas e intenciones geométricas emitidas por el motor
+//! hacia los adaptadores de infraestructura (D-Bus / KWin Script).
+
 use serde::{Deserialize, Serialize};
 
 /// Acciones de dominio que representan intenciones del motor sobre las ventanas.
-/// Estas acciones son agnósticas a la infraestructura subyacente (D-Bus, X11, Wayland).
+///
+/// Estas acciones son completamente agnósticas a la infraestructura subyacente (D-Bus, X11, Wayland).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RavenAction {
     /// Mueve y redimensiona una ventana a una posición y dimensiones específicas.

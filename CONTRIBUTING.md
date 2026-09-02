@@ -1,66 +1,74 @@
 # Contribuyendo a Raven 🐦
 
-¡Gracias por tu interés en mejorar Raven! Con el lanzamiento de la **v3.0**, el proyecto ha evolucionado hacia un gestor de mosaico dinámico multi-algoritmo (5 Layouts) de arquitectura **100% nativa en Rust**, **IPC Single-Trip libre de polling** y un **adaptador KWin modular multiarchivo**.
+¡Gracias por tu interés en mejorar Raven! Con el lanzamiento de la **v3.4**, el proyecto se consolida como una suite completa de gestión de mosaico dinámico multi-algoritmo (6 Layouts) de arquitectura **100% nativa en Rust**, **IPC Single-Trip libre de polling**, un **adaptador KWin modular** y el **Raven Hub v3.4** en C++/QML para KDE Plasma 6 (Wayland).
 
-Estamos encantados de recibir colaboraciones que impulsen la estabilidad, el rendimiento y la experiencia de usuario en KDE Plasma 6 (Wayland).
+Este proyecto es software libre creado y mantenido por **Alejandro González Hernández (Vidruck)** bajo la licencia **GNU General Public License Version 3 (GPL-3.0)**. Todas las contribuciones enviadas al repositorio se licenciarán bajo estos mismos términos.
 
 ---
 
-## 🏗️ Pilar Arquitectónico y Paradigma v3.0
+## 🏗️ Pilares Arquitectónicos v3.4
 
-Para mantener la calidad y fluidez del proyecto, todas las contribuciones deben respetar estos pilares:
+Para mantener la calidad, seguridad de tipos y fluidez del proyecto, todas las contribuciones deben respetar estos principios:
 
-### 1. Motor Nativo y Domain-Driven Layouts (`core/engine_rs`)
-- **Arquitectura de Dominio (`domain/layout/`)**: La lógica de mosaico soporta 5 algoritmos (`raven`, `tall`, `monocle`, `strict_dwindle`, `divisor`). Toda nueva adición o modificación de algoritmo debe implementar el rasgo `LayoutStrategy` e incluir pruebas unitarias.
-- **Protección Foveal & Asimetría**: El layout predeterminado `raven` organiza el espacio en un *Centro Foveal* principal flanqueado por paneles laterales/inferiores de utilidad.
-- **Límites de Seguridad Wayland**: Debe mantenerse la protección de acotamiento de seguridad a `300x250` px en la comprobación de dimensiones mínimas de ventanas para evitar evicciones o cuellos de botella en la composición.
+### 1. Motor Nativo y Domain-Driven Layouts (`core/engine_rs` y `crates/raven_core`)
+- **Arquitectura Hexagonal**: La capa de dominio (`domain/layout/`) es agnóstica de infraestructura. Soporta 6 algoritmos (`raven`, `tall`, `monocle`, `strict_dwindle`, `inverted_strict_dwindle`, `divisor`). Toda nueva estrategia debe implementar el rasgo `LayoutStrategy` e incorporar su método `predict_capacity`.
+- **Mediador de Capacidad y Mitigación de Saturación**: El motor evalúa dinámicamente la capacidad del monitor ($C_{max}$) antes de transicionar entre layouts, aplicando desalojo atómico FIFO hacia minimización para evitar sobrecargas o colapso visual.
+- **Protección Geométrica de Remanente (`min_rem`)**: En algoritmos recursivos de espiral, se deben respetar pisos dimensionales de seguridad ($\ge 100$–$120$ px) para evitar rectángulos con dimensiones cero o negativas.
 
 ### 2. Arquitectura Single-Trip D-Bus IPC (`infrastructure/dbus.rs` & `zbus 4`)
-- **Cero Polling (Push-Based IPC)**: Está estrictamente prohibido introducir bucles de consulta (polling). La comunicación entre el script de KWin y el daemon de Rust se realiza de manera síncrona/asíncrona en un solo viaje IPC (`syncStateAndUpdateLayout` y `syncWindowDelta`).
-- **Respuesta de Geometría Inmediata**: La respuesta D-Bus devuelve los comandos de reposicionamiento en el mismo viaje para minimizar latencia y consumo de CPU.
+- **Cero Polling (Push-Based IPC)**: Prohibido introducir bucles activos de consulta. La comunicación entre el script de KWin, el Plasmoide y el daemon de Rust se realiza mediante llamadas síncronas/asíncronas en un solo viaje IPC (`syncStateAndUpdateLayout`, `syncWindowDelta` y la señal `tilingCommandsPending`).
+- **Respuesta Reactiva Inmediata**: Cualquier cambio de márgenes, ratio o algoritmos debe sincronizarse en vivo con KWin en el mismo ciclo de eventos sin esperar a la pérdida de foco.
 
 ### 3. Adaptador KWin Modular Multiarchivo (`adapters/kwin_script/`)
-Con la v3.0, el puente de KWin se organiza en submódulos especializados en `contents/code/`:
-- `utils/`: Módulos del sistema (`logger`, `geometry`, `timer_pool`).
-- `core/`: Reglas de ventanas (`window_utils`), cuarentena CSD (`quarantine`) y foco direccional (`focus`).
-- `services/`: Puente de eventos D-Bus IPC (`dbus_bridge`) e inyección de atajos globales (`shortcuts`).
+El puente de KWin se estructura de forma modular en `contents/code/`:
+- `utils/`: `logger.js`, `geometry.js`, `timer_pool.js` (reutilización de `QTimer` para mitigar la presión sobre el Garbage Collector en QJSEngine).
+- `core/`: `window_utils.js` (heurísticas y PiP), `quarantine.js` (estabilización CSD para navegadores Gecko) y `focus.js` (resalte visual con Outline).
+- `services/`: `dbus_bridge.js` (puente D-Bus) y `shortcuts.js` (atajos globales de KWin).
 
-> **Reglas para el adaptador JS:**
-> - Usar la API nativa de Plasma 6 en lugar de filtrados manuales.
-> - Mantener la inmutabilidad de IDs rastreando ventanas exclusivamente mediante `w.internalId.toString()`.
-> - Reutilizar el pool de temporizadores (`setKWinTimeout`) para evitar la presión sobre el Garbage Collector en QJSEngine.
-> - El instalador (`install.sh`) se encarga automáticamente de procesar los `@include` y compilar el bundle final para `kpackagetool6`.
+### 4. Plasmoide y Hub Integrado (`adapters/plasmoid/`)
+- Desarrollado en **C++20 y Qt 6 / QML**:
+  - Clases documentadas bajo estándar Doxygen en español.
+  - Sincronización MPRIS2 no bloqueante y extrapolación a 1 Hz en `MediaController`.
+  - Monitoreo en vivo de hardware y esquema de colores de Plasma en `SystemStats`.
+  - Integración de tokens de diseño atómico centralizado en `RavenTheme.qml`.
 
-### 4. Interfaz Nativa de Preferencias (`raven_gui`)
-- Construida en Rust con `egui/eframe`. Ofrece vista previa del canvas en vivo y lectura nativa del tema de colores de KDE desde `~/.config/kdeglobals`.
-
-### 5. Optimización de Binario y Recursos (Binary Thinning)
-- Mantenemos una huella en disco mínima (~1.9 MB para el motor). Evita clonaciones innecesarias de datos en el motor y evalúa críticamente cualquier dependencia externa adicional.
+### 5. Centro de Control Gráfico (`raven_gui`)
+- Aplicación de escritorio nativa en Rust usando `egui/eframe`. Ofrece vista previa vectorial 2D en tiempo real, gestión de reglas y lectura de temas desde `~/.config/kdeglobals`.
 
 ---
 
-## 🚀 Cómo Colaborar
+## 🚀 Guía de Colaboración
 
-1. **Reporte de Bugs:** Abre un *Issue* indicando tu hardware, versión de KDE Plasma y logs del daemon (`journalctl --user -u raven -f`).
+1. **Reporte de Errores e Incidencias:** Abre un *Issue* en GitHub especificando:
+   - Hardware y tarjeta gráfica (Intel / AMD / NVIDIA).
+   - Versión exacta de KDE Plasma y servidor gráfico (Wayland).
+   - Logs del daemon (`journalctl --user -u raven -f`) y trazas del compositor.
 2. **Pull Requests:**
-   - Crea una rama descriptiva (`feature/nuevo-layout` o `fix/caso-borde-kwin`).
-   - Verifica la sanidad de tu código ejecutando:
+   - Crea una rama descriptiva a partir de `main` (`feature/nombre-mejora` o `fix/descripcion-bug`).
+   - Verifica que el código supere todas las pruebas de sanidad y estilo:
      ```bash
-     cargo check
-     cargo clippy
-     cargo fmt --check
+     cargo check --workspace
+     cargo clippy --workspace --all-targets -- -D warnings
+     cargo test --workspace
      ```
-   - Documenta cualquier modificación en la interfaz D-Bus o en la estructura de configuración.
+   - Mantén los comentarios y documentación técnica en **español**, preservando la integridad del formato Doxygen/rustdoc.
+   - Todo commit debe redactarse en **español** con descripciones claras del valor aportado.
 
 ---
 
-## 🛠️ Requisitos de Desarrollo (*Stack*)
+## 🛠️ Stack y Requisitos de Desarrollo
 
-- **Rust Toolchain:** Edición 2021 o superior (`cargo`).
-- **Node.js:** Necesario para el empaquetador del puente JS (`node` durante `./install.sh`).
-- **Librerías de Desarrollo:** `libwayland`, `libx11`, `libxkbcommon`, `pkg-config`.
-- **Herramientas de KDE:** `kpackagetool6` y `kbuildsycoca6`.
+- **Rust Toolchain:** Edición 2021 estable (`rustc`, `cargo`, `clippy`).
+- **C++ / Qt:** Compilador C++20 (`g++` o `clang`), Qt 6 (Core, Qml, Quick, DBus, Network), CMake $\ge 3.16$ y `extra-cmake-modules`.
+- **Herramientas de KDE:** `kpackagetool6`, `kbuildsycoca6` y `kwin_wayland`.
+- **Librerías del Sistema:** `pkg-config`, `libxkbcommon`, `systemd`.
 
 ---
 
-**Tu ayuda no solo mejora a Raven, me ayuda a mí a ser un mejor ingeniero. Hagamos de Raven el Tiling Engine más rápido, ligero y elegante para KDE. ¡Huélum!**
+## 📄 Licencia
+
+Al contribuir a este repositorio, aceptas que todo tu trabajo se distribuya bajo la **GNU General Public License Version 3 (GPL-3.0)**, reconociendo a **Alejandro González Hernández (Vidruck)** como autor principal y titular de los derechos del proyecto Raven Tiling Emulator. Consulta el archivo [LICENSE.txt](LICENSE.txt) para más detalles.
+
+---
+
+**¡Gracias por apoyar el desarrollo de Raven! Hagamos de este el gestor de mosaico más rápido, fluido y visualmente deslumbrante para KDE Plasma. ¡Huélum!**

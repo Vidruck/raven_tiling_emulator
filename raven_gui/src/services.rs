@@ -1,6 +1,11 @@
-// ============================================================================
-// RAVEN GUI — CAPA DE SERVICIOS Y PERSISTENCIA (services.rs)
-// ============================================================================
+//! # Capa de Servicios y Persistencia del Sistema (`services.rs`)
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Controla el ciclo de vida del servicio `raven.service` vía `systemctl --user`,
+//! regeneración atómica de configuración JSON y emisión de señales de recarga.
 
 use std::fs;
 use std::path::PathBuf;
@@ -8,6 +13,7 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 use raven_core::config::RavenConfig;
 
+/// Gestor de persistencia y control de demonio systemd.
 pub struct ServiceManager {
     pub config_path: PathBuf,
     pub is_active_cache: bool,

@@ -1,13 +1,26 @@
+//! # Configuración Persistente y Reglas de Dominio
+//!
+//! **Autor:** Alejandro González Hernández (Vidruck)  
+//! **Versión:** 3.4  
+//! **Licencia:** GPL-3.0  
+//!
+//! Administra la serialización y deserialización del archivo de configuración `~/.config/raven/raven.json`,
+//! incluyendo valores predeterminados seguros, reglas por clase de aplicación y layouts por workspace.
+
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use tracing::{info, warn};
 
+/// Regla personalizada de ventana basada en coincidencia de clase WM / Resource Class.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct WindowRule {
+    /// Clase de la aplicación (ej. "spectacle", "steam_app").
     pub class: String,
+    /// Acción forzada ("float", "tile", "ignore").
     pub action: String,
+    /// Indica si debe tratarse como Picture-in-Picture fijado sobre otras ventanas.
     #[serde(default)]
     pub pip: bool,
 }
