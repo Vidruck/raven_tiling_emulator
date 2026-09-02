@@ -11,7 +11,7 @@ use eframe::egui::Color32;
 use std::fs;
 use std::path::PathBuf;
 
-/// Paleta cromática nativa extraída de la sesión de KDE Plasma.
+/// Paleta cromática y tipografía nativa extraída de la sesión de KDE Plasma.
 #[derive(Clone, Debug, PartialEq)]
 pub struct KdePalette {
     pub window_bg: Color32,
@@ -22,6 +22,9 @@ pub struct KdePalette {
     pub button_fg: Color32,
     pub selection_bg: Color32,
     pub selection_fg: Color32,
+    pub positive_fg: Color32,
+    pub negative_fg: Color32,
+    pub font_family: Option<String>,
     pub is_dark: bool,
 }
 
@@ -36,6 +39,9 @@ impl Default for KdePalette {
             button_fg: Color32::from_rgb(226, 232, 240),
             selection_bg: Color32::from_rgb(0, 180, 216),
             selection_fg: Color32::WHITE,
+            positive_fg: Color32::from_rgb(46, 204, 113),
+            negative_fg: Color32::from_rgb(231, 76, 60),
+            font_family: None,
             is_dark: true,
         }
     }
@@ -64,12 +70,25 @@ impl KdePalette {
                     let key = parts[0].trim();
                     let val = parts[1].trim();
                     
+                    if current_section == "General" && key == "font" {
+                        let f_parts: Vec<&str> = val.split(',').collect();
+                        if let Some(f_name) = f_parts.first() {
+                            let f_clean = f_name.trim();
+                            if !f_clean.is_empty() {
+                                palette.font_family = Some(f_clean.to_string());
+                            }
+                        }
+                        continue;
+                    }
+                    
                     if let Some(color) = parse_color(val) {
                         match current_section.as_str() {
                             "Colors:Window" => {
                                 match key {
                                     "BackgroundNormal" => palette.window_bg = color,
                                     "ForegroundNormal" => palette.window_fg = color,
+                                    "ForegroundPositive" | "PositiveText" => palette.positive_fg = color,
+                                    "ForegroundNegative" | "NegativeText" => palette.negative_fg = color,
                                     _ => {}
                                 }
                             }

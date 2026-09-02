@@ -82,20 +82,21 @@ impl eframe::App for RavenGuiApp {
         }
 
         let mut visuals = if self.kde_palette.is_dark { egui::Visuals::dark() } else { egui::Visuals::light() };
-        let primary_text = if self.kde_palette.is_dark {
-            egui::Color32::from_rgb(245, 245, 250)
-        } else {
-            egui::Color32::from_rgb(20, 20, 25)
-        };
+        let primary_text = self.kde_palette.window_fg;
 
         visuals.window_fill = self.kde_palette.window_bg;
         visuals.panel_fill = self.kde_palette.window_bg;
         visuals.widgets.noninteractive.bg_fill = self.kde_palette.window_bg;
+        visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0_f32, primary_text);
         visuals.widgets.inactive.bg_fill = self.kde_palette.button_bg;
+        visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, self.kde_palette.button_fg);
         visuals.widgets.hovered.bg_fill = self.kde_palette.selection_bg;
+        visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0_f32, self.kde_palette.selection_fg);
         visuals.widgets.active.bg_fill = self.kde_palette.selection_bg;
+        visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0_f32, self.kde_palette.selection_fg);
         visuals.override_text_color = Some(primary_text);
         visuals.selection.bg_fill = self.kde_palette.selection_bg;
+        visuals.selection.stroke = egui::Stroke::new(1.0_f32, self.kde_palette.selection_fg);
         visuals.window_rounding = 14.0.into();
         ctx.set_visuals(visuals);
 

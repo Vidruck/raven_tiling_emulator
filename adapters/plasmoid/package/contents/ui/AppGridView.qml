@@ -1,9 +1,21 @@
+/**
+ * @file AppGridView.qml
+ * @brief Vista en cuadrícula interactiva de aplicaciones del sistema con filtrado en tiempo real.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
+ * @license GPL-3.0
+ */
+
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 import "./org/kde/plasma/ravenlauncher/plugin" as RavenPlugin
 
+/**
+ * @class AppGridView
+ * @brief Componente de cuadrícula de aplicaciones con buscador integrado y navegación por teclado.
+ */
 Item {
     id: root
     signal appLaunched(string appUrl, string execCmd)
@@ -223,15 +235,25 @@ Item {
         }
     }
 
+    /**
+     * @brief Actualiza la lista de aplicaciones instaladas recargando el modelo del plugin.
+     */
     function refresh() {
         appRunner.refresh();
     }
 
+    /**
+     * @brief Limpia el campo de búsqueda de texto y restaura el foco activo en él.
+     */
     function resetSearch() {
         searchField.text = "";
         searchField.forceActiveFocus();
     }
 
+    /**
+     * @brief Asegura que el elemento en el índice indicado sea visible dentro del área con scroll.
+     * @param {number} idx Índice del elemento seleccionado.
+     */
     function ensureVisible(idx) {
         var row = Math.floor(idx / 3);
         var itemY = row * 82;

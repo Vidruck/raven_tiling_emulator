@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  @file main.xml
+  @brief Esquema KConfigXT de persistencia de configuración para el Plasmoide de Raven en KDE Plasma 6.
+  @author Alejandro González Hernández (Vidruck)
+  @version 3.4
+  @license GPL-3.0
+-->
 <kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0

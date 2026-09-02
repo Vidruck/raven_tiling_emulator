@@ -1,9 +1,21 @@
+/**
+ * @file configAppearance.qml
+ * @brief Módulo de configuración KCM (KConfigModule) para el reloj, fecha y apariencia del plasmoide.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
+ * @license GPL-3.0
+ */
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.kcmutils as KCM
 
+/**
+ * @class configAppearance
+ * @brief Interfaz de configuración gráfica para las preferencias de tiempo, formato y posición del lanzador.
+ */
 KCM.SimpleKCM {
     id: root
 

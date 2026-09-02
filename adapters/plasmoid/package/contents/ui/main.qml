@@ -1,3 +1,11 @@
+/**
+ * @file main.qml
+ * @brief Componente raíz del Plasmoide de Raven para KDE Plasma 6 (PlasmoidItem).
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
+ * @license GPL-3.0
+ */
+
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
@@ -5,6 +13,10 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import "./org/kde/plasma/ravenlauncher/plugin" as RavenPlugin
 
+/**
+ * @class main
+ * @brief Elemento raíz del applet que gestiona la representación compacta en el panel y el diálogo flotante central.
+ */
 PlasmoidItem {
     id: root
     Plasmoid.icon: (RavenPlugin.SystemStats && RavenPlugin.SystemStats.distroIcon) ? RavenPlugin.SystemStats.distroIcon : "start-here-kde"

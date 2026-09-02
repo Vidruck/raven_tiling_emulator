@@ -1,21 +1,54 @@
 /**
- * @fileoverview Modulo de Logger para el puente Raven en KWin (Plasma 6).
+ * @file logger.js
+ * @brief Módulo de registro estructurado y diagnóstico para el puente de KWin (Plasma 6).
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
+/**
+ * @namespace Logger
+ * @brief Objeto estático de registro de mensajes para el motor de scripts de KWin.
+ *
+ * Emite trazas estandarizadas visualizables mediante `journalctl -f | grep RAVEN`.
+ */
 var Logger = {
-  // Activa esto a true si necesitas depurar localmente. Se deja en false por eficiencia.
+  /** @type {boolean} Bandera de depuración detallada. Desactivada por defecto para máxima eficiencia. */
   debug_enabled: false,
 
+  /**
+   * @brief Emite un mensaje informativo de operación estándar.
+   * @param {string} ctx Contexto o nombre de la función emisora.
+   * @param {string} msg Mensaje descriptivo.
+   */
   info: function (ctx, msg) {
     print("[RAVEN] [INFO] [" + ctx + "] " + msg);
   },
+
+  /**
+   * @brief Emite una advertencia de anomalía recuperable o estado inconsistente.
+   * @param {string} ctx Contexto de ejecución.
+   * @param {string} msg Mensaje de advertencia.
+   */
   warn: function (ctx, msg) {
     print("[RAVEN] [WARN] [" + ctx + "] " + msg);
   },
+
+  /**
+   * @brief Registra un error crítico junto con la traza de excepción asociada.
+   * @param {string} ctx Contexto del error.
+   * @param {string} msg Mensaje del error.
+   * @param {Error|string} [err] Objeto de error o traza.
+   */
   error: function (ctx, msg, err) {
     var trace = err ? " | Trace: " + err : "";
     print("[RAVEN] [ERROR] [" + ctx + "] " + msg + trace);
   },
+
+  /**
+   * @brief Emite mensajes de depuración sólo si debug_enabled es true.
+   * @param {string} ctx Contexto.
+   * @param {string} msg Mensaje de diagnóstico.
+   */
   debug: function (ctx, msg) {
     if (this.debug_enabled) {
       print("[RAVEN] [DEBUG] [" + ctx + "] " + msg);
@@ -23,16 +56,27 @@ var Logger = {
   }
 };
 /**
- * @fileoverview Pool estático de timers reutilizables para minimizar la carga del Garbage Collector en QJSEngine.
+ * @file timer_pool.js
+ * @brief Pool estático de temporizadores reutilizables para optimización del recolector de basura (GC) en QJSEngine.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
+/** @type {number} Capacidad máxima de temporizadores preasignados en el pool. */
 var TIMER_POOL_SIZE = 10;
+
+/** @type {Array<{timer: QTimer, busy: boolean, callback: Function|null}>} Lista de slots de temporizadores. */
 var _timer_pool = [];
+
+/** @type {boolean} Indica si el pool ha completado su inicialización. */
 var _timer_pool_ready = false;
 
 /**
- * Inicializa el pool de timers estáticos preasignados.
- * Debe llamarse una sola vez durante init().
+ * @brief Inicializa el pool de temporizadores estáticos preasignados.
+ *
+ * Crea instancias persistentes de QTimer para evitar la creación y destrucción constante
+ * de objetos durante eventos masivos de redimensionamiento o movimiento.
+ * Debe invocarse una única vez durante el ciclo de arranque `initDBusBridge()`.
  */
 function initTimerPool() {
   try {
@@ -57,12 +101,14 @@ function initTimerPool() {
 }
 
 /**
- * Ejecuta un callback después de un retardo de tiempo especificado en milisegundos,
- * reutilizando un QTimer estático del pool si está disponible.
+ * @brief Ejecuta un callback después de un retardo temporal en milisegundos.
  *
- * @param {Function} callback - Función que se ejecutará al vencer el temporizador.
- * @param {number} delayMs - Tiempo de espera en milisegundos.
- * @returns {Object|null} El slot de timer asignado o null en caso de fallo.
+ * Reutiliza un slot libre de QTimer del pool estático. Si todos los slots están ocupados,
+ * recurre a una asignación dinámica de reserva (*fallback*).
+ *
+ * @param {Function} callback Función a ejecutar al expirar el tiempo.
+ * @param {number} delayMs Tiempo de espera en milisegundos.
+ * @returns {Object|QTimer|null} Referencia al temporizador asignado o null en caso de fallo crítico.
  */
 function setKWinTimeout(callback, delayMs) {
   if (_timer_pool_ready && _timer_pool.length > 0) {
@@ -78,7 +124,7 @@ function setKWinTimeout(callback, delayMs) {
     }
   }
 
-  // Fallback a asignación dinámica
+  // Fallback a asignación dinámica si el pool se encuentra saturado
   try {
     var fallbackTimer = new QTimer();
     fallbackTimer.singleShot = true;
@@ -94,14 +140,19 @@ function setKWinTimeout(callback, delayMs) {
   }
 }
 /**
- * @fileoverview Funciones auxiliares de geometría y cálculo de coordenadas para KWin.
+ * @file geometry.js
+ * @brief Funciones auxiliares de cálculo y normalización geométrica de pantallas y ventanas en KWin.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
 /**
- * Normaliza y obtiene un objeto de geometría en coordenadas enteras de pantalla a partir de un Rect.
+ * @brief Normaliza un rectángulo nativo de Qt/KWin a un objeto de coordenadas enteras estándar.
  *
- * @param {QtRect} rect - Estructura de geometría nativa de Qt.
- * @returns {Object} Objeto con las propiedades normalizadas {x, y, w, h}.
+ * Resuelve polimorfismos entre métodos de acceso `x()`/`width()` y propiedades directas `x`/`width`.
+ *
+ * @param {QtRect|Object} rect Estructura geométrica provista por el compositor.
+ * @returns {{x: number, y: number, w: number, h: number}} Objeto normalizado con enteros redondeados.
  */
 function getRectGeometry(rect) {
   if (!rect) {
@@ -125,11 +176,12 @@ function getRectGeometry(rect) {
 }
 
 /**
- * Obtiene de forma segura el área útil de la pantalla (screen geometry) para un escritorio virtual y salida dados.
+ * @brief Obtiene de forma segura el área útil de trabajo (excluyendo paneles y docks de Plasma)
+ * para un monitor y escritorio virtual especificados.
  *
- * @param {KWin::Output} output - Salida física de pantalla.
- * @param {KWin::VirtualDesktop} desktop - Escritorio virtual.
- * @returns {Object} Geometría útil del área de trabajo.
+ * @param {KWin::Output} output Salida física o monitor reportado por KWin.
+ * @param {KWin::VirtualDesktop} desktop Escritorio virtual activo.
+ * @returns {{x: number, y: number, w: number, h: number}} Geometría utilizable del espacio de trabajo.
  */
 function getSafeScreenGeometry(output, desktop) {
   if (!output) {
@@ -149,10 +201,13 @@ function getSafeScreenGeometry(output, desktop) {
   return { x: 0, y: 0, w: 1920, h: 1080 };
 }
 /**
- * @fileoverview Evaluaciones y utilidades de estado de ventanas KWin.
+ * @file window_utils.js
+ * @brief Funciones de clasificación, filtrado y evaluación heurística de ventanas de KWin.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
-// Lista de clases de ventana base (Gecko / CSD conocidas) inamovibles.
+/** @type {string[]} Lista inmutable de clases base de navegadores Gecko y aplicaciones CSD que requieren estabilización. */
 var HARDCODED_QUARANTINE_BASE = [
   "firefox",
   "zen",
@@ -171,14 +226,15 @@ var HARDCODED_QUARANTINE_BASE = [
   "java"
 ];
 
-// Lista activa fusionada y deduplicada de clases en cuarentena.
+/** @type {string[]} Lista combinada y activa de clases en periodo de cuarentena. */
 var _quarantine_classes = HARDCODED_QUARANTINE_BASE.slice();
 
-// Lista de reglas de ventanas enviadas desde la UI.
+/** @type {Array<{class: string, action: string, pip?: boolean}>} Reglas de comportamiento personalizadas recibidas del demonio Rust. */
 var _window_rules = [];
 
 /**
- * Fusiona la lista base de cuarentena con las personalizaciones enviadas desde la UI.
+ * @brief Fusiona la lista base de cuarentena con las reglas personalizadas provistas por la configuración de usuario.
+ * @param {string} res JSON serializado con la lista de clases adicionales.
  */
 function updateQuarantineClasses(res) {
   if (!res) return;
@@ -207,10 +263,9 @@ function updateQuarantineClasses(res) {
 }
 
 /**
- * Obtiene de forma segura el identificador único (ID) de una ventana.
- *
- * @param {KWin::Window} w - Objeto de ventana de KWin.
- * @returns {string|null} Identificador único en formato cadena de texto (string) o null si es inválido.
+ * @brief Obtiene de forma segura el identificador único (internalId) de una ventana.
+ * @param {KWin::Window} w Instancia de la ventana de KWin.
+ * @returns {string|null} Identificador textual único o null si no es válida.
  */
 function getSafeWindowId(w) {
   try {
@@ -224,11 +279,12 @@ function getSafeWindowId(w) {
 }
 
 /**
- * Obtiene el identificador único del área de trabajo (workspace ID) para una ventana.
- * Combina el nombre de la salida (output) y el identificador del escritorio virtual (virtual desktop ID).
+ * @brief Obtiene el identificador compuesto del área de trabajo (workspace ID) para una ventana.
  *
- * @param {KWin::Window} window - Objeto de ventana de KWin.
- * @returns {string} Identificador único del área de trabajo en formato "salida||escritorio".
+ * Formato: `"nombre_salida||id_escritorio"` (ej. `"DP-1||1"`).
+ *
+ * @param {KWin::Window} window Instancia de la ventana.
+ * @returns {string} Identificador único del espacio de trabajo.
  */
 function getWorkspaceId(window) {
   try {
@@ -249,24 +305,19 @@ function getWorkspaceId(window) {
   }
 }
 
-/**
- * Determina si una ventana es gestionable (manageable) por el motor de mosaico (tiling engine).
- *
- * @param {KWin::Window} w - Objeto de ventana de KWin.
- * @returns {boolean} Verdadero si la ventana debe ser gestionada; de lo contrario, falso.
- */
-// Expresión regular para clases de aplicaciones que son inherentemente flotantes/herramientas
-// Nota: Para Raven, únicamente se filtra la GUI de configuración del emulador (raven_gui / raven config / control center)
+/** @type {RegExp} Expresión regular para clases de aplicaciones que deben mantenerse siempre flotantes (herramientas, selectores, GUI de Raven). */
 const FLOATING_CLASSES_REGEX = /kcolorchooser|colorpicker|gcolor|eyedropper|spectacle|klipper|plasma\.clipboard|org\.kde\.kclock|org\.kde\.polkit|polkit|pinentry|zenity|kdialog|xdotool|portal|desktopdialog|plasmoidviewer|^raven_gui$|^raven-gui$|^raven config$/i;
 
-// Expresiones regulares para widgets auxiliares o mini-reproductores por caption
+/** @type {RegExp} Expresión regular para títulos descriptivos de mini-widgets y selectores auxiliares. */
 const FLOATING_CAPTION_REGEX = /color picker|selector de color|mini player|mini-player|miniplayer|zuno widget|now playing widget|pip|quick view|raven control center|raven tiling emulator — control center/i;
 
 /**
- * Determina si una ventana es gestionable (manageable) por el motor de mosaico (tiling engine).
+ * @brief Evalúa si una ventana debe ser administrada por el ciclo de vida de Raven.
  *
- * @param {KWin::Window} w - Objeto de ventana de KWin.
- * @returns {boolean} Verdadero si la ventana debe ser gestionada; de lo contrario, falso.
+ * Excluye paneles, tooltips, notificaciones, menús emergentes (popups) y ventanas de escritorio.
+ *
+ * @param {KWin::Window} w Instancia de la ventana.
+ * @returns {boolean} true si la ventana es apta para ser gestionada.
  */
 function isManageable(w) {
   try {
@@ -302,14 +353,22 @@ function isManageable(w) {
   }
 }
 
-// Expresión regular para detectar títulos Picture-in-Picture en múltiples idiomas
+/** @type {RegExp} Expresión regular multilingüe para detectar reproductores flotantes Picture-in-Picture (PiP). */
 const PIP_CAPTION_REGEX = /picture[- ]?in[- ]?picture|imagen[- ]en[- ]imagen|pantalla en pantalla|reproductor en miniatura|incrustation|bild[- ]in[- ]bild|imagem em imagem|immagine nell'immagine|^pip$/i;
 
 /**
- * Determina si una ventana debe comportarse como flotante (floating).
+ * @brief Evalúa si una ventana debe flotar libremente sin someterse a la división en mosaico.
  *
- * @param {KWin::Window} w - Objeto de ventana de KWin.
- * @returns {boolean} Verdadero si es flotante; de lo contrario, falso.
+ * Aplica un análisis de 6 fases:
+ * 1. Tipo nativo (diálogos modales, utilidades transitorias).
+ * 2. Pantalla completa nativa (delegada a control espacial de pantalla completa).
+ * 3. Detección y anclaje superior de Picture-in-Picture (PiP).
+ * 4. Filtrado por lista de exclusión (FLOATING_CLASSES_REGEX).
+ * 5. Heurística de tamaño fijo (minSize === maxSize).
+ * 6. Micro-dimensiones (< 380x320 px) para widgets dedicados.
+ *
+ * @param {KWin::Window} w Instancia de la ventana.
+ * @returns {boolean} true si debe flotar libremente.
  */
 function isFloating(w) {
   try {
@@ -396,7 +455,10 @@ function isFloating(w) {
 }
 
 /**
- * Determina si dos ventanas comparten al menos un escritorio virtual activo.
+ * @brief Determina si dos ventanas coexisten en el mismo escritorio virtual.
+ * @param {KWin::Window} w1 Primera ventana.
+ * @param {KWin::Window} w2 Segunda ventana.
+ * @returns {boolean} true si comparten al menos un escritorio virtual.
  */
 function isSameDesktop(w1, w2) {
   if (!w1.desktops || !w2.desktops || w1.desktops.length === 0 || w2.desktops.length === 0) {
@@ -410,13 +472,21 @@ function isSameDesktop(w1, w2) {
   return false;
 }
 /**
- * @fileoverview Lógica de estabilización CSD para ventanas de arranque asíncrono.
+ * @file quarantine.js
+ * @brief Lógica de estabilización temporal (cuarentena CSD) para ventanas de arranque asíncrono en Wayland.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
 /**
- * Procesa el ingreso de una nueva ventana evaluando si requiere estabilización temporal CSD.
+ * @brief Evalúa y procesa la incorporación de una nueva ventana al sistema de mosaico.
  *
- * @param {KWin::Window} w - Ventana que se está añadiendo.
+ * Determina si la ventana requiere un periodo de cuarentena temporal para estabilizar
+ * sus dimensiones iniciales antes de ser empaquetada por el motor de cálculo:
+ * - Ventanas sin `resourceClass` definido en su primer ciclo de vida (120 ms).
+ * - Aplicaciones basadas en Gecko, Electron, JVM o CSD conocidas (80 ms).
+ *
+ * @param {KWin::Window} w Instancia de la ventana naciente.
  */
 function processNewWindow(w) {
   if (!w || w.deleted || !isManageable(w)) {
@@ -454,13 +524,19 @@ function processNewWindow(w) {
   }
 }
 /**
- * @fileoverview Resalte visual con el sistema de Outline de KWin.
+ * @file focus.js
+ * @brief Resalte visual interactivo mediante el sistema de contorno (Outline) nativo de KWin.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
 /**
- * Destaca visualmente una ventana usando el Outline de KWin.
+ * @brief Destaca momentáneamente una ventana proyectando el marco de contorno (Outline) del compositor.
  *
- * @param {KWin::Window} w - Ventana a destacar.
+ * Utilizado al conmutar foco mediante atajos (`Meta+J` / `Meta+K`) para dar retroalimentación visual inmediata.
+ * El contorno se desvanece automáticamente tras 200 ms.
+ *
+ * @param {KWin::Window} w Instancia de la ventana a destacar.
  */
 function highlightWindow(w) {
   try {
@@ -475,13 +551,19 @@ function highlightWindow(w) {
 }
 
 /**
- * @fileoverview Servicios de comunicación D-Bus para sincronización entre KWin y el demonio Rust.
+ * @file dbus_bridge.js
+ * @brief Orquestador de comunicación D-Bus bidireccional entre el compositor KWin y el demonio Rust.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
+/** @type {QTimer|null} Temporizador de anti-rebote (debounce) para agrupar ráfagas de eventos de ventana. */
 var _debounceTimer = null;
 
 /**
- * Solicita de forma asíncrona la sincronización de estado (state sync) con filtrado de rebotes (debouncing).
+ * @brief Solicita una sincronización global de estado con amortiguación temporal (debouncing de 50 ms).
+ *
+ * Agrupa múltiples eventos simultáneos de KWin (ej. cambio de escritorio + foco) en un único payload D-Bus.
  */
 function requestStateSync() {
   try {
@@ -504,7 +586,9 @@ function requestStateSync() {
 }
 
 /**
- * Sincroniza el estado completo del compositor enviándolo al demonio (daemon) de Rust vía D-Bus.
+ * @brief Extrae la topología completa de pantallas, escritorios y ventanas activas y la despacha al demonio Rust vía D-Bus.
+ *
+ * Invoca el método `syncStateAndUpdateLayout` en `org.kde.raven.Events` y aplica de inmediato los comandos geométricos devueltos.
  */
 function syncState() {
   const windows = workspace.windowList();
@@ -629,9 +713,11 @@ function syncState() {
 }
 
 /**
- * Sincroniza de forma incremental el cambio de geometría o estado (delta sync) de una única ventana.
+ * @brief Sincroniza de forma incremental el cambio de geometría o estado (delta sync) de una única ventana.
  *
- * @param {KWin::Window} w - Objeto de ventana modificado.
+ * Utilizado tras el redimensionamiento o movimiento manual de una ventana por el usuario para actualizar el modelo espacial de Rust.
+ *
+ * @param {KWin::Window} w Instancia de la ventana modificada.
  */
 function syncWindowDelta(w) {
   try {
@@ -689,11 +775,11 @@ function syncWindowDelta(w) {
 }
 
 /**
- * Migra nativamente una ventana a una pantalla (output) o escritorio virtual específico.
+ * @brief Migra nativamente una ventana a un monitor o escritorio virtual especificado.
  *
- * @param {KWin::Window} win - Objeto de ventana.
- * @param {string|null} target_output_name - Nombre de la salida destino o null.
- * @param {string|null} target_desktop_id - Identificador del escritorio virtual destino o null.
+ * @param {KWin::Window} win Instancia de la ventana a desplazar.
+ * @param {string|null} target_output_name Nombre del monitor destino o null si permanece en el mismo.
+ * @param {string|null} target_desktop_id Identificador del escritorio virtual destino o null.
  */
 function migrateWindow(win, target_output_name, target_desktop_id) {
   if (!win || win.deleted) {
@@ -724,9 +810,14 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
 }
 
 /**
- * Procesa y aplica los comandos JSON recibidos desde el demonio (daemon) de Rust.
+ * @brief Procesa y aplica en KWin la lista atómica de comandos JSON calculados por el demonio Rust.
  *
- * @param {string} commandsJson - Carga de comandos serializada en JSON.
+ * Ejecuta en dos pasadas:
+ * 1. Mutaciones de estado y flotación (`set_floating`, `keepAbove`).
+ * 2. Transformaciones geométricas (`move`, `focus`, `minimize`, `unminimize`, `migrate_to_output`).
+ * Incorpora banderas `__raven_mutating` para suprimir ciclos recursivos de feedback con KWin.
+ *
+ * @param {string} commandsJson Cadena JSON con el vector de RavenAction devuelto por el demonio.
  */
 function applyCommands(commandsJson) {
   if (!commandsJson) {
@@ -886,9 +977,17 @@ function applyCommands(commandsJson) {
 }
 
 /**
- * Enlaza (binds) los eventos principales de una ventana a las funciones de sincronización del puente de Raven.
+ * @brief Enlaza los eventos y señales reactivas del ciclo de vida de una ventana con el puente de Raven.
  *
- * @param {KWin::Window} w - Objeto de ventana.
+ * Suscribe escuchadores para:
+ * - Minimización y restauración (`minimizedChanged`).
+ * - Maximización y desmaximización (`maximizedChanged`).
+ * - Pantalla completa (`fullScreenChanged`).
+ * - Cambio de título (`captionChanged` para refresco PiP).
+ * - Migración de pantalla o escritorio virtual (`outputChanged`, `desktopsChanged`).
+ * - Modificación geométrica interactiva (`frameGeometryChanged`, `interactiveMoveResizeFinished`).
+ *
+ * @param {KWin::Window} w Instancia de la ventana a enlazar.
  */
 function bindWindow(w) {
   try {
@@ -1026,14 +1125,23 @@ function bindWindow(w) {
   }
 }
 /**
- * @fileoverview Registro e inyección de accesos directos globales nativos de KWin para Raven.
+ * @file shortcuts.js
+ * @brief Registro e integración de atajos de teclado globales nativos de KWin en KDE Plasma 6.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
 /**
- * Registra los atajos globales nativos de KWin para controlar a Raven.
- * Expone las acciones del gestor de ventanas al panel de preferencias del sistema.
+ * @brief Registra todos los atajos de teclado globales de Raven en el subsistema de accesos rápidos de KWin.
+ *
+ * Expone las acciones del gestor de mosaico en la sección "KWin" del panel de Preferencias del Sistema.
+ * Cada combinación despacha un método D-Bus hacia `org.kde.raven.Daemon` y ejecuta inmediatamente los comandos retornados.
  */
 function registerRavenShortcuts() {
+  /**
+   * @brief Envía una acción sin parámetros al demonio de Raven vía D-Bus.
+   * @param {string} actionStr Nombre del método D-Bus.
+   */
   function dispatchToRaven(actionStr) {
     try {
       callDBus(
@@ -1052,6 +1160,11 @@ function registerRavenShortcuts() {
     }
   }
 
+  /**
+   * @brief Envía una acción con un argumento al demonio de Raven vía D-Bus.
+   * @param {string} actionStr Nombre del método D-Bus.
+   * @param {number|string} arg Valor del parámetro.
+   */
   function dispatchToRavenArg(actionStr, arg) {
     try {
       callDBus(
@@ -1071,6 +1184,7 @@ function registerRavenShortcuts() {
     }
   }
 
+  // ── GESTIÓN DE ESTADO Y FLOTACIÓN ──
   registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function () {
     dispatchToRaven("toggleTiling");
   });
@@ -1079,6 +1193,8 @@ function registerRavenShortcuts() {
     var awId = aw ? getSafeWindowId(aw) : "";
     dispatchToRavenArg("toggleFloating", awId);
   });
+
+  // ── NAVEGACIÓN Y FOCO VISUAL ──
   registerShortcut("RavenFocusNext", "Raven: Siguiente Ventana", "Meta+J", function () {
     dispatchToRaven("focusNext");
   });
@@ -1097,6 +1213,8 @@ function registerRavenShortcuts() {
   registerShortcut("RavenFocusDown", "Raven: Foco Abajo", "Meta+Down", function () {
     dispatchToRaven("focusDown");
   });
+
+  // ── INTERCAMBIO Y RATIOS DE COMPOSICIÓN ──
   registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function () {
     dispatchToRaven("swapNext");
   });
@@ -1109,29 +1227,13 @@ function registerRavenShortcuts() {
   registerShortcut("RavenDecreaseRatio", "Raven: Contraer Master", "Meta+L", function () {
     dispatchToRaven("decreaseRatio");
   });
-  registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Otro Monitor", "Meta+Shift+M", function () {
-    dispatchToRaven("migrateActiveToScreen");
-  });
 
-  // Shortcuts para uso desde Plasmoid / Externo
-  registerShortcut("RavenIncrementGaps", "Raven: Incrementar Gaps", "Meta+=", function () {
-    dispatchToRavenArg("incrementGaps", 2);
-  });
-  registerShortcut("RavenDecrementGaps", "Raven: Decrementar Gaps", "Meta+-", function () {
-    dispatchToRavenArg("incrementGaps", -2);
-  });
-  registerShortcut("RavenIncrementMaster", "Raven: Incrementar Master", "Meta+]", function () {
-    dispatchToRaven("incrementMaster");
-  });
-  registerShortcut("RavenDecrementMaster", "Raven: Decrementar Master", "Meta+[", function () {
-    dispatchToRaven("decrementMaster");
+  // ── MIGRACIÓN ENTRE MONITORES Y ESCRITORIOS ──
+  registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Monitor Siguiente", "Meta+Shift+M", function () {
+    dispatchToRaven("migrateActiveToScreen");
   });
   registerShortcut("RavenMigratePrevMonitor", "Raven: Enviar a Monitor Anterior", "Meta+Shift+N", function () {
     dispatchToRaven("migrateActiveToPrevScreen");
-  });
-  registerShortcut("RavenCycleLayout", "Raven: Ciclar Layout", "Meta+Shift+L", function() {
-    dispatchToRaven("cycleLayout");
-    if (workspace.activeWindow) highlightWindow(workspace.activeWindow);
   });
   registerShortcut("RavenMigrateDesktop", "Raven: Enviar a Escritorio Siguiente", "Meta+Shift+Right", function () {
     dispatchToRaven("migrateActiveToDesktop");
@@ -1140,6 +1242,25 @@ function registerRavenShortcuts() {
     dispatchToRaven("migrateActiveToPrevDesktop");
   });
 
+  // ── MÁRGENES, CAPACIDAD Y CICLADO DE ALGORITMOS ──
+  registerShortcut("RavenIncrementGaps", "Raven: Incrementar Gaps", "Meta+=", function () {
+    dispatchToRavenArg("incrementGaps", 2);
+  });
+  registerShortcut("RavenDecrementGaps", "Raven: Decrementar Gaps", "Meta+-", function () {
+    dispatchToRavenArg("incrementGaps", -2);
+  });
+  registerShortcut("RavenIncrementMaster", "Raven: Incrementar Capacidad Master", "Meta+]", function () {
+    dispatchToRaven("incrementMaster");
+  });
+  registerShortcut("RavenDecrementMaster", "Raven: Decrementar Capacidad Master", "Meta+[", function () {
+    dispatchToRaven("decrementMaster");
+  });
+  registerShortcut("RavenCycleLayout", "Raven: Ciclar Algoritmo de Disposición", "Meta+Shift+L", function() {
+    dispatchToRaven("cycleLayout");
+    if (workspace.activeWindow) highlightWindow(workspace.activeWindow);
+  });
+
+  // ── REDIMENSIONAMIENTO FINO POR VENTANA ──
   registerShortcut("RavenResizeWidthInc", "Raven: Aumentar Ancho de Ventana", "Meta+Alt+Right", function () {
     dispatchToRaven("resize_width_inc");
   });
@@ -1154,27 +1275,29 @@ function registerRavenShortcuts() {
   });
 }
 /**
- * @fileoverview Punto de entrada base (Plantilla) para el puente Raven (Raven Bridge) en KDE Plasma 6.
- * Este archivo agrupa y carga los submódulos modulares a través de compilación por node o despliegue.
+ * @file index.js
+ * @brief Punto de entrada modular y orquestador del puente Raven (Raven Bridge) en KDE Plasma 6.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
  */
 
 
 /**
- * Inicializa y registra los atajos de teclado globales de Raven en KWin.
+ * @brief Registra los atajos de teclado globales en el gestor de accesos directos de KWin.
  */
 function initShortcuts() {
   registerRavenShortcuts();
 }
 
 /**
- * Inicializa el puente D-Bus completo, incluyendo:
- * - Pool de timers estáticos
- * - Clases de cuarentena del daemon
- * - Reglas de ventanas del daemon
- * - Hooks de ciclo de vida de ventanas (windowAdded, windowRemoved, etc.)
- * - Seguimiento de ventana activa
- * - Notificación de bridge listo al daemon Rust
- * - Primera sincronización completa
+ * @brief Inicializa el ciclo de vida del puente D-Bus y enlaza las señales del compositor KWin.
+ *
+ * Secuencia de arranque:
+ * 1. Inicializa el pool estático de temporizadores (`initTimerPool`).
+ * 2. Enlaza todas las ventanas gestionables ya presentes en el espacio de trabajo (`bindWindow`).
+ * 3. Registra ganchos de eventos del compositor (`windowAdded`, `windowRemoved`, `activeWindowChanged`, `currentDesktopChanged`).
+ * 4. Suscribe la señal D-Bus `tilingCommandsPending` y notifica `bridgeReady` al demonio Rust.
+ * 5. Ejecuta la primera sincronización de estado global (`requestStateSync`).
  */
 function initDBusBridge() {
   // 1. Inicializar pool de timers estáticos
@@ -1216,7 +1339,7 @@ function initDBusBridge() {
     requestStateSync();
   });
 
-  // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (50ms)
+  // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (100ms)
   setKWinTimeout(function () {
     try {
       callDBus(
@@ -1274,9 +1397,9 @@ function initDBusBridge() {
   }, 100);
 }
 
-// Registro inicial de ciclo de vida
+// Registro e inicialización de ciclo de vida en el motor de scripting de KWin
 try {
-  Logger.info("Main", "Inicializando el puente de Raven Tiling Emulator v3.0");
+  Logger.info("Main", "Inicializando el puente de Raven Tiling Emulator v3.4");
   initShortcuts();
   initDBusBridge();
   Logger.info("Main", "Puente inicializado exitosamente");

@@ -38,14 +38,20 @@ QtObject {
     readonly property color windowBackground: RavenPlugin.SystemStats.windowBgColor ///< Color de fondo de ventana raíz.
     readonly property color viewBackground: RavenPlugin.SystemStats.viewBgColor     ///< Color de fondo de vistas y cuadrículas.
     readonly property color cardBackground: RavenPlugin.SystemStats.cardBackground ///< Color de fondo para tarjetas e islas.
+    readonly property color buttonBackground: RavenPlugin.SystemStats.buttonBgColor ///< Color de botones nativo de KDE.
+    readonly property color buttonTextColor: RavenPlugin.SystemStats.buttonTextColor ///< Color de texto de botones nativo.
     readonly property color cardBorder: isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.08) ///< Borde sutil de tarjeta.
     readonly property color hoverBackground: isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07) ///< Fondo al pasar el cursor (Hover).
     readonly property color surfaceElevated: isDark ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0, 0, 0, 0.04) ///< Superficie para sub-islas elevadas.
 
-    // ── TIPOGRAFÍA Y CONTRASTE ──
+    // ── TIPOGRAFÍA Y CONTRASTE DEL SISTEMA ──
+    readonly property string fontFamily: RavenPlugin.SystemStats.generalFontFamily ///< Familia de fuentes estándar del sistema.
+    readonly property string fixedFontFamily: RavenPlugin.SystemStats.fixedFontFamily ///< Familia monospace del sistema.
     readonly property color textColor: RavenPlugin.SystemStats.textColor       ///< Color de texto principal de alto contraste.
     readonly property color subTextColor: RavenPlugin.SystemStats.subTextColor ///< Color de texto secundario y subtítulos.
 
-    // ── COLOR DE ACENTO Y REALCE (ACCENT COLOR) ──
+    // ── COLORES SEMÁNTICOS Y DE ACENTO ──
     readonly property color highlightColor: RavenPlugin.SystemStats.highlightColor ///< Color de acento nativo de Plasma del usuario.
+    readonly property color positiveColor: RavenPlugin.SystemStats.positiveTextColor ///< Color semántico de éxito (verde).
+    readonly property color negativeColor: RavenPlugin.SystemStats.negativeTextColor ///< Color semántico de error/alerta (rojo).
 }

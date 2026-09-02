@@ -100,18 +100,19 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                     container.height = rem_h;
                 }
                 2 => {
-                    // Partición vertical: la ventana toma el bloque IZQUIERDO de tamaño master_ratio
+                    // Partición vertical: la ventana toma el bloque DERECHO del área remanente de tamaño master_ratio
                     let win_min_w = std::cmp::max(win.min_w, 120);
                     let min_rem = 120;
                     let max_allowed = std::cmp::max(1, container.width - min_rem);
                     let raw_w = (container.width as f32 * master_ratio) as i32;
                     let main_w = raw_w.clamp(std::cmp::min(win_min_w, max_allowed), max_allowed);
+                    let rem_w = std::cmp::max(1, container.width - main_w);
                     
+                    curr.x = container.x + rem_w;
                     curr.width = main_w;
 
-                    // El contenedor remanente se desplaza a la DERECHA
-                    container.x += main_w;
-                    container.width = std::cmp::max(1, container.width - main_w);
+                    // El contenedor remanente queda en la esquina SUPERIOR IZQUIERDA
+                    container.width = rem_w;
                 }
                 _ => {
                     // Partición horizontal: la ventana toma el bloque SUPERIOR de tamaño master_ratio

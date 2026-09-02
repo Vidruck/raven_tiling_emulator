@@ -31,17 +31,39 @@ BG_CARD='\033[48;5;235m'   # Dark Background Card
 
 # --- Componentes UI ---
 
+# Función para calcular el ancho visual de una cadena (manejando ANSI y emojis de doble ancho)
+get_visual_length() {
+    local str="$1"
+    python3 -c '
+import sys, re, unicodedata
+s = sys.argv[1]
+s_clean = re.sub(r"(\\033|\x1b|\\e)\[[0-9;]*[a-zA-Z]", "", s)
+w = 0
+for ch in s_clean:
+    if ord(ch) in (0xFE0E, 0xFE0F): # variation selectors
+        continue
+    eaw = unicodedata.east_asian_width(ch)
+    if eaw in ("W", "F") or (unicodedata.category(ch) in ("So", "Sk") and ord(ch) > 0x1000):
+        w += 2
+    else:
+        w += 1
+print(w)
+' "$str" 2>/dev/null || {
+        local clean=$(echo -e "$str" | sed 's/\x1b\[[0-9;]*m//g')
+        echo ${#clean}
+    }
+}
+
 draw_box() {
     local title="$1"
     shift
     local lines=("$@")
-    local max_len=${#title}
+    local max_len=$(get_visual_length "$title")
     
     for line in "${lines[@]}"; do
-        # Remover códigos ANSI para calcular longitud real
-        local clean_line=$(echo -e "$line" | sed 's/\x1b\[[0-9;]*m//g')
-        if [ ${#clean_line} -gt $max_len ]; then
-            max_len=${#clean_line}
+        local len=$(get_visual_length "$line")
+        if [ "$len" -gt "$max_len" ]; then
+            max_len=$len
         fi
     done
     
@@ -50,14 +72,17 @@ draw_box() {
     # Borde superior
     echo -e "${PRIMARY}╭$(printf '─%.0s' $(seq 1 $width))╮${RESET}"
     if [ -n "$title" ]; then
-        echo -e "${PRIMARY}│ ${ACCENT}${BOLD}$title${RESET}$(printf ' %.0s' $(seq 1 $((width - ${#title} - 1))))${PRIMARY}│${RESET}"
+        local title_len=$(get_visual_length "$title")
+        local title_pad=$((width - title_len - 1))
+        echo -e "${PRIMARY}│ ${ACCENT}${BOLD}$title${RESET}$(printf ' %.0s' $(seq 1 $title_pad))${PRIMARY}│${RESET}"
         echo -e "${PRIMARY}├$(printf '─%.0s' $(seq 1 $width))┤${RESET}"
     fi
     
     # Contenido
     for line in "${lines[@]}"; do
-        local clean_line=$(echo -e "$line" | sed 's/\x1b\[[0-9;]*m//g')
-        local pad=$((width - ${#clean_line} - 2))
+        local line_len=$(get_visual_length "$line")
+        local pad=$((width - line_len - 1))
+        if [ "$pad" -lt 0 ]; then pad=0; fi
         echo -e "${PRIMARY}│${RESET} $line$(printf ' %.0s' $(seq 1 $pad))${PRIMARY}│${RESET}"
     done
     
@@ -69,25 +94,15 @@ print_header() {
     clear 2>/dev/null || true
     echo -e "${SECONDARY}${BOLD}"
     cat << "EOF"
-  ____       _   __   __  _ _ _   _   _ 
- |  _ \     / \  \ \ / / | _ _ | | | | |
- | |_) |   / _ \  \ V /  |  _|   |  \| |
- |  _ <   / ___ \  \ /   | |___  | |\  |
- |_| \_\ /_/   \_\  V    |_____| |_| \_|
-
-  _____   ___   _ _      ___   _   _   _____
- |_   _| |_ _| |_  |    |_ _| | \ | | / ____|
-   | |    | |   | |      | |  |  \| | | |  _ 
-   | |    | |   | |___   | |  | |\  | | |_| |
-   |_|   |___|  | ____| |___| |_| \_|  \____|
-
-  _____  __  __ _  _   _   _ _        _    _ _ _     _      ____  
- | ____| |  \/  | | | | | |_  |      / \  |_   _| /  _  \  |  _ \ 
- |  _|   | |\/| | | | | |  | |      / _ \   | |   | | | |  | |_) |
- | |___  | |  | | |  V  |  | |__   / ___ \  | |   | |_| |  |  _ < 
- |_____| |_|  |_|  \ _ /   |____| /_/   \_\ |_|   \ ___ /  |_| \_\
+  ██████╗   █████╗  ██╗   ██╗ ███████╗ ███╗   ██╗
+  ██╔══██╗ ██╔══██╗ ██║   ██║ ██╔════╝ ████╗  ██║
+  ██████╔╝ ███████║ ██║   ██║ █████╗   ██╔██╗ ██║
+  ██╔══██╗ ██╔══██║ ╚██╗ ██╔╝ ██╔══╝   ██║╚██╗██║
+  ██║  ██║ ██║  ██║  ╚████╔╝  ███████╗ ██║ ╚████║
+  ╚═╝  ╚═╝ ╚═╝  ╚═╝   ╚═══╝   ╚══════╝ ╚═╝  ╚═══╝
 EOF
-    echo -e "${PRIMARY}${BOLD} 🐦 Raven Tiling Emulator v3.0 — Suite de Gestión Interactiva 🐦${RESET}"
+    echo -e "${ACCENT}${BOLD}              🐦  — Tiling Emulator —  🐦${RESET}"
+    echo -e "${PRIMARY}${BOLD}           v3.4 — Suite de Gestión Interactiva ${RESET}"
     echo -e "${MUTED} Engine: Native Rust | Host: KDE Plasma 6 (Wayland) | IPC: Single-Trip D-Bus${RESET}\n"
 }
 

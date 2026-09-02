@@ -129,6 +129,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
             let curr_x = rect.min.x;
             let curr_y = rect.min.y;
 
+            // Ventana 1: Master a la derecha ocupando toda la altura
             let w1_w = w * ratio;
             let rem_w = w - w1_w;
             let r1 = egui::Rect::from_min_size(
@@ -138,26 +139,29 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
             painter.rect_filled(r1, 6.0, center_color);
             painter.text(r1.center(), egui::Align2::CENTER_CENTER, "1 (Master Invertido)", egui::FontId::monospace(10.0), egui::Color32::WHITE);
 
+            // Ventana 2: Ocupa la parte inferior del bloque izquierdo
             let w2_h = h * ratio;
+            let rem_h = h - w2_h;
             let r2 = egui::Rect::from_min_size(
-                egui::pos2(curr_x + gap_f, curr_y + gap_f),
+                egui::pos2(curr_x + gap_f, curr_y + rem_h + gap_f),
                 egui::vec2(rem_w - gap_f * 2.0, w2_h - gap_f * 2.0),
             );
             painter.rect_filled(r2, 6.0, side_color);
             painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), egui::Color32::WHITE);
 
-            let rem_h = h - w2_h;
+            // Ventana 3: Ocupa la parte izquierda del sub-bloque superior
             let w3_w = rem_w * ratio;
+            let rem_w2 = rem_w - w3_w;
             let r3 = egui::Rect::from_min_size(
-                egui::pos2(curr_x + gap_f, curr_y + w2_h + gap_f),
+                egui::pos2(curr_x + rem_w2 + gap_f, curr_y + gap_f),
                 egui::vec2(w3_w - gap_f * 2.0, rem_h - gap_f * 2.0),
             );
             painter.rect_filled(r3, 6.0, side_color);
             painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
 
-            let rem_w2 = rem_w - w3_w;
+            // Ventana 4: Cierra en la esquina superior izquierda (rem_w2 x rem_h)
             let r4 = egui::Rect::from_min_size(
-                egui::pos2(curr_x + w3_w + gap_f, curr_y + w2_h + gap_f),
+                egui::pos2(curr_x + gap_f, curr_y + gap_f),
                 egui::vec2(rem_w2 - gap_f * 2.0, rem_h - gap_f * 2.0),
             );
             painter.rect_filled(r4, 6.0, side_color);

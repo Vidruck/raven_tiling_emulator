@@ -1,9 +1,21 @@
+/**
+ * @file MediaWidgetView.qml
+ * @brief Widget de control multimedia MPRIS con carátulas de álbum y controles interactivos.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
+ * @license GPL-3.0
+ */
+
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 import "./org/kde/plasma/ravenlauncher/plugin" as RavenPlugin
 
+/**
+ * @class MediaWidgetView
+ * @brief Componente visual para la reproducción de audio, visualización de metadatos y control de volumen/pista.
+ */
 Rectangle {
     id: rootMedia
     radius: RavenPlugin.RavenTheme.radiusLg

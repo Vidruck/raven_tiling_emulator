@@ -100,6 +100,24 @@ class SystemStats : public QObject
     /** @brief Color de superficie para sub-islas y contenedores anidados. */
     Q_PROPERTY(QString surfaceElevated READ surfaceElevated NOTIFY themeChanged)
     
+    /** @brief Color de fondo para botones según kdeglobals. */
+    Q_PROPERTY(QString buttonBgColor READ buttonBgColor NOTIFY themeChanged)
+    
+    /** @brief Color de texto para botones según kdeglobals. */
+    Q_PROPERTY(QString buttonTextColor READ buttonTextColor NOTIFY themeChanged)
+    
+    /** @brief Familia tipográfica general del sistema KDE Plasma. */
+    Q_PROPERTY(QString generalFontFamily READ generalFontFamily NOTIFY themeChanged)
+    
+    /** @brief Familia tipográfica de ancho fijo (monospace) del sistema KDE Plasma. */
+    Q_PROPERTY(QString fixedFontFamily READ fixedFontFamily NOTIFY themeChanged)
+    
+    /** @brief Color semántico para estados positivos o de éxito (PositiveText). */
+    Q_PROPERTY(QString positiveTextColor READ positiveTextColor NOTIFY themeChanged)
+    
+    /** @brief Color semántico para advertencias y errores (NegativeText). */
+    Q_PROPERTY(QString negativeTextColor READ negativeTextColor NOTIFY themeChanged)
+    
     /** @brief Color principal de texto. */
     Q_PROPERTY(QString textColor READ textColor NOTIFY themeChanged)
     
@@ -182,6 +200,24 @@ public:
     /** @return Color de superficie elevada. */
     QString surfaceElevated() const { return m_surfaceElevated; }
     
+    /** @return Color de botones de KDE. */
+    QString buttonBgColor() const { return m_buttonBgColor; }
+    
+    /** @return Color de texto de botones. */
+    QString buttonTextColor() const { return m_buttonTextColor; }
+    
+    /** @return Tipografía general del sistema. */
+    QString generalFontFamily() const { return m_generalFontFamily; }
+    
+    /** @return Tipografía monospace del sistema. */
+    QString fixedFontFamily() const { return m_fixedFontFamily; }
+    
+    /** @return Color semántico de éxito. */
+    QString positiveTextColor() const { return m_positiveTextColor; }
+    
+    /** @return Color semántico de alerta/error. */
+    QString negativeTextColor() const { return m_negativeTextColor; }
+    
     /** @return Color de texto primario. */
     QString textColor() const { return m_textColor; }
     
@@ -254,6 +290,12 @@ private:
     QString m_cardBorder = QStringLiteral("rgba(255, 255, 255, 0.09)");
     QString m_hoverBackground = QStringLiteral("rgba(255, 255, 255, 0.12)");
     QString m_surfaceElevated = QStringLiteral("rgba(255, 255, 255, 0.07)");
+    QString m_buttonBgColor = QStringLiteral("#1e232d");
+    QString m_buttonTextColor = QStringLiteral("#ffffff");
+    QString m_generalFontFamily = QStringLiteral("Noto Sans");
+    QString m_fixedFontFamily = QStringLiteral("Monospace");
+    QString m_positiveTextColor = QStringLiteral("#2ECC71");
+    QString m_negativeTextColor = QStringLiteral("#E74C3C");
     QString m_textColor = QStringLiteral("#ffffff");
     QString m_subTextColor = QStringLiteral("rgba(255, 255, 255, 0.65)");
     QString m_highlightColor = QStringLiteral("#00c8d2");

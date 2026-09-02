@@ -236,6 +236,22 @@ void SystemStats::readKdeGlobalsTheme()
                                       .arg(tg, 2, 16, QLatin1Char('0'))
                                       .arg(tb, 2, 16, QLatin1Char('0'));
                     }
+                } else if (key == QLatin1String("ForegroundPositive") || key == QLatin1String("PositiveText")) {
+                    QStringList rgb = val.split(QLatin1Char(','));
+                    if (rgb.size() >= 3) {
+                        m_positiveTextColor = QStringLiteral("#%1%2%3")
+                                              .arg(rgb[0].toInt(), 2, 16, QLatin1Char('0'))
+                                              .arg(rgb[1].toInt(), 2, 16, QLatin1Char('0'))
+                                              .arg(rgb[2].toInt(), 2, 16, QLatin1Char('0'));
+                    }
+                } else if (key == QLatin1String("ForegroundNegative") || key == QLatin1String("NegativeText")) {
+                    QStringList rgb = val.split(QLatin1Char(','));
+                    if (rgb.size() >= 3) {
+                        m_negativeTextColor = QStringLiteral("#%1%2%3")
+                                              .arg(rgb[0].toInt(), 2, 16, QLatin1Char('0'))
+                                              .arg(rgb[1].toInt(), 2, 16, QLatin1Char('0'))
+                                              .arg(rgb[2].toInt(), 2, 16, QLatin1Char('0'));
+                    }
                 }
             } else if (currentGroup == QLatin1String("Colors:View")) {
                 if (key == QLatin1String("BackgroundNormal")) {
@@ -248,6 +264,24 @@ void SystemStats::readKdeGlobalsTheme()
                                         .arg(viewB, 2, 16, QLatin1Char('0'));
                     }
                 }
+            } else if (currentGroup == QLatin1String("Colors:Button")) {
+                if (key == QLatin1String("BackgroundNormal")) {
+                    QStringList rgb = val.split(QLatin1Char(','));
+                    if (rgb.size() >= 3) {
+                        m_buttonBgColor = QStringLiteral("#%1%2%3")
+                                          .arg(rgb[0].toInt(), 2, 16, QLatin1Char('0'))
+                                          .arg(rgb[1].toInt(), 2, 16, QLatin1Char('0'))
+                                          .arg(rgb[2].toInt(), 2, 16, QLatin1Char('0'));
+                    }
+                } else if (key == QLatin1String("ForegroundNormal")) {
+                    QStringList rgb = val.split(QLatin1Char(','));
+                    if (rgb.size() >= 3) {
+                        m_buttonTextColor = QStringLiteral("#%1%2%3")
+                                            .arg(rgb[0].toInt(), 2, 16, QLatin1Char('0'))
+                                            .arg(rgb[1].toInt(), 2, 16, QLatin1Char('0'))
+                                            .arg(rgb[2].toInt(), 2, 16, QLatin1Char('0'));
+                    }
+                }
             } else if (currentGroup == QLatin1String("Colors:Selection")) {
                 if (key == QLatin1String("BackgroundNormal")) {
                     QStringList rgb = val.split(QLatin1Char(','));
@@ -257,6 +291,18 @@ void SystemStats::readKdeGlobalsTheme()
                                            .arg(hR, 2, 16, QLatin1Char('0'))
                                            .arg(hG, 2, 16, QLatin1Char('0'))
                                            .arg(hB, 2, 16, QLatin1Char('0'));
+                    }
+                }
+            } else if (currentGroup == QLatin1String("General")) {
+                if (key == QLatin1String("font")) {
+                    QStringList fParts = val.split(QLatin1Char(','));
+                    if (!fParts.isEmpty() && !fParts.first().trimmed().isEmpty()) {
+                        m_generalFontFamily = fParts.first().trimmed();
+                    }
+                } else if (key == QLatin1String("fixed")) {
+                    QStringList fParts = val.split(QLatin1Char(','));
+                    if (!fParts.isEmpty() && !fParts.first().trimmed().isEmpty()) {
+                        m_fixedFontFamily = fParts.first().trimmed();
                     }
                 }
             }
@@ -273,15 +319,8 @@ void SystemStats::readKdeGlobalsTheme()
         m_textColor = QStringLiteral("#FFFFFF");
         m_subTextColor = QStringLiteral("#A0AEC0"); // Gris claro de alta legibilidad (Tailwind/Nord Slate)
 
-        // Fondo de tarjeta con tono armónico y sutil profundidad
-        int cardR = qBound(18, int(winR * 1.08 + 10), 45);
-        int cardG = qBound(22, int(winG * 1.08 + 12), 50);
-        int cardB = qBound(28, int(winB * 1.08 + 16), 60);
-
-        m_cardBackground = QStringLiteral("#%1%2%3")
-                          .arg(cardR, 2, 16, QLatin1Char('0'))
-                          .arg(cardG, 2, 16, QLatin1Char('0'))
-                          .arg(cardB, 2, 16, QLatin1Char('0'));
+        // Fondo de tarjeta con tono armónico adoptando directamente el fondo de las vistas de KDE
+        m_cardBackground = m_viewBgColor;
 
         // Bordes finos y discretos (1px)
         m_cardBorder = QStringLiteral("rgba(255, 255, 255, 0.08)");
@@ -292,14 +331,7 @@ void SystemStats::readKdeGlobalsTheme()
         m_textColor = QStringLiteral("#111827");
         m_subTextColor = QStringLiteral("#4B5563");
 
-        int cardR = qBound(220, int(winR * 0.96), 255);
-        int cardG = qBound(220, int(winG * 0.96), 255);
-        int cardB = qBound(225, int(winB * 0.96), 255);
-
-        m_cardBackground = QStringLiteral("#%1%2%3")
-                          .arg(cardR, 2, 16, QLatin1Char('0'))
-                          .arg(cardG, 2, 16, QLatin1Char('0'))
-                          .arg(cardB, 2, 16, QLatin1Char('0'));
+        m_cardBackground = m_viewBgColor;
 
         m_cardBorder = QStringLiteral("rgba(0, 0, 0, 0.07)");
         m_hoverBackground = QStringLiteral("rgba(0, 0, 0, 0.06)");

@@ -1,3 +1,11 @@
+/**
+ * @file MainWindowView.qml
+ * @brief Vista y panel principal unificado de Raven Launcher y Command Hub en KDE Plasma 6.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
+ * @license GPL-3.0
+ */
+
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -5,6 +13,10 @@ import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasmoid
 import "./org/kde/plasma/ravenlauncher/plugin" as RavenPlugin
 
+/**
+ * @class MainWindowView
+ * @brief Interfaz interactiva completa que integra el panel de control de mosaico, monitores, escritorios, cuadrícula de apps, widget multimedia y telemetría de hardware.
+ */
 Item {
     id: root
     implicitWidth: 510
@@ -48,8 +60,8 @@ Item {
     // ── Circular Gauge Component ────────────────────────────────────────────
     component CircularGauge : Item {
         id: gaugeRoot
-        width: 54
-        height: 54
+        width: 46
+        height: 46
         property real value: 0
         property string title: ""
         property string colorOverride: ""
@@ -63,14 +75,14 @@ Item {
                 
                 var x = width / 2;
                 var y = height / 2;
-                var radius = width / 2 - 4;
+                var radius = width / 2 - 3.5;
                 var startAngle = Math.PI * 0.75;
                 var endAngle = Math.PI * 2.25;
                 
                 // Track de fondo
                 ctx.beginPath();
                 ctx.arc(x, y, radius, startAngle, endAngle);
-                ctx.lineWidth = 4.5;
+                ctx.lineWidth = 3.5;
                 ctx.lineCap = "round";
                 ctx.strokeStyle = RavenPlugin.RavenTheme.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.1);
                 ctx.stroke();
@@ -80,7 +92,7 @@ Item {
                 var valAngle = startAngle + (endAngle - startAngle) * (boundedVal / 100.0);
                 ctx.beginPath();
                 ctx.arc(x, y, radius, startAngle, valAngle);
-                ctx.lineWidth = 4.5;
+                ctx.lineWidth = 3.5;
                 ctx.lineCap = "round";
                 ctx.strokeStyle = gaugeRoot.colorOverride !== "" ? gaugeRoot.colorOverride : RavenPlugin.RavenTheme.highlightColor;
                 ctx.stroke();
@@ -98,14 +110,14 @@ Item {
             Text {
                 text: Math.round(gaugeRoot.value) + "%"
                 color: RavenPlugin.RavenTheme.textColor
-                font.pixelSize: 11
+                font.pixelSize: 10
                 font.bold: true
                 anchors.horizontalCenter: parent.horizontalCenter
             }
             Text {
                 text: gaugeRoot.title
                 color: RavenPlugin.RavenTheme.subTextColor
-                font.pixelSize: 9
+                font.pixelSize: 8
                 anchors.horizontalCenter: parent.horizontalCenter
             }
         }
@@ -144,54 +156,61 @@ Item {
                 // ── ISLA 1: RAVEN COMMAND & CONTROL (SUB-ISLAS MODULARES) ──
                 Island {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 195
+                    Layout.preferredHeight: 205
 
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 10
-                        spacing: 8
+                        spacing: 10
 
                         // ── CABECERA HERO: RELOJ, FECHA, MARCA Y CONTROLES MAESTROS ──
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: 12
 
                             Kirigami.Icon {
                                 source: "window-duplicate"
-                                implicitWidth: 26; implicitHeight: 26
+                                implicitWidth: 32; implicitHeight: 32
                                 color: RavenPlugin.RavenController.tilingEnabled ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.subTextColor
+                                Layout.alignment: Qt.AlignVCenter
                             }
 
                             ColumnLayout {
-                                spacing: -2
+                                spacing: 2
+                                Layout.fillWidth: true
+
                                 RowLayout {
-                                    spacing: 6
+                                    spacing: 8
                                     Text {
-                                        text: i18n("RAVEN TILING")
-                                        color: RavenPlugin.RavenTheme.textColor
-                                        font.pixelSize: 12
+                                        text: Qt.formatTime(root.currentDate, "hh:mm")
+                                        color: RavenPlugin.RavenTheme.highlightColor
+                                        font.pixelSize: 18
                                         font.bold: true
-                                        font.letterSpacing: 0.5
+                                        font.family: RavenPlugin.RavenTheme.fixedFontFamily || "Monospace"
                                     }
                                     Rectangle {
-                                        width: 3; height: 3; radius: 1.5
+                                        width: 4; height: 4; radius: 2
                                         color: RavenPlugin.RavenTheme.subTextColor
-                                        opacity: 0.6
+                                        opacity: 0.5
                                         Layout.alignment: Qt.AlignVCenter
                                     }
                                     Text {
-                                        text: Qt.formatDateTime(root.currentDate, "hh:mm:ss AP")
-                                        color: RavenPlugin.RavenTheme.highlightColor
-                                        font.pixelSize: 12
+                                        text: i18n("RAVEN TILING")
+                                        color: RavenPlugin.RavenTheme.textColor
+                                        font.pixelSize: 11
                                         font.bold: true
-                                        font.family: "Monospace"
+                                        font.family: RavenPlugin.RavenTheme.fontFamily || "Noto Sans"
+                                        font.letterSpacing: 0.8
                                     }
                                 }
+
                                 Text {
-                                    text: Qt.formatDateTime(root.currentDate, "dddd, d 'de' MMMM") + " • " + (RavenPlugin.RavenController.tilingEnabled ? i18n("Modo Mosaico") : i18n("Modo Flotante"))
+                                    text: Qt.formatDate(root.currentDate, Qt.DefaultLocaleLongDate) + "  •  " + (RavenPlugin.RavenController.tilingEnabled ? i18n("Modo Mosaico") : i18n("Modo Flotante"))
                                     color: RavenPlugin.RavenController.tilingEnabled ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.subTextColor
                                     font.pixelSize: 10
                                     font.capitalization: Font.Capitalize
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
                                 }
                             }
 
@@ -554,57 +573,47 @@ Item {
                     active: root.appletExpanded
                 }
 
-                // ── ISLA 4: RECURSOS DEL SISTEMA CON RELOJ Y FECHA (FOOTER DASHBOARD) ──
+                // ── ISLA 4: RECURSOS Y TELEMETRÍA DEL SISTEMA (FOOTER DASHBOARD) ──
                 Island {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 145
+                    Layout.preferredHeight: 118
 
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 10
                         spacing: 8
 
-                        // Cabecera: Distro & Uptime + Reloj y Fecha Dinámica
+                        // Cabecera: Distro & Uptime + Versión de Raven
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 8
+                            spacing: 10
 
                             Kirigami.Icon {
                                 source: (RavenPlugin.SystemStats && RavenPlugin.SystemStats.distroIcon) ? RavenPlugin.SystemStats.distroIcon : "start-here-kde"
                                 fallback: "kde"
                                 implicitWidth: 24
                                 implicitHeight: 24
+                                Layout.alignment: Qt.AlignVCenter
                             }
 
                             ColumnLayout {
-                                spacing: -2
-                                RowLayout {
-                                    spacing: 6
-                                    Text {
-                                        text: RavenPlugin.SystemStats.osName || "Linux"
-                                        color: RavenPlugin.RavenTheme.textColor
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                    }
-                                    Rectangle {
-                                        width: 3; height: 3; radius: 1.5
-                                        color: RavenPlugin.RavenTheme.subTextColor
-                                        opacity: 0.6
-                                        Layout.alignment: Qt.AlignVCenter
-                                    }
-                                    Text {
-                                        text: Qt.formatDateTime(root.currentDate, "hh:mm:ss AP")
-                                        color: RavenPlugin.RavenTheme.highlightColor
-                                        font.pixelSize: 11
-                                        font.bold: true
-                                        font.family: "Monospace"
-                                    }
-                                }
+                                spacing: 1
+                                Layout.fillWidth: true
+
                                 Text {
-                                    text: Qt.formatDateTime(root.currentDate, "dddd, d 'de' MMMM") + " • " + i18n("Encendido: ") + (RavenPlugin.SystemStats.uptimeString || "0:00")
+                                    text: RavenPlugin.SystemStats.osName || "Linux"
+                                    color: RavenPlugin.RavenTheme.textColor
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    font.family: RavenPlugin.RavenTheme.fontFamily || "Noto Sans"
+                                }
+
+                                Text {
+                                    text: i18n("Encendido: ") + (RavenPlugin.SystemStats.uptimeString || "0:00")
                                     color: RavenPlugin.RavenTheme.subTextColor
                                     font.pixelSize: 9
-                                    font.capitalization: Font.Capitalize
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
                                 }
                             }
 
