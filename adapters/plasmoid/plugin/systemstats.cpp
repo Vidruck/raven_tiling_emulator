@@ -3,11 +3,13 @@
 #include <QPalette>
 #include <QFile>
 #include <QTextStream>
+#include <QProcess>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QDir>
 #include <QUrl>
 #include <QIcon>
+#include <QRegularExpression>
 #include <sys/utsname.h>
 
 SystemStats::SystemStats(QObject *parent)
@@ -145,21 +147,109 @@ void SystemStats::loadStaticInfo()
         m_compositor = QStringLiteral("%1 (%2)").arg(desktop.isEmpty() ? QStringLiteral("Desktop") : desktop, sessionType);
     }
 
-    // 4. CPU Model
+    // 4. CPU Model, Brand & Vendor Color
+    // Lee la información de CPU desde /proc/cpuinfo (clave 'model name' o 'Processor')
     QFile cpuInfo(QStringLiteral("/proc/cpuinfo"));
     if (cpuInfo.open(QIODevice::ReadOnly | QIODevice::Text)) {
         QTextStream in(&cpuInfo);
         while (!in.atEnd()) {
             QString line = in.readLine().trimmed();
-            if (line.startsWith(QLatin1String("model name"))) {
+            if (line.startsWith(QLatin1String("model name")) || line.startsWith(QLatin1String("Model name")) || line.startsWith(QLatin1String("Processor")) || line.startsWith(QLatin1String("Hardware"))) {
                 int colonPos = line.indexOf(QLatin1Char(':'));
                 if (colonPos != -1) {
                     m_cpuModel = line.mid(colonPos + 1).trimmed();
-                    break;
+                    if (!m_cpuModel.isEmpty()) {
+                        break;
+                    }
                 }
             }
         }
         cpuInfo.close();
+    }
+
+    // Fallback secundario mediante lscpu si /proc/cpuinfo no devolvió el modelo
+    if (m_cpuModel.isEmpty()) {
+        QProcess proc;
+        proc.start(QStringLiteral("lscpu"), QStringList());
+        if (proc.waitForFinished(1000)) {
+            QString out = QString::fromUtf8(proc.readAllStandardOutput());
+            for (const QString &line : out.split(QLatin1Char('\n'))) {
+                if (line.startsWith(QLatin1String("Model name:")) || line.startsWith(QLatin1String("Nombre del modelo:"))) {
+                    int colonPos = line.indexOf(QLatin1Char(':'));
+                    if (colonPos != -1) {
+                        m_cpuModel = line.mid(colonPos + 1).trimmed();
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Normalización de CPU y Detección de Fabricante/Color Corporativo
+    QString raw = m_cpuModel;
+    QString lower = raw.toLower();
+
+    if (lower.contains(QLatin1String("intel"))) {
+        m_cpuVendor = QStringLiteral("intel");
+        m_cpuVendorColor = QStringLiteral("#0071C5"); // Azul Oficial de Intel
+    } else if (lower.contains(QLatin1String("amd")) || lower.contains(QLatin1String("ryzen"))) {
+        m_cpuVendor = QStringLiteral("amd");
+        m_cpuVendorColor = QStringLiteral("#ED1C24"); // Rojo Carmesí AMD Ryzen
+    } else if (lower.contains(QLatin1String("qualcomm")) || lower.contains(QLatin1String("snapdragon")) || lower.contains(QLatin1String("oryon"))) {
+        m_cpuVendor = QStringLiteral("qualcomm");
+        m_cpuVendorColor = QStringLiteral("#FFFFFF"); // Blanco/Negro Puro Qualcomm
+    } else if (lower.contains(QLatin1String("apple"))) {
+        m_cpuVendor = QStringLiteral("apple");
+        m_cpuVendorColor = QStringLiteral("#A2AAAD"); // Plateado Apple
+    } else {
+        m_cpuVendor = QStringLiteral("unknown");
+        m_cpuVendorColor = QStringLiteral("#A0AEC0"); // Gris Neutro
+    }
+
+    // Limpieza de caracteres de registro, frecuencias y sufijos no comerciales
+    QString clean = raw;
+    clean.remove(QRegularExpression(QStringLiteral("\\((R|TM|r|tm)\\)")));
+    clean.remove(QRegularExpression(QStringLiteral("@[0-9.\\s]+GHz"), QRegularExpression::CaseInsensitiveOption));
+    clean.remove(QRegularExpression(QStringLiteral("with Radeon.*"), QRegularExpression::CaseInsensitiveOption));
+    clean.remove(QRegularExpression(QStringLiteral("\\d+-Core Processor"), QRegularExpression::CaseInsensitiveOption));
+    clean.remove(QRegularExpression(QStringLiteral("Processor"), QRegularExpression::CaseInsensitiveOption));
+    clean.remove(QRegularExpression(QStringLiteral("CPU"), QRegularExpression::CaseInsensitiveOption));
+    clean = clean.simplified().trimmed();
+
+    if (m_cpuVendor == QLatin1String("intel")) {
+        QRegularExpression matchCore(QStringLiteral("Core\\s+i[3579](?:-[0-9A-Za-z]+)?"), QRegularExpression::CaseInsensitiveOption);
+        auto match = matchCore.match(clean);
+        if (match.hasMatch()) {
+            m_cpuBrandName = QStringLiteral("Intel %1").arg(match.captured(0));
+        } else if (clean.contains(QLatin1String("Xeon"), Qt::CaseInsensitive)) {
+            QRegularExpression matchXeon(QStringLiteral("Xeon\\s+[A-Za-z0-9-]+(?:\\s+v\\d+)?"), QRegularExpression::CaseInsensitiveOption);
+            auto mX = matchXeon.match(clean);
+            m_cpuBrandName = mX.hasMatch() ? QStringLiteral("Intel %1").arg(mX.captured(0)) : QStringLiteral("Intel Xeon");
+        } else {
+            m_cpuBrandName = clean.isEmpty() ? QStringLiteral("Intel Core") : (clean.startsWith(QLatin1String("Intel"), Qt::CaseInsensitive) ? clean : QStringLiteral("Intel %1").arg(clean));
+        }
+    } else if (m_cpuVendor == QLatin1String("amd")) {
+        QRegularExpression matchRyzen(QStringLiteral("Ryzen\\s+[3579](?:\\s+[A-Za-z0-9-]+)?"), QRegularExpression::CaseInsensitiveOption);
+        auto match = matchRyzen.match(clean);
+        if (match.hasMatch()) {
+            m_cpuBrandName = QStringLiteral("AMD %1").arg(match.captured(0));
+        } else if (clean.contains(QLatin1String("EPYC"), Qt::CaseInsensitive)) {
+            m_cpuBrandName = QStringLiteral("AMD EPYC");
+        } else if (clean.contains(QLatin1String("Threadripper"), Qt::CaseInsensitive)) {
+            m_cpuBrandName = QStringLiteral("AMD Threadripper");
+        } else {
+            m_cpuBrandName = clean.isEmpty() ? QStringLiteral("AMD Ryzen") : (clean.startsWith(QLatin1String("AMD"), Qt::CaseInsensitive) ? clean : QStringLiteral("AMD %1").arg(clean));
+        }
+    } else if (m_cpuVendor == QLatin1String("qualcomm")) {
+        QRegularExpression matchSnap(QStringLiteral("Snapdragon\\s+[A-Za-z0-9\\s-]+"), QRegularExpression::CaseInsensitiveOption);
+        auto match = matchSnap.match(clean);
+        if (match.hasMatch()) {
+            m_cpuBrandName = match.captured(0).split(QLatin1Char('-')).first().trimmed();
+        } else {
+            m_cpuBrandName = QStringLiteral("Snapdragon CPU");
+        }
+    } else {
+        m_cpuBrandName = clean.isEmpty() ? QStringLiteral("CPU") : clean;
     }
 
     // 5. User Name & Avatar

@@ -227,12 +227,34 @@ impl RavenControllerActor {
 
                     self.controller.get_engine_mut().config.layout_type = layout_name.clone();
                     if let Some(ws_id) = current_ws {
-                        self.controller.get_engine_mut().config.workspace_layouts.insert(ws_id, layout_name);
+                        self.controller.get_engine_mut().config.workspace_layouts.insert(ws_id, layout_name.clone());
                     }
 
                     if let Err(e) = self.controller.get_engine().config.save() {
                         tracing::warn!("[ACTOR] Error al persistir configuración tras cambio de layout: {}", e);
                     }
+
+                    let readable_name = match layout_name.as_str() {
+                        "tall" => "Tall (Columna)",
+                        "monocle" => "Monocle (Monocromático)",
+                        "strict_dwindle" => "Strict Dwindle (Espiral)",
+                        "inverted_strict_dwindle" => "Inverted Dwindle (Espiral Invertida)",
+                        "divisor" => "Divisor (Cuadrícula)",
+                        _ => "Raven BSP (Foveal)",
+                    };
+                    tokio::spawn(async move {
+                        let _ = tokio::process::Command::new("notify-send")
+                            .arg("-a")
+                            .arg("Raven Tiling")
+                            .arg("-t")
+                            .arg("1200")
+                            .arg("-h")
+                            .arg("string:x-canonical-private-synchronous:raven-osd")
+                            .arg("Disposición de Ventanas")
+                            .arg(&format!("Layout: {}", readable_name))
+                            .output()
+                            .await;
+                    });
 
                     let mut response = String::from("[]");
                     if let Ok(commands) = self.controller.commit_layout() {

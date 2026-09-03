@@ -412,6 +412,17 @@ function applyCommands(commandsJson) {
                 }
               }, 150);
             })(w);
+          } else if (cmd.action === "migrate_to_desktop") {
+            w.__raven_mutating = true;
+            migrateWindow(w, null, cmd.target_ws);
+            (function (cw) {
+              setKWinTimeout(function () {
+                if (cw && !cw.deleted) {
+                  cw.__raven_mutating = false;
+                  requestStateSync();
+                }
+              }, 150);
+            })(w);
           } else if (cmd.action === "saturation_warning") {
             Logger.warn("Saturation", "Pantalla cerca de saturación: " + cmd.active + "/" + cmd.cmax + " ventanas");
           }

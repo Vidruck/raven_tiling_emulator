@@ -110,6 +110,32 @@ impl RavenController {
         });
     }
 
+    /// Despacha una notificación OSD ultraligera y asíncrona mediante `notify-send`.
+    ///
+    /// Utiliza el hint `x-canonical-private-synchronous:raven-osd` para reemplazar
+    /// notificaciones previas en tiempo real sin saturar el centro de notificaciones del sistema.
+    ///
+    /// # Parámetros
+    /// * `title` - Título del encabezado OSD (ej. "Márgenes de Ventana", "Disposición de Ventanas").
+    /// * `body` - Mensaje descriptivo con el valor actual o delta aplicado.
+    fn send_osd_notification(title: &str, body: &str) {
+        let t = title.to_string();
+        let b = body.to_string();
+        tokio::spawn(async move {
+            let _ = tokio::process::Command::new("notify-send")
+                .arg("-a")
+                .arg("Raven Tiling")
+                .arg("-t")
+                .arg("1200")
+                .arg("-h")
+                .arg("string:x-canonical-private-synchronous:raven-osd")
+                .arg(&t)
+                .arg(&b)
+                .output()
+                .await;
+        });
+    }
+
     /// Determina si el motor de mosaico (tiling engine) está operativo.
     pub fn is_tiling_enabled(&self) -> bool {
         self.engine.is_tiling_enabled
@@ -493,6 +519,7 @@ impl RavenController {
                     self.engine.current_windows.get(wid).map(|w| w.workspace_id.clone())
                 });
 
+                let new_layout_name;
                 if let Some(ws_id) = current_ws {
                     let current = self.engine.config.workspace_layouts
                         .get(&ws_id)
@@ -509,6 +536,7 @@ impl RavenController {
                         _ => "raven",
                     }.to_string();
 
+                    new_layout_name = next.clone();
                     self.engine.config.workspace_layouts.insert(ws_id.clone(), next.clone());
                     info!("[CONTROLLER] Layout de Workspace {} cambiado a: {}", ws_id, next);
                 } else {
@@ -521,14 +549,28 @@ impl RavenController {
                         "divisor" => "raven".to_string(),
                         _ => "raven".to_string(),
                     };
+                    new_layout_name = self.engine.config.layout_type.clone();
                     info!("[CONTROLLER] Layout global cambiado a: {}", self.engine.config.layout_type);
                 }
+                
+                let readable_name = match new_layout_name.as_str() {
+                    "tall" => "Tall (Columna)",
+                    "monocle" => "Monocle (Monocromático)",
+                    "strict_dwindle" => "Strict Dwindle (Espiral)",
+                    "inverted_strict_dwindle" => "Inverted Dwindle (Espiral Invertida)",
+                    "divisor" => "Divisor (Cuadrícula)",
+                    _ => "Raven BSP (Foveal)",
+                };
+                Self::send_osd_notification("Disposición de Ventanas", &format!("Layout: {}", readable_name));
+
                 needs_recalc = true;
                 config_changed = true;
             }
             "increment_gaps" => {
                 self.engine.config.default_gaps =
                     std::cmp::max(0, self.engine.config.default_gaps + _payload);
+                let sign = if _payload >= 0 { format!("+{}", _payload) } else { format!("{}", _payload) };
+                Self::send_osd_notification("Márgenes de Ventana", &format!("Gaps {} px (Total: {} px)", sign, self.engine.config.default_gaps));
                 needs_recalc = true;
                 config_changed = true;
             }

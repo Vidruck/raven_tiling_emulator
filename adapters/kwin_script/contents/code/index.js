@@ -55,16 +55,22 @@ function initDBusBridge() {
 
   workspace.activeWindowChanged.connect(function () {
     var aw = workspace.activeWindow;
+    if (aw && !isManageable(aw)) {
+      // Ignorar paneles, diálogos de escritorio y plasmoides para no perder el foco previo de apps
+      return;
+    }
     var awId = aw ? getSafeWindowId(aw) : "";
-    try {
-      callDBus(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
-        "windowActivated",
-        awId || ""
-      );
-    } catch (e) { }
+    if (awId) {
+      try {
+        callDBus(
+          "org.kde.raven.Daemon",
+          "/Events",
+          "org.kde.raven.Events",
+          "windowActivated",
+          awId
+        );
+      } catch (e) { }
+    }
   });
 
   workspace.currentDesktopChanged.connect(function () {

@@ -47,27 +47,27 @@ PlasmoidItem {
         backgroundHints: PlasmaCore.Types.NoBackground
         hideOnWindowDeactivate: true
         visible: false
-        width: 495
+        width: 440
         height: (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Math.min(Plasmoid.screenGeometry.height - 100, 900) : 900
 
         Component.onCompleted: {
             var screenW = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.width > 0) ? Plasmoid.screenGeometry.width : 1920
             var screenH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Plasmoid.screenGeometry.height : 1080
-            x = (screenW - 495) / 2
+            x = (screenW - 440) / 2
             y = (screenH - 880) / 2
         }
 
         mainItem: Item {
             id: dialogContent
             
-            Layout.minimumWidth: 400
+            Layout.minimumWidth: 380
             Layout.maximumWidth: 1000
-            Layout.preferredWidth: 495
+            Layout.preferredWidth: 440
             Layout.minimumHeight: 700
             Layout.maximumHeight: 1200
             Layout.preferredHeight: 880
             
-            implicitWidth: 495
+            implicitWidth: 440
             implicitHeight: 880
 
             MainWindowView {
@@ -82,9 +82,9 @@ PlasmoidItem {
     }
 
     fullRepresentation: Item {
-        Layout.minimumWidth: 400
+        Layout.minimumWidth: 380
         Layout.minimumHeight: 700
-        Layout.preferredWidth: 495
+        Layout.preferredWidth: 440
         Layout.preferredHeight: 880
         MainWindowView {
             anchors.fill: parent

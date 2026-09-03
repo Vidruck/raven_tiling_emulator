@@ -964,6 +964,17 @@ function applyCommands(commandsJson) {
                 }
               }, 150);
             })(w);
+          } else if (cmd.action === "migrate_to_desktop") {
+            w.__raven_mutating = true;
+            migrateWindow(w, null, cmd.target_ws);
+            (function (cw) {
+              setKWinTimeout(function () {
+                if (cw && !cw.deleted) {
+                  cw.__raven_mutating = false;
+                  requestStateSync();
+                }
+              }, 150);
+            })(w);
           } else if (cmd.action === "saturation_warning") {
             Logger.warn("Saturation", "Pantalla cerca de saturación: " + cmd.active + "/" + cmd.cmax + " ventanas");
           }
@@ -1323,16 +1334,22 @@ function initDBusBridge() {
 
   workspace.activeWindowChanged.connect(function () {
     var aw = workspace.activeWindow;
+    if (aw && !isManageable(aw)) {
+      // Ignorar paneles, diálogos de escritorio y plasmoides para no perder el foco previo de apps
+      return;
+    }
     var awId = aw ? getSafeWindowId(aw) : "";
-    try {
-      callDBus(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
-        "windowActivated",
-        awId || ""
-      );
-    } catch (e) { }
+    if (awId) {
+      try {
+        callDBus(
+          "org.kde.raven.Daemon",
+          "/Events",
+          "org.kde.raven.Events",
+          "windowActivated",
+          awId
+        );
+      } catch (e) { }
+    }
   });
 
   workspace.currentDesktopChanged.connect(function () {

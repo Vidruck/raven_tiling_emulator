@@ -61,6 +61,15 @@ class SystemStats : public QObject
     /** @brief Modelo del procesador central (CPU). */
     Q_PROPERTY(QString cpuModel READ cpuModel CONSTANT)
     
+    /** @brief Nombre comercial limpio y formateado del procesador (ej. 'AMD Ryzen 5 7530U', 'Intel Core i7-12700H'). */
+    Q_PROPERTY(QString cpuBrandName READ cpuBrandName CONSTANT)
+    
+    /** @brief Fabricante de la CPU ('intel', 'amd', 'qualcomm', 'apple', 'unknown'). */
+    Q_PROPERTY(QString cpuVendor READ cpuVendor CONSTANT)
+    
+    /** @brief Color de acento característico del fabricante de la CPU (Intel Azul #0071C5, AMD Rojo #ED1C24, Qualcomm Blanco/Negro, etc.). */
+    Q_PROPERTY(QString cpuVendorColor READ cpuVendorColor CONSTANT)
+    
     /** @brief Nombre de usuario en sesión. */
     Q_PROPERTY(QString userName READ userName CONSTANT)
     
@@ -163,6 +172,15 @@ public:
     
     /** @return Modelo de la CPU. */
     QString cpuModel() const { return m_cpuModel; }
+    
+    /** @return Nombre comercial simplificado del procesador. */
+    QString cpuBrandName() const { return m_cpuBrandName; }
+    
+    /** @return Identificador de marca del fabricante ('intel', 'amd', 'qualcomm', 'apple', 'unknown'). */
+    QString cpuVendor() const { return m_cpuVendor; }
+    
+    /** @return Color temático del fabricante. */
+    QString cpuVendorColor() const { return m_cpuVendorColor; }
     
     /** @return Nombre de usuario. */
     QString userName() const { return m_userName; }
@@ -276,7 +294,10 @@ private:
     QString m_kernelVersion;                   ///< Versión del kernel.
     QString m_uptimeString;                    ///< Uptime formateado.
     QString m_compositor;                      ///< Compositor.
-    QString m_cpuModel;                        ///< Modelo de CPU.
+    QString m_cpuModel;                        ///< Modelo de CPU sin procesar.
+    QString m_cpuBrandName;                    ///< Modelo de CPU comercial simplificado (ej. 'AMD Ryzen 5 7530U').
+    QString m_cpuVendor;                       ///< Fabricante del procesador ('intel', 'amd', etc.).
+    QString m_cpuVendorColor;                  ///< Color corporativo distintivo de la marca de CPU.
     QString m_userName;                        ///< Usuario.
     QString m_userFace;                        ///< Foto de perfil.
     int m_batteryUsage = 0;                    ///< Nivel de batería.
