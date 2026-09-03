@@ -184,7 +184,9 @@ do_install() {
     mkdir -p "$HOME/.local/share/icons/hicolor/scalable/apps"
     mkdir -p "$HOME/.local/share/applications"
     
-    if [ -f "$SOURCE_DIR/icon/org.kde.raven.tiling.svg" ]; then
+    if [ -f "$SOURCE_DIR/assets/icon_app/org.kde.raven.tiling.svg" ]; then
+        cp "$SOURCE_DIR/assets/icon_app/org.kde.raven.tiling.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/${ICON_NAME}.svg"
+    elif [ -f "$SOURCE_DIR/icon/org.kde.raven.tiling.svg" ]; then
         cp "$SOURCE_DIR/icon/org.kde.raven.tiling.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/${ICON_NAME}.svg"
     fi
 

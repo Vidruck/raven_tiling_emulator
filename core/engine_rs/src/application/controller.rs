@@ -764,6 +764,15 @@ impl RavenController {
                                         window_id: wid.clone(),
                                         target_desktop: target_desk.clone(),
                                     });
+                                    if let Some(target_w) = self.engine.current_windows.get_mut(wid) {
+                                        target_w.desktops = vec![target_desk.clone()];
+                                        target_w.workspace_id = format!("{}||{}", target_w.output, target_desk);
+                                    }
+                                    needs_recalc = true;
+                                    Self::send_osd_notification(
+                                        "Espacio de Trabajo",
+                                        &format!("Ventana enviada a escritorio {}", target_idx + 1),
+                                    );
                                 }
                             }
                         } else {
@@ -782,6 +791,16 @@ impl RavenController {
                                         window_id: wid.clone(),
                                         target_output: target_out.clone(),
                                     });
+                                    if let Some(target_w) = self.engine.current_windows.get_mut(wid) {
+                                        let desk = target_w.desktops.first().cloned().unwrap_or_default();
+                                        target_w.output = target_out.clone();
+                                        target_w.workspace_id = format!("{}||{}", target_out, desk);
+                                    }
+                                    needs_recalc = true;
+                                    Self::send_osd_notification(
+                                        "Monitor",
+                                        &format!("Ventana enviada a monitor {}", target_out),
+                                    );
                                 }
                             }
                         }

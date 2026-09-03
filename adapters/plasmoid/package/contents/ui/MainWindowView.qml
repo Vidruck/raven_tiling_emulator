@@ -806,42 +806,42 @@ Item {
                         { 
                             name: i18n("Raven BSP"),
                             id: "raven",                  
-                            icon: "view-split-left-right", 
+                            iconKey: "dwindle_bsp", 
                             tooltip: i18n("Raven BSP (Espiral Áurea)") 
                         },
 
                         { 
                             name: i18n("Tall / Master"),          
                             id: "tall",                   
-                            icon: "view-split-top-bottom", 
+                            iconKey: "tall", 
                             tooltip: i18n("Tall (Ventana Maestra + Pila)") 
                         },
 
                         { 
                             name: i18n("Monocle"),                
                             id: "monocle",                
-                            icon: "view-fullscreen",       
+                            iconKey: "monocle", 
                             tooltip: i18n("Monocle (Ventana Completa)") 
                         },
 
                         { 
                             name: i18n("Strict Dwindle"),         
                             id: "strict_dwindle",         
-                            icon: "view-grid",             
+                            iconKey: "strict_dwindle", 
                             tooltip: i18n("Strict Dwindle (Fibonacci Puro)") 
                         },
 
                         {   
                             name: i18n("Inverted Strict Dwindle"), 
                             id: "inverted_strict_dwindle", 
-                            icon: "view-grid-symbolic",    
+                            iconKey: "inverted_strict_dwindle", 
                             tooltip: i18n("Inverted Strict Dwindle (Espiral Inversa)") 
                         },
 
                         { 
                             name: i18n("Divisor"),                
                             id: "divisor",                
-                            icon: "view-paged",            
+                            iconKey: "divisor", 
                             tooltip: i18n("Divisor (Subdivisiones Equitativas)") 
                         }
                     ]
@@ -849,6 +849,7 @@ Item {
                         width: 36; height: 36; radius: 8
                         Layout.alignment: Qt.AlignHCenter
                         property bool isActive: RavenPlugin.RavenController.currentLayout === modelData.id
+                        property string iconSuffix: RavenPlugin.RavenTheme.isDark ? "dark" : "light"
                         color: {
                             if (layoutMa.containsMouse) return RavenPlugin.RavenTheme.highlightColor;
                             if (isActive) return Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.25);
@@ -858,11 +859,16 @@ Item {
                         border.color: RavenPlugin.RavenTheme.highlightColor
                         Behavior on color { ColorAnimation { duration: 120 } }
 
-                        Kirigami.Icon {
+                        Image {
                             anchors.centerIn: parent
-                            source: modelData.icon
-                            implicitWidth: 18; implicitHeight: 18
-                            color: (layoutMa.containsMouse || isActive) ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
+                            width: 22; height: 22
+                            source: Qt.resolvedUrl("../assets/icon_layouts/" + modelData.iconKey + "_" + iconSuffix + ".svg")
+                            sourceSize.width: 44
+                            sourceSize.height: 44
+                            smooth: true
+                            mipmap: true
+                            fillMode: Image.PreserveAspectFit
+                            opacity: (layoutMa.containsMouse || isActive) ? 1.0 : 0.85
                         }
 
                         ToolTip.visible: layoutMa.containsMouse

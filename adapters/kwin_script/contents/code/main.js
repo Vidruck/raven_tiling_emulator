@@ -789,8 +789,37 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
     if (target_output_name) {
       const outputs = workspace.screens || [];
       for (let i = 0; i < outputs.length; i++) {
-        if (outputs[i].name === target_output_name) {
-          workspace.sendClientToScreen(win, outputs[i]);
+        const out = outputs[i];
+        if (out && out.name === target_output_name) {
+          try {
+            if (typeof workspace.sendClientToScreen === "function") {
+              workspace.sendClientToScreen(win, out);
+            }
+          } catch (errScreen) {
+            Logger.debug("migrateWindow", "workspace.sendClientToScreen fallback: " + errScreen);
+          }
+
+          try {
+            if (out.geometry && win.frameGeometry) {
+              const geom = out.geometry;
+              const curW = win.frameGeometry.width || 800;
+              const curH = win.frameGeometry.height || 600;
+              const newX = geom.x + Math.max(0, Math.floor((geom.width - curW) / 2));
+              const newY = geom.y + Math.max(0, Math.floor((geom.height - curH) / 2));
+              win.frameGeometry = {
+                x: newX,
+                y: newY,
+                width: Math.min(curW, geom.width),
+                height: Math.min(curH, geom.height)
+              };
+            }
+          } catch (errGeom) {
+            Logger.debug("migrateWindow", "win.frameGeometry relocation fallback: " + errGeom);
+          }
+
+          try {
+            win.output = out;
+          } catch (errOut) {}
           break;
         }
       }
@@ -798,7 +827,7 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
     if (target_desktop_id) {
       const desktops = workspace.desktops || [];
       for (let j = 0; j < desktops.length; j++) {
-        if (desktops[j].id.toString() === target_desktop_id) {
+        if (desktops[j] && desktops[j].id.toString() === target_desktop_id) {
           win.desktops = [desktops[j]];
           break;
         }

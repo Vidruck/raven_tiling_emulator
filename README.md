@@ -1,7 +1,7 @@
 # Raven Tiling Emulator 🐦
 
 <p align="center">
-  <img src="icon/org.kde.raven.tiling.svg" width="250" alt="Raven Logo">
+  <img src="assets/icon_app/org.kde.raven.tiling.svg" width="250" alt="Raven Logo">
 </p>
 
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
@@ -154,8 +154,16 @@ El proyecto está organizado en un **Cargo Workspace** que integra el motor en R
 │       │   ├── geometry.rs                   # Primitivas geométricas (Rect, WindowNode)
 │       │   └── lib.rs
 │       └── Cargo.toml
-├── icon/                                     # Iconografía vectorial oficial
-│   └── org.kde.raven.tiling.svg
+├── assets/                                   # Iconografía y recursos gráficos oficiales
+│   ├── icon_app/                             # Icono principal de la aplicación (SVG)
+│   │   └── org.kde.raven.tiling.svg
+│   └── icon_layouts/                         # Iconos SVG nativos por algoritmo (Light / Dark)
+│       ├── dwindle_bsp_dark.svg / dwindle_bsp_light.svg
+│       ├── tall_dark.svg / tall_light.svg
+│       ├── monocle_dark.svg / monocle_light.svg
+│       ├── strict_dwindle_dark.svg / strict_dwindle_light.svg
+│       ├── inverted_strict_dwindle_dark.svg / inverted_strict_dwindle_light.svg
+│       └── divisor_dark.svg / divisor_light.svg
 ├── raven_gui/                                # Centro de Control Gráfico en egui / Rust
 │   ├── src/
 │   │   ├── components/                       # Componentes gráficos (layout_preview, etc.)
