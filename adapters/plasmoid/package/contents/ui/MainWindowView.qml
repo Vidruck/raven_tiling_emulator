@@ -845,30 +845,42 @@ Item {
                             tooltip: i18n("Divisor (Subdivisiones Equitativas)") 
                         }
                     ]
-                    delegate: Rectangle {
-                        width: 36; height: 36; radius: 8
+                    delegate: Item {
+                        width: 36; height: 36
                         Layout.alignment: Qt.AlignHCenter
                         property bool isActive: RavenPlugin.RavenController.currentLayout === modelData.id
                         property string iconSuffix: RavenPlugin.RavenTheme.isDark ? "dark" : "light"
-                        color: {
-                            if (layoutMa.containsMouse) return RavenPlugin.RavenTheme.highlightColor;
-                            if (isActive) return Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.25);
-                            return RavenPlugin.RavenTheme.hoverBackground;
-                        }
-                        border.width: isActive ? 1 : 0
-                        border.color: RavenPlugin.RavenTheme.highlightColor
-                        Behavior on color { ColorAnimation { duration: 120 } }
 
+                        // Indicador sutil de selección activa o hover (halo/borde exterior)
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 10
+                            color: {
+                                if (layoutMa.containsMouse) return Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.35);
+                                if (isActive) return Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.20);
+                                return "transparent";
+                            }
+                            border.width: isActive ? 2 : (layoutMa.containsMouse ? 1 : 0)
+                            border.color: RavenPlugin.RavenTheme.highlightColor
+                            Behavior on color { ColorAnimation { duration: 120 } }
+                            Behavior on border.width { NumberAnimation { duration: 120 } }
+                        }
+
+                        // Icono SVG nativo ocupando el espacio completo
                         Image {
-                            anchors.centerIn: parent
-                            width: 22; height: 22
+                            anchors.fill: parent
+                            anchors.margins: isActive ? 1 : (layoutMa.containsMouse ? 0 : 2)
                             source: Qt.resolvedUrl("../assets/icon_layouts/" + modelData.iconKey + "_" + iconSuffix + ".svg")
-                            sourceSize.width: 44
-                            sourceSize.height: 44
+                            sourceSize.width: 72
+                            sourceSize.height: 72
                             smooth: true
                             mipmap: true
                             fillMode: Image.PreserveAspectFit
-                            opacity: (layoutMa.containsMouse || isActive) ? 1.0 : 0.85
+                            opacity: (layoutMa.containsMouse || isActive) ? 1.0 : 0.88
+                            scale: layoutMa.pressed ? 0.94 : (layoutMa.containsMouse ? 1.04 : 1.0)
+                            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
+                            Behavior on opacity { NumberAnimation { duration: 120 } }
+                            Behavior on anchors.margins { NumberAnimation { duration: 120 } }
                         }
 
                         ToolTip.visible: layoutMa.containsMouse
