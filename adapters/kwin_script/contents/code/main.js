@@ -864,8 +864,28 @@ function applyCommands(commandsJson) {
           const w = windows[j];
           if (getSafeWindowId(w) === cmd.window_id) {
             try {
+              const wasFloating = Boolean(w.__raven_dynamic_float);
               w.__raven_dynamic_float = Boolean(cmd.floating);
               w.keepAbove = Boolean(cmd.keep_above);
+
+              // Feedback visual táctil: si pasa a flotante, aplicar un ligero desajuste (nudge)
+              if (cmd.floating && !wasFloating && !w.fullScreen && w.maximizeMode === 0) {
+                w.__raven_mutating = true;
+                const fg = w.frameGeometry;
+                w.frameGeometry = {
+                  x: fg.x + 24,
+                  y: fg.y + 24,
+                  width: Math.max(300, Math.round(fg.width * 0.95)),
+                  height: Math.max(200, Math.round(fg.height * 0.95))
+                };
+                (function (cw) {
+                  setKWinTimeout(function () {
+                    if (cw && !cw.deleted) {
+                      cw.__raven_mutating = false;
+                    }
+                  }, 150);
+                })(w);
+              }
             } catch (e) {
               Logger.error("applyCommands", "Error asignando estado flotante dinámico", e);
             }
@@ -1226,7 +1246,65 @@ function registerRavenShortcuts() {
 
   // ── GESTIÓN DE ESTADO Y FLOTACIÓN ──
   registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function () {
-    dispatchToRaven("toggleTiling");
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "toggleTiling",
+        function (response) {
+          if (response && response !== "[]") {
+            applyCommands(response);
+          }
+          // Verificar estado resultante para coordinar el comportamiento del puente
+          callDBus(
+            "org.kde.raven.Daemon",
+            "/Events",
+            "org.kde.raven.Events",
+            "getTilingState",
+            function (stateRes) {
+              var isEnabled = (stateRes === "true" || stateRes === true);
+              if (isEnabled) {
+                // Modo activado: Sincronización forzada completa ("patada del puente a Rust")
+                syncState();
+              } else {
+                // Modo desactivado: Desacomodo sutil (offset en cascada) para feedback visual claro
+                var winList = workspace.windowList ? workspace.windowList() : [];
+                var activeOut = workspace.activeOutput;
+                var offset = 18;
+                for (var i = 0; i < winList.length; i++) {
+                  var w = winList[i];
+                  if (w && !w.deleted && isManageable(w) && !w.minimized && !w.fullScreen && w.maximizeMode === 0) {
+                    if (!activeOut || !w.output || w.output.name === activeOut.name) {
+                      try {
+                        w.__raven_mutating = true;
+                        var geom = w.frameGeometry;
+                        w.frameGeometry = {
+                          x: geom.x + offset,
+                          y: geom.y + offset,
+                          width: geom.width,
+                          height: geom.height
+                        };
+                        offset += 14;
+                        (function (cw) {
+                          setKWinTimeout(function () {
+                            if (cw && !cw.deleted) {
+                              cw.__raven_mutating = false;
+                            }
+                          }, 150);
+                        })(w);
+                      } catch (errGeom) {}
+                    }
+                  }
+                }
+              }
+            }
+          );
+        }
+      );
+    } catch (e) {
+      Logger.error("Shortcuts", "Fallo en RavenToggleTiling: " + e);
+    }
   });
   registerShortcut("RavenToggleFloating", "Raven: Alternar Ventana Flotante Dinámica (Quick Peek)", "Meta+Shift+F", function () {
     var aw = workspace.activeWindow;

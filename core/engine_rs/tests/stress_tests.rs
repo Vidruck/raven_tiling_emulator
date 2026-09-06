@@ -349,3 +349,185 @@ async fn test_all_windows_dynamically_floated_and_restored() {
     // Validar que la pila flotante quedó totalmente vacía y limpia
     assert_eq!(controller.get_engine().dynamic_floating_windows.len(), 0);
 }
+
+#[tokio::test]
+async fn test_saturation_cyclic_stack_stress_60_windows() {
+    // Escenario de estrés masivo contra intentos de romper el programa:
+    // Pantalla de 1000x800. Capacidad máxima por algoritmo Dwindle BSP:
+    // usable_w = 1000 - gaps; (1000/300).max(1) = 3 cols; (800/250).max(1) = 3 rows -> Cmax = 9.
+    // Usaremos un monitor pequeño de 600x500 para forzar un Cmax = 4.
+    // usable_w = 600 / 300 = 2; usable_h = 500 / 250 = 2 -> Cmax = 4.
+    //
+    // Se generan 60 ventanas (15 veces la capacidad del monitor).
+    // 1. Inyectar las 60 ventanas en el controlador.
+    // 2. Comprobar que exactamente las 4 más recientes quedan visibles en el mosaico
+    //    y las 56 restantes reciben comando de desalojo / minimizado.
+    // 3. Simular un usuario hostil desminimizando y activando en bucle ventanas desalojadas (100 ciclos):
+    //    - La ventana reabierta/activada NUNCA debe ser desalojada de inmediato.
+    //    - La ventana expulsada debe ser exactamente la que más tiempo llevaba inactiva (cola LRU).
+    //    - No debe haber fugas, corrupción de árbol ni deadlocks con 60 ventanas.
+
+    let config = RavenConfig {
+        default_gaps: 0,
+        ..Default::default()
+    };
+    let engine = TilingEngine::new(config);
+    let mut controller = RavenController::new(engine);
+
+    let workspace_id = "eDP-1||desktop_1".to_string();
+    let mut workspaces = HashMap::new();
+    workspaces.insert(
+        workspace_id.clone(),
+        Rect {
+            x: 0,
+            y: 0,
+            width: 600,
+            height: 500,
+        },
+    );
+
+    let total_windows = 60;
+    let mut window_pool: HashMap<String, WindowNode> = HashMap::new();
+
+    for i in 0..total_windows {
+        let wid = format!("stress-win-{:02}", i);
+        window_pool.insert(
+            wid.clone(),
+            WindowNode {
+                window_id: wid,
+                workspace_id: workspace_id.clone(),
+                output: "eDP-1".to_string(),
+                desktops: vec!["desktop_1".to_string()],
+                is_floating: false,
+                is_minimized: false,
+                is_pip: false,
+                geometry: Rect {
+                    x: 0,
+                    y: 0,
+                    width: 300,
+                    height: 250,
+                },
+                min_w: 100,
+                min_h: 100,
+                strict_birth: false,
+                is_quarantined: false,
+                is_fullscreen: false,
+                resource_class: "stress-test-class".to_string(),
+                caption: format!("Stress Window {}", i),
+                custom_w_ratio: None,
+                custom_h_ratio: None,
+            },
+        );
+    }
+
+    // Paso 1: Introducir las 60 ventanas inicialmente todas abiertas
+    let mut current_windows: Vec<WindowNode> = (0..total_windows)
+        .map(|i| window_pool.get(&format!("stress-win-{:02}", i)).unwrap().clone())
+        .collect();
+
+    let initial_actions = controller
+        .handle_state_change(workspaces.clone(), current_windows.clone())
+        .expect("El controlador debe asimilar 60 ventanas sin pánico");
+
+    // Extraer qué ventanas fueron ordenadas a minimizar
+    let evicted_ids: Vec<String> = initial_actions
+        .iter()
+        .filter_map(|action| match action {
+            raven_core::action::RavenAction::MinimizeWindow { window_id } => Some(window_id.clone()),
+            _ => None,
+        })
+        .collect();
+
+    // Con Cmax = 4 en 600x500 y 60 ventanas, el exceso debe ser exactamente 60 - 4 = 56 ventanas
+    assert_eq!(
+        evicted_ids.len(),
+        56,
+        "Deben ser desalojadas exactamente 56 ventanas por saturación geométrica"
+    );
+
+    // Las ventanas desalojadas fueron las 56 primeras (stress-win-00 hasta stress-win-55)
+    for i in 0..56 {
+        let expected_evicted = format!("stress-win-{:02}", i);
+        assert!(
+            evicted_ids.contains(&expected_evicted),
+            "La ventana más vieja {} debió ser desalojada",
+            expected_evicted
+        );
+    }
+
+    // Actualizamos el estado simulando que KWin minimizó las ventanas desalojadas
+    for id in &evicted_ids {
+        if let Some(w) = window_pool.get_mut(id) {
+            w.is_minimized = true;
+        }
+    }
+
+    // Paso 2: Ciclo de estrés hostil (100 iteraciones)
+    // El usuario toma una de las ventanas minimizadas (la más vieja de todas),
+    // la desminimiza y la enfoca/activa.
+    let mut rng_seed: usize = 0;
+    for iteration in 0..100 {
+        // Seleccionamos una ventana actualmente minimizada
+        let candidate_id = format!("stress-win-{:02}", rng_seed % 56);
+        rng_seed += 7; // Paso pseudoaleatorio para alternar entre las 56 ventanas
+
+        // Simular que el usuario hace click en la barra de tareas: la desminimiza y la enfoca
+        if let Some(w) = window_pool.get_mut(&candidate_id) {
+            w.is_minimized = false;
+        }
+        controller.active_window_id = Some(candidate_id.clone());
+
+        // Preparamos el payload completo de ventanas reflejando el nuevo estado
+        current_windows = (0..total_windows)
+            .map(|i| window_pool.get(&format!("stress-win-{:02}", i)).unwrap().clone())
+            .collect();
+
+        let actions = controller
+            .handle_state_change(workspaces.clone(), current_windows.clone())
+            .unwrap_or_else(|e| panic!("Fallo en iteración {}: {:?}", iteration, e));
+
+        let new_evictions: Vec<String> = actions
+            .iter()
+            .filter_map(|action| match action {
+                raven_core::action::RavenAction::MinimizeWindow { window_id } => Some(window_id.clone()),
+                _ => None,
+            })
+            .collect();
+
+        // 1. REGLA DE ORO DE LA GUERRA DE MINIMIZADO:
+        // La ventana candidata que el usuario acaba de reabrir/enfocar NUNCA debe ser minimizada
+        assert!(
+            !new_evictions.contains(&candidate_id),
+            "GUERRA DETECTADA en iteración {}: El demonio minimizó la ventana recién activada por el usuario ({})!",
+            iteration,
+            candidate_id
+        );
+
+        // 2. Debe desalojar a otra ventana para mantener el balance Cmax = 4
+        assert_eq!(
+            new_evictions.len(),
+            1,
+            "En iteración {}, al reactivar una ventana debe desalojar exactamente 1 ventana vieja",
+            iteration
+        );
+
+        // 3. Aplicar la nueva minimización a nuestro pool simulado
+        for evicted in &new_evictions {
+            if let Some(w) = window_pool.get_mut(evicted) {
+                w.is_minimized = true;
+            }
+        }
+
+        // Comprobar que en todo momento quedan exactamente 4 ventanas no minimizadas
+        let visible_count = window_pool.values().filter(|w| !w.is_minimized).count();
+        assert_eq!(
+            visible_count, 4,
+            "En iteración {}, deben quedar exactamente 4 ventanas visibles en el mosaico",
+            iteration
+        );
+    }
+
+    // Comprobar que el historial interno mantiene exactamente las 60 ventanas en seguimiento
+    assert_eq!(controller.get_engine().window_history.len(), 60);
+}
+

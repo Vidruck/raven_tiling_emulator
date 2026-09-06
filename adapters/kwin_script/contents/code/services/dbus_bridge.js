@@ -312,8 +312,28 @@ function applyCommands(commandsJson) {
           const w = windows[j];
           if (getSafeWindowId(w) === cmd.window_id) {
             try {
+              const wasFloating = Boolean(w.__raven_dynamic_float);
               w.__raven_dynamic_float = Boolean(cmd.floating);
               w.keepAbove = Boolean(cmd.keep_above);
+
+              // Feedback visual táctil: si pasa a flotante, aplicar un ligero desajuste (nudge)
+              if (cmd.floating && !wasFloating && !w.fullScreen && w.maximizeMode === 0) {
+                w.__raven_mutating = true;
+                const fg = w.frameGeometry;
+                w.frameGeometry = {
+                  x: fg.x + 24,
+                  y: fg.y + 24,
+                  width: Math.max(300, Math.round(fg.width * 0.95)),
+                  height: Math.max(200, Math.round(fg.height * 0.95))
+                };
+                (function (cw) {
+                  setKWinTimeout(function () {
+                    if (cw && !cw.deleted) {
+                      cw.__raven_mutating = false;
+                    }
+                  }, 150);
+                })(w);
+              }
             } catch (e) {
               Logger.error("applyCommands", "Error asignando estado flotante dinámico", e);
             }

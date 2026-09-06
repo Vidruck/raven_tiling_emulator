@@ -209,15 +209,41 @@ impl TilingEngine {
         Ok((layout_map, evicted_windows))
     }
 
+    /// Promueve una ventana al final de la cola cronológica (MRU - Most Recently Used).
+    ///
+    /// Si la ventana ya existe en el historial, es removida de su posición previa
+    /// y reinsertada al final. Si no existía, se inserta al final.
+    ///
+    /// # Retorno
+    /// Verdadero (`true`) si el orden del historial cambió efectivamente.
+    pub fn promote_to_recent(&mut self, window_id: &str) -> bool {
+        if window_id.is_empty() {
+            return false;
+        }
+
+        // Si ya está en la última posición, no hay cambio de orden
+        if self.window_history.back().map(|id| id.as_str()) == Some(window_id) {
+            return false;
+        }
+
+        let mut changed = false;
+        if let Some(pos) = self.window_history.iter().position(|id| id == window_id) {
+            self.window_history.remove(pos);
+            changed = true;
+        }
+
+        self.window_history.push_back(window_id.to_string());
+        changed || true
+    }
+
     /// Sincroniza el historial cronológico interno con el estado del compositor.
     ///
     /// Elimina de la memoria aquellas ventanas destruidas o cerradas en el compositor
-    /// y registra las nuevas ventanas visibles (no flotantes) al final de la cola (queue) FIFO.
+    /// y registra las nuevas ventanas visibles (no flotantes) al final de la cola FIFO / LRU.
     ///
     /// # Parámetros
     /// * `current_windows` - Estado actual de ventanas activas reportadas por el compositor.
     pub fn update_history(&mut self, current_windows: &[WindowNode]) -> bool {
-        let initial_len = self.window_history.len();
         let initial_order = self.window_history.clone();
 
         self.window_history
@@ -234,6 +260,6 @@ impl TilingEngine {
             }
         }
 
-        initial_len != self.window_history.len() || initial_order != self.window_history
+        initial_order != self.window_history
     }
 }

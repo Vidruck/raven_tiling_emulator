@@ -69,10 +69,10 @@ pub fn calculate_global_topology(
         }).or_else(|| workspaces.values().next().copied());
 
         if let Some(screen_rect) = screen_rect_opt {
-            // Filtrar ventanas no-fullscreen y no-pip para el mosaico de fondo
+            // Filtrar ventanas no-fullscreen, no-pip y no-minimizadas para el mosaico de fondo activo
             let tiling_windows: Vec<WindowNode> = ws_windows
                 .iter()
-                .filter(|w| !w.is_fullscreen && !w.is_pip && !w.is_floating)
+                .filter(|w| !w.is_fullscreen && !w.is_pip && !w.is_floating && !w.is_minimized)
                 .cloned()
                 .collect();
 

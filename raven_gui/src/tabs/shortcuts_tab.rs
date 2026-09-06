@@ -63,7 +63,7 @@ pub fn show(ui: &mut egui::Ui, accent: egui::Color32) {
                 for (idx, (key, desc)) in items.iter().enumerate() {
                     ui.horizontal(|ui| {
                         let is_highlight = *key == "Meta + Shift + F";
-                        let key_color = if is_highlight { accent } else { accent };
+                        let key_color = if is_highlight { egui::Color32::from_rgb(255, 204, 0) } else { accent };
                         ui.label(egui::RichText::new(*key).strong().size(12.5).color(key_color));
                         ui.label(egui::RichText::new(format!("→ {}", desc)).size(12.0));
                     });

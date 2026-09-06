@@ -134,13 +134,23 @@ Item {
         }
     }
 
-    // ── Island / Card Component ─────────────────────────────────────────────
+    // ── Island / Card Component (Frosted Privacy Glass Satinado) ────────────
     component Island : Rectangle {
         color: RavenPlugin.RavenTheme.cardBackground
         border.color: RavenPlugin.RavenTheme.cardBorder
         border.width: 1
         radius: RavenPlugin.RavenTheme.radiusLg
         clip: true
+
+        // Capa de refracción cenital difusa (luz de borde superior estilo cristal biselado)
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 1
+            radius: RavenPlugin.RavenTheme.radiusLg
+            color: RavenPlugin.RavenTheme.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(255, 255, 255, 0.40)
+        }
     }
 
     // ── Layout Principal: Contenido Central + Sidebar Fino de Algoritmos ──────

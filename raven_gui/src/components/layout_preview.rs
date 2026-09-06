@@ -76,7 +76,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                     egui::vec2(stack_w - gap_f * 2.0, stack_h - gap_f * 2.0),
                 );
                 painter.rect_filled(r, 6.0, side_color);
-                painter.text(r.center(), egui::Align2::CENTER_CENTER, &(i + 2).to_string(), egui::FontId::monospace(10.0), egui::Color32::WHITE);
+                painter.text(r.center(), egui::Align2::CENTER_CENTER, (i + 2).to_string(), egui::FontId::monospace(10.0), egui::Color32::WHITE);
             }
         }
         "monocle" => {
@@ -176,7 +176,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                     egui::vec2(col_w - gap_f * 2.0, h - gap_f * 2.0),
                 );
                 painter.rect_filled(r, 6.0, if i == 0 { center_color } else { side_color });
-                painter.text(r.center(), egui::Align2::CENTER_CENTER, &(i + 1).to_string(), egui::FontId::monospace(10.0), egui::Color32::WHITE);
+                painter.text(r.center(), egui::Align2::CENTER_CENTER, (i + 1).to_string(), egui::FontId::monospace(10.0), egui::Color32::WHITE);
             }
         }
         _ => {

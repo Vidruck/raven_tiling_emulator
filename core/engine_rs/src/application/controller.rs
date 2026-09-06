@@ -243,7 +243,18 @@ impl RavenController {
         windows: Vec<WindowNode>,
     ) -> Result<Vec<RavenAction>, RavenError> {
 
-        let history_changed = self.engine.update_history(&windows);
+        let mut history_changed = self.engine.update_history(&windows);
+
+        // Si hay una ventana activa especificada, promoverla como MRU en el historial cíclico
+        if let Some(ref act_id) = self.active_window_id {
+            if !act_id.is_empty()
+                && windows.iter().any(|w| &w.window_id == act_id && !w.is_floating)
+                && self.engine.promote_to_recent(act_id)
+            {
+                history_changed = true;
+            }
+        }
+
         if history_changed {
             Self::persist_window_history(self.engine.window_history.clone());
         }
@@ -493,6 +504,7 @@ impl RavenController {
                             floating: false,
                             keep_above: false,
                         });
+                        Self::send_osd_notification("Ventana", "Modo: Mosaico (Tiling)");
                     } else {
                         // Caso B: La ventana está en mosaico -> Convertirla en flotante temporal (Quick Peek)
                         self.engine.dynamic_floating_windows.insert(wid.clone());
@@ -505,13 +517,19 @@ impl RavenController {
                             floating: true,
                             keep_above: true,
                         });
+                        Self::send_osd_notification("Ventana", "Modo: Flotante (Quick Peek)");
                     }
                     needs_recalc = true;
                 }
             }
             "toggle_tiling" => {
-                self.engine.toggle_tiling();
+                let enabled = self.engine.toggle_tiling();
                 self.last_known_layout.clear();
+                if enabled {
+                    Self::send_osd_notification("Modo Mosaico", "Activado (Reorganizando ventanas)");
+                } else {
+                    Self::send_osd_notification("Modo Mosaico", "Desactivado (Modo Flotante)");
+                }
                 needs_recalc = true;
             }
             "cycle_layout" => {

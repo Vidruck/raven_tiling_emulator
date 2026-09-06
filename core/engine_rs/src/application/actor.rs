@@ -172,7 +172,9 @@ impl RavenControllerActor {
                     if let Some(ref id) = window_id {
                         if !id.trim().is_empty() {
                             self.active_window_id = window_id.clone();
-                            self.controller.active_window_id = window_id;
+                            self.controller.active_window_id = window_id.clone();
+                            // Promover de inmediato en el historial cíclico (LRU) como la ventana más reciente
+                            self.controller.get_engine_mut().promote_to_recent(id);
                         }
                     }
                 }
@@ -251,7 +253,7 @@ impl RavenControllerActor {
                             .arg("-h")
                             .arg("string:x-canonical-private-synchronous:raven-osd")
                             .arg("Disposición de Ventanas")
-                            .arg(&format!("Layout: {}", readable_name))
+                            .arg(format!("Layout: {}", readable_name))
                             .output()
                             .await;
                     });

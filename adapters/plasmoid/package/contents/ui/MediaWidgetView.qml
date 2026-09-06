@@ -110,42 +110,21 @@ Rectangle {
                 }
             }
 
-            // Info de Pista y Artista
+            // Info de Pista y Artista (Espacio amplio para el título de la canción)
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 1
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 2
 
-                RowLayout {
+                Text {
+                    text: media.hasPlayer && media.trackTitle.length > 0
+                        ? media.trackTitle
+                        : i18n("Sin reproducción activa")
+                    color: RavenPlugin.RavenTheme.textColor
+                    font.pixelSize: 12
+                    font.bold: true
+                    elide: Text.ElideRight
                     Layout.fillWidth: true
-                    spacing: 6
-
-                    Text {
-                        text: media.hasPlayer && media.trackTitle.length > 0
-                            ? media.trackTitle
-                            : i18n("Sin reproducción activa")
-                        color: RavenPlugin.RavenTheme.textColor
-                        font.pixelSize: 12
-                        font.bold: true
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-
-                    Rectangle {
-                        visible: media.hasPlayer && media.playerName.length > 0
-                        radius: 4
-                        height: 16
-                        width: playerBadgeText.implicitWidth + 8
-                        color: Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.2)
-
-                        Text {
-                            id: playerBadgeText
-                            anchors.centerIn: parent
-                            text: media.playerName
-                            color: RavenPlugin.RavenTheme.highlightColor
-                            font.pixelSize: 9
-                            font.bold: true
-                        }
-                    }
                 }
 
                 Text {
@@ -159,69 +138,94 @@ Rectangle {
                 }
             }
 
-            // Controles de Reproducción compactos integrados junto a la info de la pista
-            RowLayout {
-                spacing: 4
-                Layout.alignment: Qt.AlignVCenter
+            // Columna Derecha: Badge del Reproductor arriba y Controles de Reproducción abajo
+            ColumnLayout {
+                spacing: 3
+                Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
 
-                // Anterior
+                // Nombre del reproductor centrado/alineado sobre los controles
                 Rectangle {
-                    width: 26; height: 26; radius: 13
-                    color: prevMa.containsMouse ? RavenPlugin.RavenTheme.hoverBackground : "transparent"
-                    Kirigami.Icon {
+                    visible: media.hasPlayer && media.playerName.length > 0
+                    radius: 4
+                    height: 15
+                    width: playerBadgeText.implicitWidth + 8
+                    Layout.alignment: Qt.AlignHCenter
+                    color: Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.2)
+
+                    Text {
+                        id: playerBadgeText
                         anchors.centerIn: parent
-                        source: "media-skip-backward"
-                        implicitWidth: 14; implicitHeight: 14
-                        color: RavenPlugin.RavenTheme.textColor
+                        text: media.playerName
+                        color: RavenPlugin.RavenTheme.highlightColor
+                        font.pixelSize: 8
+                        font.bold: true
                     }
-                    MouseArea {
-                        id: prevMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: media.previous()
-                    }
-                    ToolTip.visible: prevMa.containsMouse
-                    ToolTip.text: i18n("Pista anterior")
                 }
 
-                // Play / Pausa
-                Rectangle {
-                    width: 30; height: 30; radius: 15
-                    color: RavenPlugin.RavenTheme.highlightColor
-                    Kirigami.Icon {
-                        anchors.centerIn: parent
-                        source: media.isPlaying ? "media-playback-pause" : "media-playback-start"
-                        implicitWidth: 15; implicitHeight: 15
-                        color: "#FFFFFF"
-                    }
-                    MouseArea {
-                        id: playMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: media.playPause()
-                    }
-                    ToolTip.visible: playMa.containsMouse
-                    ToolTip.text: media.isPlaying ? i18n("Pausar") : i18n("Reproducir")
-                }
+                // Controles de Reproducción compactos
+                RowLayout {
+                    spacing: 4
+                    Layout.alignment: Qt.AlignHCenter
 
-                // Siguiente
-                Rectangle {
-                    width: 26; height: 26; radius: 13
-                    color: nextMa.containsMouse ? RavenPlugin.RavenTheme.hoverBackground : "transparent"
-                    Kirigami.Icon {
-                        anchors.centerIn: parent
-                        source: "media-skip-forward"
-                        implicitWidth: 14; implicitHeight: 14
-                        color: RavenPlugin.RavenTheme.textColor
+                    // Anterior
+                    Rectangle {
+                        width: 26; height: 26; radius: 13
+                        color: prevMa.containsMouse ? RavenPlugin.RavenTheme.hoverBackground : "transparent"
+                        Kirigami.Icon {
+                            anchors.centerIn: parent
+                            source: "media-skip-backward"
+                            implicitWidth: 14; implicitHeight: 14
+                            color: RavenPlugin.RavenTheme.textColor
+                        }
+                        MouseArea {
+                            id: prevMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: media.previous()
+                        }
+                        ToolTip.visible: prevMa.containsMouse
+                        ToolTip.text: i18n("Pista anterior")
                     }
-                    MouseArea {
-                        id: nextMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: media.next()
+
+                    // Play / Pausa
+                    Rectangle {
+                        width: 28; height: 28; radius: 14
+                        color: RavenPlugin.RavenTheme.highlightColor
+                        Kirigami.Icon {
+                            anchors.centerIn: parent
+                            source: media.isPlaying ? "media-playback-pause" : "media-playback-start"
+                            implicitWidth: 14; implicitHeight: 14
+                            color: "#FFFFFF"
+                        }
+                        MouseArea {
+                            id: playMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: media.playPause()
+                        }
+                        ToolTip.visible: playMa.containsMouse
+                        ToolTip.text: media.isPlaying ? i18n("Pausar") : i18n("Reproducir")
                     }
-                    ToolTip.visible: nextMa.containsMouse
-                    ToolTip.text: i18n("Siguiente pista")
+
+                    // Siguiente
+                    Rectangle {
+                        width: 26; height: 26; radius: 13
+                        color: nextMa.containsMouse ? RavenPlugin.RavenTheme.hoverBackground : "transparent"
+                        Kirigami.Icon {
+                            anchors.centerIn: parent
+                            source: "media-skip-forward"
+                            implicitWidth: 14; implicitHeight: 14
+                            color: RavenPlugin.RavenTheme.textColor
+                        }
+                        MouseArea {
+                            id: nextMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: media.next()
+                        }
+                        ToolTip.visible: nextMa.containsMouse
+                        ToolTip.text: i18n("Siguiente pista")
+                    }
                 }
             }
         }

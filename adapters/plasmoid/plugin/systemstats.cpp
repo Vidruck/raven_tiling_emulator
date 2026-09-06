@@ -274,13 +274,13 @@ void SystemStats::loadStaticInfo()
 
 void SystemStats::readKdeGlobalsTheme()
 {
-    // Raven Dark Base Defaults
+    // Raven Dark Base Defaults (Frosted Privacy Glass - opacidad 0.92)
     m_windowBgColor = QStringLiteral("#0f131a");
     m_viewBgColor = QStringLiteral("#151922");
-    m_cardBackground = QStringLiteral("#181c26");
-    m_cardBorder = QStringLiteral("rgba(255, 255, 255, 0.09)");
-    m_hoverBackground = QStringLiteral("rgba(255, 255, 255, 0.12)");
-    m_surfaceElevated = QStringLiteral("rgba(255, 255, 255, 0.06)");
+    m_cardBackground = QStringLiteral("#EB151922");
+    m_cardBorder = QStringLiteral("#20FFFFFF");
+    m_hoverBackground = QStringLiteral("#24FFFFFF");
+    m_surfaceElevated = QStringLiteral("#14FFFFFF");
     m_textColor = QStringLiteral("#ffffff");
     m_subTextColor = QStringLiteral("rgba(255, 255, 255, 0.65)");
     m_highlightColor = QStringLiteral("#00c8d2");
@@ -409,23 +409,29 @@ void SystemStats::readKdeGlobalsTheme()
         m_textColor = QStringLiteral("#FFFFFF");
         m_subTextColor = QStringLiteral("#A0AEC0"); // Gris claro de alta legibilidad (Tailwind/Nord Slate)
 
-        // Fondo de tarjeta con tono armónico adoptando directamente el fondo de las vistas de KDE
-        m_cardBackground = m_viewBgColor;
+        // Fondo de tarjeta con translucidez difusa satinada (Frosted Privacy Glass - opacidad 0.92 = alpha EB)
+        m_cardBackground = QStringLiteral("#EB%1%2%3")
+                           .arg(viewR, 2, 16, QLatin1Char('0'))
+                           .arg(viewG, 2, 16, QLatin1Char('0'))
+                           .arg(viewB, 2, 16, QLatin1Char('0'));
 
-        // Bordes finos y discretos (1px)
-        m_cardBorder = QStringLiteral("rgba(255, 255, 255, 0.08)");
-        m_hoverBackground = QStringLiteral("rgba(255, 255, 255, 0.12)");
-        m_surfaceElevated = QStringLiteral("rgba(255, 255, 255, 0.06)");
+        // Bordes perimetrales con refracción sutil estilo cristal biselado
+        m_cardBorder = QStringLiteral("#20FFFFFF");
+        m_hoverBackground = QStringLiteral("#24FFFFFF");
+        m_surfaceElevated = QStringLiteral("#14FFFFFF");
     } else {
         // En temas claros:
         m_textColor = QStringLiteral("#111827");
         m_subTextColor = QStringLiteral("#4B5563");
 
-        m_cardBackground = m_viewBgColor;
+        m_cardBackground = QStringLiteral("#EB%1%2%3")
+                           .arg(viewR, 2, 16, QLatin1Char('0'))
+                           .arg(viewG, 2, 16, QLatin1Char('0'))
+                           .arg(viewB, 2, 16, QLatin1Char('0'));
 
-        m_cardBorder = QStringLiteral("rgba(0, 0, 0, 0.07)");
-        m_hoverBackground = QStringLiteral("rgba(0, 0, 0, 0.06)");
-        m_surfaceElevated = QStringLiteral("rgba(0, 0, 0, 0.03)");
+        m_cardBorder = QStringLiteral("#1A000000");
+        m_hoverBackground = QStringLiteral("#14000000");
+        m_surfaceElevated = QStringLiteral("#0D000000");
     }
 
     emit themeChanged();

@@ -44,7 +44,7 @@ PlasmoidItem {
         id: centerDialog
         location: PlasmaCore.Types.Floating
         flags: Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
-        backgroundHints: PlasmaCore.Types.NoBackground
+        backgroundHints: PlasmaCore.Dialog.StandardBackground
         hideOnWindowDeactivate: true
         visible: false
         width: 440
