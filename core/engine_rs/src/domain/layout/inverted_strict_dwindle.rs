@@ -100,19 +100,19 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                     container.height = rem_h;
                 }
                 2 => {
-                    // Partición vertical: la ventana toma el bloque DERECHO del área remanente de tamaño master_ratio
+                    // Partición vertical: la ventana toma el bloque IZQUIERDO del área remanente de tamaño master_ratio
                     let win_min_w = std::cmp::max(win.min_w, 120);
                     let min_rem = 120;
                     let max_allowed = std::cmp::max(1, container.width - min_rem);
                     let raw_w = (container.width as f32 * master_ratio) as i32;
                     let main_w = raw_w.clamp(std::cmp::min(win_min_w, max_allowed), max_allowed);
-                    let rem_w = std::cmp::max(1, container.width - main_w);
                     
-                    curr.x = container.x + rem_w;
+                    curr.x = container.x;
                     curr.width = main_w;
 
-                    // El contenedor remanente queda en la esquina SUPERIOR IZQUIERDA
-                    container.width = rem_w;
+                    // El contenedor remanente queda en el CENTRO (lado interior derecho)
+                    container.x += main_w;
+                    container.width = std::cmp::max(1, container.width - main_w);
                 }
                 _ => {
                     // Partición horizontal: la ventana toma el bloque SUPERIOR de tamaño master_ratio
@@ -136,3 +136,74 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
         (layout_map, evicted_windows)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::geometry::Rect;
+
+    fn mock_window(id: &str) -> WindowNode {
+        WindowNode {
+            window_id: id.to_string(),
+            workspace_id: "default||default".to_string(),
+            output: "default".to_string(),
+            desktops: vec![],
+            is_floating: false,
+            is_minimized: false,
+            is_pip: false,
+            geometry: Rect::new(0, 0, 100, 100),
+            min_w: 0,
+            min_h: 0,
+            strict_birth: false,
+            is_quarantined: false,
+            is_fullscreen: false,
+            resource_class: String::new(),
+            caption: String::new(),
+            custom_w_ratio: None,
+            custom_h_ratio: None,
+        }
+    }
+
+    #[test]
+    fn test_inverted_strict_dwindle_spiral_order() {
+        let strategy = InvertedStrictDwindleStrategy;
+        let windows = vec![
+            mock_window("win_1"),
+            mock_window("win_2"),
+            mock_window("win_3"),
+            mock_window("win_4"),
+        ];
+
+        let screen = Rect::new(0, 0, 1000, 1000);
+        let (layout, _) = strategy.calculate(&windows, screen, 1, 0.5, 0, None);
+
+        let r1 = layout.get("win_1").unwrap();
+        let r2 = layout.get("win_2").unwrap();
+        let r3 = layout.get("win_3").unwrap();
+        let r4 = layout.get("win_4").unwrap();
+
+        // Ventana 1: Lado derecho (x = 500, w = 500, h = 1000)
+        assert_eq!(r1.x, 500);
+        assert_eq!(r1.width, 500);
+        assert_eq!(r1.height, 1000);
+
+        // Ventana 2: Lado inferior izquierdo (x = 0, y = 500, w = 500, h = 500)
+        assert_eq!(r2.x, 0);
+        assert_eq!(r2.y, 500);
+        assert_eq!(r2.width, 500);
+        assert_eq!(r2.height, 500);
+
+        // Ventana 3: Lado superior izquierdo exterior (x = 0, y = 0, w = 250, h = 500)
+        assert_eq!(r3.x, 0);
+        assert_eq!(r3.y, 0);
+        assert_eq!(r3.width, 250);
+        assert_eq!(r3.height, 500);
+
+        // Ventana 4: Centro interior izquierdo terminando la espiral (x = 250, y = 0, w = 250, h = 500)
+        assert_eq!(r4.x, 250);
+        assert_eq!(r4.y, 0);
+        assert_eq!(r4.width, 250);
+        assert_eq!(r4.height, 500);
+    }
+}
+

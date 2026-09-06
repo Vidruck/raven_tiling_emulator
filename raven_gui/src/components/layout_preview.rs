@@ -149,19 +149,19 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
             painter.rect_filled(r2, 6.0, side_color);
             painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), egui::Color32::WHITE);
 
-            // Ventana 3: Ocupa la parte izquierda del sub-bloque superior
+            // Ventana 3: Ocupa el bloque izquierdo del sub-bloque superior
             let w3_w = rem_w * ratio;
             let rem_w2 = rem_w - w3_w;
             let r3 = egui::Rect::from_min_size(
-                egui::pos2(curr_x + rem_w2 + gap_f, curr_y + gap_f),
+                egui::pos2(curr_x + gap_f, curr_y + gap_f),
                 egui::vec2(w3_w - gap_f * 2.0, rem_h - gap_f * 2.0),
             );
             painter.rect_filled(r3, 6.0, side_color);
             painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
 
-            // Ventana 4: Cierra en la esquina superior izquierda (rem_w2 x rem_h)
+            // Ventana 4: Cierra en el centro (lado interior derecho del sub-bloque superior)
             let r4 = egui::Rect::from_min_size(
-                egui::pos2(curr_x + gap_f, curr_y + gap_f),
+                egui::pos2(curr_x + w3_w + gap_f, curr_y + gap_f),
                 egui::vec2(rem_w2 - gap_f * 2.0, rem_h - gap_f * 2.0),
             );
             painter.rect_filled(r4, 6.0, side_color);
