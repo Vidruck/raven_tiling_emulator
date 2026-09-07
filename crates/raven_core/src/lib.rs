@@ -9,5 +9,6 @@
 //! de ventanas, configuraciones persistentes y el catálogo de acciones atómicas del motor.
 
 pub mod action;
+pub mod backend;
 pub mod config;
 pub mod geometry;

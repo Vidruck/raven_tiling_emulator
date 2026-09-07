@@ -36,13 +36,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let engine = TilingEngine::new(app_config);
     let controller = RavenController::new(engine);
 
-    let (tx, rx) = tokio::sync::mpsc::channel(100);
-    let actor = raven_engine::application::actor::RavenControllerActor::new(controller, rx);
+    let (actor_tx, actor_rx) = tokio::sync::mpsc::channel(100);
+    let actor = raven_engine::application::actor::RavenControllerActor::new(controller, actor_rx);
     
     // Iniciar el actor en un hilo en background
     tokio::spawn(actor.run());
 
-    let dbus_service = RavenDBusService { tx };
+    let (kwin_tx, mut kwin_rx) = tokio::sync::mpsc::channel(100);
+    let forward_actor_tx = actor_tx.clone();
+    tokio::spawn(async move {
+        while let Some(kwin_msg) = kwin_rx.recv().await {
+            let _ = forward_actor_tx.send(raven_engine::application::actor::RavenMessage::KWinBridge(kwin_msg)).await;
+        }
+    });
+
+    let dbus_service = RavenDBusService { tx: kwin_tx };
 
     info!("[DBUS] Registrando servicio org.kde.raven.Daemon...");
 
