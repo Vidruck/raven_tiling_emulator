@@ -10,13 +10,11 @@
 
 use std::error::Error;
 use tracing::info;
-use zbus::ConnectionBuilder;
 
+use raven_backend_kwin::KWinBackend;
+use raven_core::config::RavenConfig;
 use raven_engine::application::controller::RavenController;
 use raven_engine::application::engine::TilingEngine;
-use raven_core::config::RavenConfig;
-
-use raven_engine::infrastructure::dbus::RavenDBusService;
 
 /// Función principal de arranque del demonio.
 #[tokio::main]
@@ -42,25 +40,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Iniciar el actor en un hilo en background
     tokio::spawn(actor.run());
 
-    let (kwin_tx, mut kwin_rx) = tokio::sync::mpsc::channel(100);
-    let forward_actor_tx = actor_tx.clone();
-    tokio::spawn(async move {
-        while let Some(kwin_msg) = kwin_rx.recv().await {
-            let _ = forward_actor_tx.send(raven_engine::application::actor::RavenMessage::KWinBridge(kwin_msg)).await;
-        }
-    });
+    // Inicializar e intermediar el bridge actual de KWin mediante el nuevo crate modular raven_backend_kwin
+    let mut kwin_backend = KWinBackend::new();
+    kwin_backend.start_bridge(actor_tx).await?;
 
-    let dbus_service = RavenDBusService { tx: kwin_tx };
-
-    info!("[DBUS] Registrando servicio org.kde.raven.Daemon...");
-
-    let _connection = ConnectionBuilder::session()?
-        .name("org.kde.raven.Daemon")?
-        .serve_at("/Events", dbus_service)?
-        .build()
-        .await?;
-
-    info!("\u{2705} Raven está operando con éxito. Topología registrada.");
+    info!("\u{2705} Raven está operando con éxito con KWinBackend como intermediario.");
 
     std::future::pending::<()>().await;
 
