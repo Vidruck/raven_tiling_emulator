@@ -62,7 +62,8 @@ impl KWinBackend {
     {
         info!("[KWIN-BACKEND] Levantando servicio D-Bus intermediario para KWin / Plasma...");
 
-        let (bridge_tx, mut bridge_rx) = mpsc::channel(100);
+        // Capacidad ampliada a 256 para absorber ráfagas extremas de sincronización interactiva
+        let (bridge_tx, mut bridge_rx) = mpsc::channel(256);
 
         // Forwarder intermediario: retransmite los mensajes del bridge al actor principal
         tokio::spawn(async move {

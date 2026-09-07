@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let engine = TilingEngine::new(app_config);
     let controller = RavenController::new(engine);
 
-    let (actor_tx, actor_rx) = tokio::sync::mpsc::channel(100);
+    let (actor_tx, actor_rx) = tokio::sync::mpsc::channel(256);
     let actor = raven_engine::application::actor::RavenControllerActor::new(controller, actor_rx);
     
     // Iniciar el actor en un hilo en background

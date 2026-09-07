@@ -52,7 +52,7 @@ impl RavenControllerActor {
     }
 
     pub async fn run(mut self) {
-        info!("🎭 Actor Model (P3) Inicializado con Canal Bounded (Capacidad: 100)");
+        info!("🎭 Actor Model (P3) Inicializado con Canal Bounded (Capacidad: 256)");
 
         while let Some(msg) = self.rx.recv().await {
             match msg {
