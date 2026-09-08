@@ -56,10 +56,54 @@ El motor geométrico se organiza en submódulos especializados dentro de `domain
 
 ---
 
-## 🚀 Arquitectura Single-Trip D-Bus IPC & Push Reactivo (zbus 4)
-- **Cero Polling y Tráfico Optimizado**: Se eliminaron las transmisiones masivas de estado redundantes. El script de KWin y el motor de Rust interactúan mediante un modelo síncrono de consulta-respuesta en un solo viaje IPC (`syncStateAndUpdateLayout` y `syncWindowDelta`).
-- **Sincronización Inmediata por Señales D-Bus (`tilingCommandsPending`)**: Los cambios emitidos desde el plasmoide (ajuste de gaps, cambio de layout, alternancia de mosaico) se aplican de forma inmediata en KWin sin requerir el cierre del launcher.
-- **Reducción del 90% en Bus IPC**: Minimiza el uso de CPU de KWin y elimina cuellos de botella en composiciones complejas.
+## 🚀 Arquitectura Hexagonal y Transición Hacia la Versión 4.0
+
+Raven Tiling se encuentra en una transición arquitectónica mayor hacia una **arquitectura hexagonal (puertos y adaptadores)** orientada a compositores múltiples, sentando las bases del salto generacional a la **v4.0.0**.
+
+```text
+┌───────────────────────────────────────────────────────────────────┐
+│                     Raven Engine (Core Domain)                    │
+│   • TilingEngine (Raven BSP, Tall, Monocle, Dwindle, Divisor)     │
+│   • Actor Model Tokio (RavenControllerActor - Concurrencia P3)     │
+│   • raven_core (Topology, OutputNode, WindowNode, RavenAction)     │
+└───────────────────────────────┬───────────────────────────────────┘
+                                │ Trait CompositorBackend
+                                │ (start_listener, apply_actions)
+         ┌──────────────────────┴──────────────────────┐
+         ▼                                             ▼
+┌───────────────────────────────┐             ┌─────────────────────────────┐
+│    raven_backend_kwin         │             │    raven_backend_wayland    │
+│  (Adaptador KDE Plasma 6)     │             │  (v4.0.0 - Protocolos WLR)  │
+│  • zbus D-Bus sesión          │             │  • zwlr_foreign_toplevel_v1 │
+│  • Single-Trip IPC Bridge     │             │  • ext-workspace-v1         │
+│  • Emisión reactiva de señales│             │  • Ingestión sub-milisegundo│
+└───────────────────────────────┘             └─────────────────────────────┘
+```
+
+### 🧩 Desacoplamiento de Componentes (`raven_core` & `raven_backend_kwin`)
+- **`raven_core` (Núcleo Puro Universal)**: 
+  - Define tipos de datos agnósticos de pantalla y compositor: `Topology`, `OutputNode` (`name`, `rect`, `scale`), `WindowNode` y `Rect`.
+  - Define las intenciones atómicas del motor mediante [`RavenAction`](crates/raven_core/src/action.rs) (`MoveWindow`, `SetFloating`, `FocusWindow`, etc.), sin prefijos ni dependencias de ningún entorno de escritorio específico.
+  - Define el contrato de abstracción [`CompositorBackend`](crates/raven_core/src/backend.rs) y el canal unificado de eventos [`CompositorEvent`](crates/raven_core/src/backend.rs#L48).
+- **`raven_backend_kwin` (Adaptador de Compositor KWin / Plasma 6)**:
+  - Implementa el trait universal `CompositorBackend`.
+  - Aísla por completo la serialización de D-Bus (`zbus 4`), el registro del servicio `org.kde.raven.Daemon` y la traducción bidireccional entre `KWinBridgeMessage` y `RavenAction`.
+  - Emite señales asíncronas reactivas `tilingCommandsPending` para notificar a KWin sobre reacomodos sin generar contención.
+
+---
+
+## 🔮 Hoja de Ruta hacia la Versión 4.0 (Wayland Native Protocols)
+
+Para la futura versión **v4.0.0**, Raven tiene programado llevar la ingestión y control de ventanas al **nivel nativo del protocolo Wayland**, complementando y superando la dependencia exclusiva de scripts intermediarios:
+
+1. **Ingestión Directa mediante Protocolos Wayland**:
+   - Soporte nativo de `zwlr_foreign_toplevel_manager_v1` y `ext-foreign-toplevel-list-v1`: Descubrimiento, foco, minimización y cierre de superficies gestionado directamente desde Rust en espacio de usuario.
+   - Soporte del protocolo `ext-workspace-v1` para la administración de escritorios virtuales independientes.
+   - **Latencia Sub-milisegundo**: Tiempos de reacción de sincronización inferiores a 1 ms al interactuar directamente con el socket del servidor Wayland.
+2. **Soporte de Compositores Múltiples**:
+   - Gracias al trait `CompositorBackend`, la misma lógica matemática del motor de Raven podrá operar no solo en **KDE Plasma 6**, sino expandirse hacia compositores Wayland como **Hyprland**, **Sway** y entornos basados en **wlroots**.
+3. **Generador Dinámico de Layouts (Dynamic Layout Sandbox)**:
+   - Motor incrustado de scripting ligero (DSL o Rhai / WebAssembly) para diseñar y cargar en caliente (*hot-reloading*) nuevas matemáticas de mosaico personalizadas desde el Centro de Control sin reiniciar el demonio.
 
 ---
 
@@ -147,12 +191,20 @@ El proyecto está organizado en un **Cargo Workspace** que integra el motor en R
 │       ├── tests/                            # Tests de integración, multimonitor y estrés
 │       └── Cargo.toml
 ├── crates/
-│   └── raven_core/                           # Biblioteca núcleo compartida
+│   ├── raven_core/                           # Biblioteca núcleo pura y contratos compartidos
+│   │   ├── src/
+│   │   │   ├── action.rs                     # Catálogo de acciones atómicas de dominio (RavenAction)
+│   │   │   ├── backend.rs                    # Trait CompositorBackend y eventos universales (CompositorEvent)
+│   │   │   ├── config.rs                     # Esquema y persistencia de configuración
+│   │   │   ├── geometry.rs                   # Topología universal (Topology, OutputNode, Rect, WindowNode)
+│   │   │   └── lib.rs
+│   │   └── Cargo.toml
+│   └── raven_backend_kwin/                   # Adaptador de compositor desacoplado para KWin / Plasma 6
 │       ├── src/
-│       │   ├── action.rs                     # Comandos y acciones geométricas
-│       │   ├── config.rs                     # Esquema y persistencia de configuración
-│       │   ├── geometry.rs                   # Primitivas geométricas (Rect, WindowNode)
-│       │   └── lib.rs
+│       │   ├── commands.rs                   # Conversión de acciones a comandos D-Bus de KWin (TilingCommand)
+│       │   ├── parser.rs                     # Ingestión y parseo de payloads y geometrías de KWin
+│       │   ├── service.rs                    # Servicio zbus D-Bus `org.kde.raven.Events`
+│       │   └── lib.rs                        # Implementación del trait universal CompositorBackend
 │       └── Cargo.toml
 ├── assets/                                   # Iconografía y recursos gráficos oficiales
 │   ├── icon_app/                             # Icono principal de la aplicación (SVG)
