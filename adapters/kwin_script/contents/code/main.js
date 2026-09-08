@@ -382,7 +382,9 @@ function isFloating(w) {
     // se envía como fs=true al motor Rust que le asigna pantalla completa.
     if (w.fullScreen) return false;
 
-    if (w.maximizeMode !== 0 || w.maximized) return true;
+    // Nota: w.maximizeMode !== 0 NO debe clasificar la ventana como flotante,
+    // pues muchas aplicaciones abren restauradas en estado maximizado por KWin
+    // y deben someterse al mosaico normal desmaximizándose automáticamente.
 
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
@@ -944,8 +946,18 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              if (w.maximizeMode !== 0 || w.fullScreen) {
+              if (w.fullScreen) {
                 break;
+              }
+
+              // Si la ventana está maximizada por KWin, desmaximizarla de inmediato
+              // para permitir que adopte la geometría calculada por el motor de mosaico
+              if (w.maximizeMode !== 0) {
+                try {
+                  w.setMaximize(false, false);
+                } catch (errMax) {
+                  Logger.debug("applyCommands", "Error forzando desmaximización: " + errMax);
+                }
               }
 
               w.__raven_mutating = true;

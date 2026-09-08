@@ -10,21 +10,24 @@
 use tokio::sync::{mpsc, oneshot};
 use zbus::interface;
 
+use raven_core::action::RavenAction;
+use crate::commands::TilingCommand;
+
 /// Mensajes enviados desde el servicio D-Bus hacia el actor del motor.
 pub enum KWinBridgeMessage {
     SyncState {
         payload_json: String,
-        reply: oneshot::Sender<String>,
+        reply: oneshot::Sender<Vec<RavenAction>>,
     },
     SyncWindowDelta {
         delta_json: String,
-        reply: oneshot::Sender<String>,
+        reply: oneshot::Sender<Vec<RavenAction>>,
     },
     DispatchShortcut {
         action: String,
         payload: i32,
         payload_str: Option<String>,
-        reply: oneshot::Sender<String>,
+        reply: oneshot::Sender<Vec<RavenAction>>,
     },
     BridgeReady,
     WindowActivated {
@@ -47,8 +50,14 @@ pub enum KWinBridgeMessage {
     },
     SetLayoutForCurrentWorkspace {
         layout_name: String,
-        reply: oneshot::Sender<String>,
+        reply: oneshot::Sender<Vec<RavenAction>>,
     },
+}
+
+/// Convierte una lista de acciones de Raven en la representación JSON de `TilingCommand` esperada por KWin.
+pub fn actions_to_kwin_json(actions: Vec<RavenAction>) -> String {
+    let dbus_commands: Vec<TilingCommand> = actions.into_iter().map(Into::into).collect();
+    serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"))
 }
 
 /// Servicio D-Bus de Raven para interactuar con KWin y Plasma 6.
@@ -76,11 +85,13 @@ impl KWinDbusService {
             reply: reply_tx,
         };
 
-        let response = if self.tx.send(msg).await.is_ok() {
-            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
         } else {
-            String::from("[]")
+            Vec::new()
         };
+
+        let response = actions_to_kwin_json(actions);
 
         if response != "[]" {
             let _ = Self::tiling_commands_pending(signal_ctxt, &response).await;
@@ -109,11 +120,13 @@ impl KWinDbusService {
             reply: reply_tx,
         };
 
-        if self.tx.send(msg).await.is_ok() {
-            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
         } else {
-            String::from("[]")
-        }
+            Vec::new()
+        };
+
+        actions_to_kwin_json(actions)
     }
 
     /// Sincroniza de forma incremental (delta sync) el cambio de geometría o estado de una única ventana.
@@ -125,11 +138,13 @@ impl KWinDbusService {
             reply: reply_tx,
         };
 
-        if self.tx.send(msg).await.is_ok() {
-            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
         } else {
-            String::from("[]")
-        }
+            Vec::new()
+        };
+
+        actions_to_kwin_json(actions)
     }
 
     /// Notifica que el puente de JavaScript se ha restablecido y está listo.
@@ -282,11 +297,13 @@ impl KWinDbusService {
             layout_name,
             reply: reply_tx,
         };
-        let response = if self.tx.send(msg).await.is_ok() {
-            reply_rx.await.unwrap_or_else(|_| String::from("[]"))
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
         } else {
-            String::from("[]")
+            Vec::new()
         };
+
+        let response = actions_to_kwin_json(actions);
 
         if response != "[]" {
             let _ = Self::tiling_commands_pending(&signal_ctxt, &response).await;

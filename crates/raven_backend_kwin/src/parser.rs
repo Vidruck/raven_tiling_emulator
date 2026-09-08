@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use raven_core::geometry::{Rect, WindowNode};
+use raven_core::geometry::{Rect, Topology, WindowNode};
 
 /// Representa la geometría de una pantalla en la estructura de serialización de KWin.
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -77,19 +77,8 @@ pub struct KWinWindow {
     pub cap: String,
 }
 
-/// Representa el estado global de salidas y escritorios virtuales en KWin.
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-pub struct KWinTopology {
-    /// Listado de nombres de salidas (outputs) físicas de pantalla.
-    #[serde(default)]
-    pub outputs: Vec<String>,
-    /// Listado de identificadores de escritorios virtuales activos.
-    #[serde(default)]
-    pub desktops: Vec<String>,
-    /// Identificador del escritorio actual activo.
-    #[serde(default)]
-    pub current_desktop: String,
-}
+/// Representa el estado global de salidas y escritorios virtuales en KWin (alias de la topología universal de raven_core).
+pub type KWinTopology = Topology;
 
 /// Contenedor raíz del payload de sincronización enviado por el script de KWin.
 #[derive(Debug, Deserialize, Clone)]
@@ -100,11 +89,11 @@ pub struct KWinPayload {
     pub screens: HashMap<String, KWinScreen>,
     /// Topología de pantallas y escritorios virtuales de KWin.
     #[serde(default)]
-    pub topology: KWinTopology,
+    pub topology: Topology,
 }
 
 /// Resultado del parseo del payload de KWin: (Workspaces, Ventanas, Topología).
-pub type ParsedKWinPayload = (HashMap<String, Rect>, Vec<WindowNode>, KWinTopology);
+pub type ParsedKWinPayload = (HashMap<String, Rect>, Vec<WindowNode>, Topology);
 
 /// Parsea el payload JSON de KWin convirtiéndolo en estructuras nativas de `raven_core`.
 pub fn parse_payload(
@@ -112,9 +101,9 @@ pub fn parse_payload(
 ) -> Result<ParsedKWinPayload, serde_json::Error> {
     let payload: KWinPayload = serde_json::from_str(payload_str)?;
     let mut workspaces = HashMap::new();
-    for (ws_id, screen) in payload.screens {
+    for (ws_id, screen) in &payload.screens {
         workspaces.insert(
-            ws_id,
+            ws_id.clone(),
             Rect::new(screen.x, screen.y, screen.w, screen.h),
         );
     }
@@ -151,5 +140,26 @@ pub fn parse_payload(
             .with_class_and_caption(win.cls, win.cap),
         );
     }
-    Ok((workspaces, windows, payload.topology))
+
+    let mut topology = payload.topology;
+    // Si la topología no trae output_nodes poblados, derivarlos de screens y outputs conocidos
+    if topology.output_nodes.is_empty() {
+        let mut output_nodes = Vec::new();
+        for out in &topology.outputs {
+            // Buscar si hay alguna pantalla en payload.screens que corresponda al output
+            let matching_rect = payload.screens.iter().find_map(|(ws_id, screen)| {
+                if ws_id.starts_with(out) {
+                    Some(Rect::new(screen.x, screen.y, screen.w, screen.h))
+                } else {
+                    None
+                }
+            });
+
+            let rect = matching_rect.unwrap_or_else(|| Rect::new(0, 0, 1920, 1080));
+            output_nodes.push(raven_core::geometry::OutputNode::new(out.clone(), rect, 1.0));
+        }
+        topology.output_nodes = output_nodes;
+    }
+
+    Ok((workspaces, windows, topology))
 }

@@ -5,8 +5,7 @@ use tokio::sync::Mutex;
 use raven_core::config::RavenConfig;
 use raven_engine::application::controller::RavenController;
 use raven_engine::application::engine::TilingEngine;
-use raven_engine::domain::geometry::{Rect, WindowNode};
-use raven_engine::infrastructure::dbus::KWinTopology;
+use raven_engine::domain::geometry::{Rect, Topology, WindowNode};
 
 #[tokio::test]
 async fn test_saturation_flood() {
@@ -112,8 +111,9 @@ async fn test_concurrent_settings_conflict() {
     // Plasmoid recibe +10
     let task_a = tokio::spawn(async move {
         let mut guard = ctrl_a.lock().await;
-        let topology = KWinTopology {
+        let topology = Topology {
             outputs: vec![],
+            output_nodes: vec![],
             desktops: vec![],
             current_desktop: String::new(),
         };
@@ -123,8 +123,9 @@ async fn test_concurrent_settings_conflict() {
     // GUI recibe -8 concurrentemente
     let task_b = tokio::spawn(async move {
         let mut guard = ctrl_b.lock().await;
-        let topology = KWinTopology {
+        let topology = Topology {
             outputs: vec![],
+            output_nodes: vec![],
             desktops: vec![],
             current_desktop: String::new(),
         };
@@ -252,8 +253,9 @@ async fn test_all_windows_dynamically_floated_and_restored() {
     let config = RavenConfig::default();
     let engine = TilingEngine::new(config);
     let mut controller = RavenController::new(engine);
-    let topology = KWinTopology {
+    let topology = Topology {
         outputs: vec!["DP-1".to_string()],
+        output_nodes: vec![],
         desktops: vec!["desk_1".to_string()],
         current_desktop: "desk_1".to_string(),
     };
@@ -344,6 +346,11 @@ async fn test_all_windows_dynamically_floated_and_restored() {
 
         let recalc_cmds = controller.commit_layout().expect("commit_layout debe reconstruir el mosaico");
         assert!(!recalc_cmds.is_empty(), "Al reinsertar ventanas, el motor recalcula geometrías válidas");
+        let has_move_target = recalc_cmds.iter().any(|c| match c {
+            raven_core::action::RavenAction::MoveWindow { window_id, .. } => window_id == &win_id,
+            _ => false,
+        });
+        assert!(has_move_target, "La ventana {} restaurada al mosaico debe recibir comando MoveWindow", win_id);
     }
 
     // Validar que la pila flotante quedó totalmente vacía y limpia

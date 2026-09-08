@@ -13,8 +13,8 @@ use tokio::sync::mpsc;
 use tracing::info;
 
 use crate::application::controller::RavenController;
-use raven_backend_kwin::{parse_payload, KWinTopology, TilingCommand, KWinWindow, service::KWinBridgeMessage};
-use crate::domain::geometry::{Rect, WindowNode};
+use raven_backend_kwin::{parse_payload, KWinWindow, service::KWinBridgeMessage};
+use crate::domain::geometry::{Rect, Topology, WindowNode};
 use raven_core::backend::CompositorEvent;
 
 /// Mensajes que el demonio recibe en su bucle de eventos (compatibilidad KWin + eventos universales de compositor).
@@ -36,7 +36,7 @@ pub struct RavenControllerActor {
     controller: RavenController,
     active_window_id: Option<String>,
     last_payload_json: String,
-    current_topology: KWinTopology,
+    current_topology: Topology,
     rx: mpsc::Receiver<RavenMessage>,
 }
 
@@ -46,7 +46,7 @@ impl RavenControllerActor {
             controller,
             active_window_id: None,
             last_payload_json: String::from("{}"),
-            current_topology: KWinTopology::default(),
+            current_topology: Topology::default(),
             rx,
         }
     }
@@ -85,21 +85,24 @@ impl RavenControllerActor {
                                 self.controller.get_engine_mut().promote_to_recent(id);
                             }
                         }
-                        CompositorEvent::TopologyChanged { outputs, desktops, current_desktop } => {
-                            self.current_topology = KWinTopology {
-                                outputs,
-                                desktops,
-                                current_desktop,
-                            };
+                        CompositorEvent::TopologyChanged(topology) => {
+                            self.current_topology = topology;
                         }
                     }
                 }
                 RavenMessage::KWinBridge(kwin_msg) => match kwin_msg {
                     KWinBridgeMessage::SyncState { payload_json, reply } => {
                         self.last_payload_json = payload_json.clone();
-                        let (workspaces, windows, topology) = parse_payload(&payload_json)
-                            .unwrap_or_else(|_| (HashMap::new(), Vec::new(), KWinTopology::default()));
+                        let (workspaces, mut windows, topology) = parse_payload(&payload_json)
+                            .unwrap_or_else(|_| (HashMap::new(), Vec::new(), Topology::default()));
                         
+                        // Preservar la bandera de flotación dinámica si Rust ya mantiene la ventana en Quick Peek
+                        for win in &mut windows {
+                            if self.controller.get_engine().dynamic_floating_windows.contains(&win.window_id) {
+                                win.is_floating = true;
+                            }
+                        }
+
                         self.current_topology = topology.clone();
                         self.controller.active_window_id = self.active_window_id.clone();
                         
@@ -108,12 +111,10 @@ impl RavenControllerActor {
                             all_commands.extend(cmds);
                         }
                         
-                        let dbus_commands: Vec<TilingCommand> = all_commands.into_iter().map(Into::into).collect();
-                        let response = serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
-                        let _ = reply.send(response);
+                        let _ = reply.send(all_commands);
                     }
                     KWinBridgeMessage::SyncWindowDelta { delta_json, reply } => {
-                        let mut response = String::from("[]");
+                        let mut commands = Vec::new();
                         if let Ok(win) = serde_json::from_str::<KWinWindow>(&delta_json) {
                             let ws_id = if !win.ws.is_empty() {
                                 win.ws
@@ -123,12 +124,13 @@ impl RavenControllerActor {
                                 format!("{}||{}", out_name, desk_name)
                             };
 
+                            let is_dynamic_float = self.controller.get_engine().dynamic_floating_windows.contains(&win.id);
                             let win_node = WindowNode::new(
                                 win.id,
                                 ws_id,
                                 win.output,
                                 win.desktops,
-                                win.f,
+                                win.f || is_dynamic_float,
                                 win.m,
                                 win.p,
                                 Rect::new(win.x, win.y, win.w, win.h),
@@ -140,17 +142,31 @@ impl RavenControllerActor {
                             )
                             .with_class_and_caption(win.cls, win.cap);
                             
+                            let is_tiled = !win_node.is_floating && !win_node.is_minimized;
+                            let wid = win_node.window_id.clone();
                             self.controller.handle_delta_change(win_node);
-                            if let Ok(commands) = self.controller.commit_layout() {
-                                let dbus_commands: Vec<TilingCommand> =
-                                    commands.into_iter().map(Into::into).collect();
-                                response = serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
+                            
+                            if is_tiled {
+                                self.active_window_id = Some(wid.clone());
+                                self.controller.active_window_id = Some(wid.clone());
+                                self.controller.get_engine_mut().promote_to_recent(&wid);
+                            }
+
+                            if let Ok(recalc_cmds) = self.controller.commit_layout() {
+                                commands.extend(recalc_cmds);
                             }
                         }
-                        let _ = reply.send(response);
+                        let _ = reply.send(commands);
                     }
                     KWinBridgeMessage::DispatchShortcut { action, payload, payload_str, reply } => {
                         let effective_active_id = payload_str.filter(|s| !s.trim().is_empty()).or_else(|| self.active_window_id.clone());
+                        
+                        if let Some(ref id) = effective_active_id {
+                            self.active_window_id = Some(id.clone());
+                            self.controller.active_window_id = Some(id.clone());
+                            self.controller.get_engine_mut().promote_to_recent(id);
+                        }
+
                         let mut all_commands = Vec::new();
                         if let Ok((needs_recalc, cmds)) = self.controller.handle_shortcut(
                             action,
@@ -166,10 +182,7 @@ impl RavenControllerActor {
                                 }
                             }
                         }
-                        let dbus_commands: Vec<TilingCommand> = all_commands.into_iter().map(Into::into).collect();
-                        let response = serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
-                        
-                        let _ = reply.send(response);
+                        let _ = reply.send(all_commands);
                     }
                     KWinBridgeMessage::BridgeReady => {
                         self.last_payload_json.clear();
@@ -265,12 +278,11 @@ impl RavenControllerActor {
                                 .await;
                         });
 
-                        let mut response = String::from("[]");
-                        if let Ok(commands) = self.controller.commit_layout() {
-                            let dbus_commands: Vec<TilingCommand> = commands.into_iter().map(Into::into).collect();
-                            response = serde_json::to_string(&dbus_commands).unwrap_or_else(|_| String::from("[]"));
+                        let mut commands = Vec::new();
+                        if let Ok(cmds) = self.controller.commit_layout() {
+                            commands = cmds;
                         }
-                        let _ = reply.send(response);
+                        let _ = reply.send(commands);
                     }
                 },
             }

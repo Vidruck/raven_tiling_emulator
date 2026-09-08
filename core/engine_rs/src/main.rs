@@ -41,10 +41,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tokio::spawn(actor.run());
 
     // Inicializar e intermediar el bridge actual de KWin mediante el nuevo crate modular raven_backend_kwin
-    let mut kwin_backend = KWinBackend::new();
+    let kwin_backend = KWinBackend::new();
     kwin_backend.start_bridge(actor_tx).await?;
 
-    info!("\u{2705} Raven está operando con éxito con KWinBackend como intermediario.");
+    info!("✅ Raven está operando con éxito con KWinBackend como intermediario.");
 
     std::future::pending::<()>().await;
 

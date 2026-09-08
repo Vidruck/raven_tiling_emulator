@@ -128,3 +128,60 @@ impl WindowNode {
         self
     }
 }
+
+/// Representa una salida o monitor físico en el compositor.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OutputNode {
+    /// Nombre o conector del monitor (ej. "eDP-1", "DP-2", "HDMI-A-1").
+    pub name: String,
+    /// Rectángulo geométrico del monitor en coordenadas globales del compositor.
+    pub rect: Rect,
+    /// Factor de escala del monitor (ej. 1.0, 1.25, 2.0).
+    #[serde(default = "default_scale")]
+    pub scale: f64,
+}
+
+fn default_scale() -> f64 {
+    1.0
+}
+
+impl OutputNode {
+    /// Crea una nueva instancia de monitor físico (`OutputNode`).
+    pub fn new(name: String, rect: Rect, scale: f64) -> Self {
+        Self { name, rect, scale }
+    }
+}
+
+/// Representa el modelo universal de topología física y lógica de pantallas y escritorios.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Topology {
+    /// Listado de identificadores o nombres de pantallas físicas conectadas.
+    #[serde(default)]
+    pub outputs: Vec<String>,
+    /// Nodos detallados de monitores con geometría y escala (si están disponibles).
+    #[serde(default)]
+    pub output_nodes: Vec<OutputNode>,
+    /// Listado de identificadores de escritorios virtuales activos.
+    #[serde(default)]
+    pub desktops: Vec<String>,
+    /// Identificador del escritorio virtual activo actualmente.
+    #[serde(default)]
+    pub current_desktop: String,
+}
+
+impl Topology {
+    /// Crea una nueva topología básica a partir de listas de outputs y escritorios.
+    pub fn new(
+        outputs: Vec<String>,
+        output_nodes: Vec<OutputNode>,
+        desktops: Vec<String>,
+        current_desktop: String,
+    ) -> Self {
+        Self {
+            outputs,
+            output_nodes,
+            desktops,
+            current_desktop,
+        }
+    }
+}

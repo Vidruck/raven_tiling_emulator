@@ -180,7 +180,9 @@ function isFloating(w) {
     // se envía como fs=true al motor Rust que le asigna pantalla completa.
     if (w.fullScreen) return false;
 
-    if (w.maximizeMode !== 0 || w.maximized) return true;
+    // Nota: w.maximizeMode !== 0 NO debe clasificar la ventana como flotante,
+    // pues muchas aplicaciones abren restauradas en estado maximizado por KWin
+    // y deben someterse al mosaico normal desmaximizándose automáticamente.
 
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";

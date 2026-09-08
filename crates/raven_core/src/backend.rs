@@ -61,11 +61,7 @@ pub enum CompositorEvent {
     /// Foco de entrada cambiado hacia una ventana específica.
     WindowFocused(Option<String>),
     /// Cambio o reorganización en la topología de monitores o escritorios.
-    TopologyChanged {
-        outputs: Vec<String>,
-        desktops: Vec<String>,
-        current_desktop: String,
-    },
+    TopologyChanged(crate::geometry::Topology),
 }
 
 /// Contrato universal de abstracción para backends de compositores de ventanas.

@@ -93,7 +93,11 @@ impl eframe::App for RavenGuiApp {
         visuals.widgets.hovered.bg_fill = self.kde_palette.selection_bg;
         visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0_f32, self.kde_palette.selection_fg);
         visuals.widgets.active.bg_fill = self.kde_palette.selection_bg;
-        visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0_f32, self.kde_palette.selection_fg);
+        // En egui, `RichText::strong()` y los encabezados usan `visuals.strong_text_color()`,
+        // el cual retorna `visuals.widgets.active.text_color()`. Debe ser el color de texto de ventana (`window_fg`),
+        // no el color de selección (`selection_fg`, típicamente blanco), para evitar que los títulos queden blancos sobre fondo claro.
+        let strong_color = self.kde_palette.window_fg;
+        visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0_f32, strong_color);
         visuals.override_text_color = Some(primary_text);
         visuals.selection.bg_fill = self.kde_palette.selection_bg;
         visuals.selection.stroke = egui::Stroke::new(1.0_f32, self.kde_palette.selection_fg);

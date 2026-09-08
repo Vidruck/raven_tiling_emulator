@@ -24,8 +24,11 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
     let h = rect.height();
 
     let center_color = palette.selection_bg;
+    let center_fg    = palette.selection_fg;
     let side_color   = palette.button_bg;
+    let side_fg      = palette.button_fg;
     let pip_color    = egui::Color32::from_rgb(247, 37, 133); // Magenta vibrante para PiP
+    let pip_fg       = egui::Color32::WHITE;
 
     match layout_type {
         "raven" => {
@@ -40,7 +43,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(w - gap_f * 2.0, master_h - gap_f * 2.0),
             );
             painter.rect_filled(master_rect, 6.0, center_color);
-            painter.text(master_rect.center(), egui::Align2::CENTER_CENTER, "1 (Master Superior)", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+            painter.text(master_rect.center(), egui::Align2::CENTER_CENTER, "1 (Master Superior)", egui::FontId::monospace(11.0), center_fg);
 
             // Panel Inferior Izquierdo (Ventana 2)
             let bottom_left = egui::Rect::from_min_size(
@@ -48,7 +51,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(half_w - gap_f * 2.0, bottom_h - gap_f * 2.0),
             );
             painter.rect_filled(bottom_left, 6.0, side_color);
-            painter.text(bottom_left.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(bottom_left.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(10.0), side_fg);
 
             // Panel Inferior Derecho (Ventana 3)
             let bottom_right = egui::Rect::from_min_size(
@@ -56,7 +59,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(half_w - gap_f * 2.0, bottom_h - gap_f * 2.0),
             );
             painter.rect_filled(bottom_right, 6.0, side_color);
-            painter.text(bottom_right.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(bottom_right.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), side_fg);
         }
         "tall" => {
             let master_w = w * ratio;
@@ -68,7 +71,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(master_w - gap_f * 2.0, h - gap_f * 2.0),
             );
             painter.rect_filled(master, 6.0, center_color);
-            painter.text(master.center(), egui::Align2::CENTER_CENTER, "Master", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+            painter.text(master.center(), egui::Align2::CENTER_CENTER, "Master", egui::FontId::monospace(11.0), center_fg);
 
             for i in 0..3 {
                 let r = egui::Rect::from_min_size(
@@ -76,7 +79,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                     egui::vec2(stack_w - gap_f * 2.0, stack_h - gap_f * 2.0),
                 );
                 painter.rect_filled(r, 6.0, side_color);
-                painter.text(r.center(), egui::Align2::CENTER_CENTER, (i + 2).to_string(), egui::FontId::monospace(10.0), egui::Color32::WHITE);
+                painter.text(r.center(), egui::Align2::CENTER_CENTER, (i + 2).to_string(), egui::FontId::monospace(10.0), side_fg);
             }
         }
         "monocle" => {
@@ -85,7 +88,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(w - gap_f * 2.0, h - gap_f * 2.0),
             );
             painter.rect_filled(r, 6.0, center_color);
-            painter.text(r.center(), egui::Align2::CENTER_CENTER, "Monóculo (Maximizado)", egui::FontId::monospace(12.0), egui::Color32::WHITE);
+            painter.text(r.center(), egui::Align2::CENTER_CENTER, "Monóculo (Maximizado)", egui::FontId::monospace(12.0), center_fg);
         }
         "strict_dwindle" => {
             let curr_x = rect.min.x;
@@ -97,7 +100,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(w1_w - gap_f * 2.0, h - gap_f * 2.0),
             );
             painter.rect_filled(r1, 6.0, center_color);
-            painter.text(r1.center(), egui::Align2::CENTER_CENTER, "1", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+            painter.text(r1.center(), egui::Align2::CENTER_CENTER, "1", egui::FontId::monospace(11.0), center_fg);
 
             let rem_w = w - w1_w;
             let w2_h = h * ratio;
@@ -106,7 +109,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(rem_w - gap_f * 2.0, w2_h - gap_f * 2.0),
             );
             painter.rect_filled(r2, 6.0, side_color);
-            painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+            painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), side_fg);
 
             let rem_h = h - w2_h;
             let w3_w = rem_w * ratio;
@@ -115,7 +118,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(w3_w - gap_f * 2.0, rem_h - gap_f * 2.0),
             );
             painter.rect_filled(r3, 6.0, side_color);
-            painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), side_fg);
 
             let rem_w2 = rem_w - w3_w;
             let r4 = egui::Rect::from_min_size(
@@ -123,7 +126,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(rem_w2 - gap_f * 2.0, rem_h - gap_f * 2.0),
             );
             painter.rect_filled(r4, 6.0, side_color);
-            painter.text(r4.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(9.0), egui::Color32::WHITE);
+            painter.text(r4.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(9.0), side_fg);
         }
         "inverted_strict_dwindle" => {
             let curr_x = rect.min.x;
@@ -137,7 +140,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(w1_w - gap_f * 2.0, h - gap_f * 2.0),
             );
             painter.rect_filled(r1, 6.0, center_color);
-            painter.text(r1.center(), egui::Align2::CENTER_CENTER, "1 (Master Invertido)", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(r1.center(), egui::Align2::CENTER_CENTER, "1 (Master Invertido)", egui::FontId::monospace(10.0), center_fg);
 
             // Ventana 2: Ocupa la parte inferior del bloque izquierdo
             let w2_h = h * ratio;
@@ -147,7 +150,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(rem_w - gap_f * 2.0, w2_h - gap_f * 2.0),
             );
             painter.rect_filled(r2, 6.0, side_color);
-            painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), egui::Color32::WHITE);
+            painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(11.0), side_fg);
 
             // Ventana 3: Ocupa el bloque izquierdo del sub-bloque superior
             let w3_w = rem_w * ratio;
@@ -157,7 +160,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(w3_w - gap_f * 2.0, rem_h - gap_f * 2.0),
             );
             painter.rect_filled(r3, 6.0, side_color);
-            painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), side_fg);
 
             // Ventana 4: Cierra en el centro (lado interior derecho del sub-bloque superior)
             let r4 = egui::Rect::from_min_size(
@@ -165,7 +168,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(rem_w2 - gap_f * 2.0, rem_h - gap_f * 2.0),
             );
             painter.rect_filled(r4, 6.0, side_color);
-            painter.text(r4.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(9.0), egui::Color32::WHITE);
+            painter.text(r4.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(9.0), side_fg);
         }
         "divisor" => {
             let n = 4;
@@ -175,8 +178,9 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                     rect.min + egui::vec2(i as f32 * col_w + gap_f, gap_f),
                     egui::vec2(col_w - gap_f * 2.0, h - gap_f * 2.0),
                 );
-                painter.rect_filled(r, 6.0, if i == 0 { center_color } else { side_color });
-                painter.text(r.center(), egui::Align2::CENTER_CENTER, (i + 1).to_string(), egui::FontId::monospace(10.0), egui::Color32::WHITE);
+                let (bg, fg) = if i == 0 { (center_color, center_fg) } else { (side_color, side_fg) };
+                painter.rect_filled(r, 6.0, bg);
+                painter.text(r.center(), egui::Align2::CENTER_CENTER, (i + 1).to_string(), egui::FontId::monospace(10.0), fg);
             }
         }
         _ => {
@@ -192,7 +196,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(center_w - gap_f * 2.0, main_h - gap_f * 2.0),
             );
             painter.rect_filled(r1, 6.0, center_color);
-            painter.text(r1.center(), egui::Align2::CENTER_CENTER, "1", egui::FontId::monospace(14.0), egui::Color32::WHITE);
+            painter.text(r1.center(), egui::Align2::CENTER_CENTER, "1", egui::FontId::monospace(14.0), center_fg);
 
             // 2. Left 1 (Top)
             let r2 = egui::Rect::from_min_size(
@@ -200,7 +204,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(sidebar_w - gap_f * 2.0, main_h / 2.0 - gap_f * 2.0),
             );
             painter.rect_filled(r2, 6.0, side_color);
-            painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(r2.center(), egui::Align2::CENTER_CENTER, "2", egui::FontId::monospace(10.0), side_fg);
 
             // 3. Right 1 (Top)
             let r3 = egui::Rect::from_min_size(
@@ -208,7 +212,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(sidebar_w - gap_f * 2.0, main_h / 2.0 - gap_f * 2.0),
             );
             painter.rect_filled(r3, 6.0, side_color);
-            painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(r3.center(), egui::Align2::CENTER_CENTER, "3", egui::FontId::monospace(10.0), side_fg);
 
             // 4. Bottom Left
             let r4 = egui::Rect::from_min_size(
@@ -216,7 +220,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(w / 2.0 - gap_f * 2.0, bottom_h - gap_f * 2.0),
             );
             painter.rect_filled(r4, 6.0, side_color);
-            painter.text(r4.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(r4.center(), egui::Align2::CENTER_CENTER, "4", egui::FontId::monospace(10.0), side_fg);
 
             // 5. Bottom Right
             let r5 = egui::Rect::from_min_size(
@@ -224,7 +228,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(w / 2.0 - gap_f * 2.0, bottom_h - gap_f * 2.0),
             );
             painter.rect_filled(r5, 6.0, side_color);
-            painter.text(r5.center(), egui::Align2::CENTER_CENTER, "5", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(r5.center(), egui::Align2::CENTER_CENTER, "5", egui::FontId::monospace(10.0), side_fg);
 
             // 6. Left 2 (Bottom)
             let r6 = egui::Rect::from_min_size(
@@ -232,7 +236,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(sidebar_w - gap_f * 2.0, main_h / 2.0 - gap_f * 2.0),
             );
             painter.rect_filled(r6, 6.0, side_color);
-            painter.text(r6.center(), egui::Align2::CENTER_CENTER, "6", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(r6.center(), egui::Align2::CENTER_CENTER, "6", egui::FontId::monospace(10.0), side_fg);
 
             // 7. Right 2 (Bottom)
             let r7 = egui::Rect::from_min_size(
@@ -240,7 +244,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(sidebar_w - gap_f * 2.0, main_h / 2.0 - gap_f * 2.0),
             );
             painter.rect_filled(r7, 6.0, side_color);
-            painter.text(r7.center(), egui::Align2::CENTER_CENTER, "7", egui::FontId::monospace(10.0), egui::Color32::WHITE);
+            painter.text(r7.center(), egui::Align2::CENTER_CENTER, "7", egui::FontId::monospace(10.0), side_fg);
         }
     }
 
@@ -301,5 +305,5 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
     let pip_rect = egui::Rect::from_min_size(pip_pos, pip_size);
     painter.rect_filled(pip_rect, 6.0, pip_color);
     painter.rect_stroke(pip_rect, 6.0, egui::Stroke::new(1.0_f32, egui::Color32::WHITE));
-    painter.text(pip_rect.center(), egui::Align2::CENTER_CENTER, "📌 PiP", egui::FontId::monospace(9.5), egui::Color32::WHITE);
+    painter.text(pip_rect.center(), egui::Align2::CENTER_CENTER, "📌 PiP", egui::FontId::monospace(9.5), pip_fg);
 }

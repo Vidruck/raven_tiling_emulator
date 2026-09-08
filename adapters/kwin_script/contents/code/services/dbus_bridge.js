@@ -392,8 +392,18 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              if (w.maximizeMode !== 0 || w.fullScreen) {
+              if (w.fullScreen) {
                 break;
+              }
+
+              // Si la ventana está maximizada por KWin, desmaximizarla de inmediato
+              // para permitir que adopte la geometría calculada por el motor de mosaico
+              if (w.maximizeMode !== 0) {
+                try {
+                  w.setMaximize(false, false);
+                } catch (errMax) {
+                  Logger.debug("applyCommands", "Error forzando desmaximización: " + errMax);
+                }
               }
 
               w.__raven_mutating = true;

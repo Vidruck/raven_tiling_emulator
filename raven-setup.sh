@@ -387,7 +387,10 @@ do_rebuild_kwin() {
     if [ -f "$SOURCE_DIR/build_kwin_bundle.sh" ]; then
         bash "$SOURCE_DIR/build_kwin_bundle.sh"
         log_info "Actualizando paquete de KWin..."
-        kpackagetool6 --type=KWin/Script -u "$SOURCE_DIR/adapters/kwin_script/" >/dev/null 2>&1 || true
+        kpackagetool6 --type=KWin/Script -u "$SOURCE_DIR/adapters/kwin_script/" >/dev/null 2>&1 || \
+        kpackagetool6 --type=KWin/Script -i "$SOURCE_DIR/adapters/kwin_script/" >/dev/null 2>&1 || true
+        # Notificar a KWin para recargar la configuración de scripts si está en ejecución
+        qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
         log_success "Script de KWin actualizado en Plasma 6"
     else
         log_error "No se encontró build_kwin_bundle.sh"

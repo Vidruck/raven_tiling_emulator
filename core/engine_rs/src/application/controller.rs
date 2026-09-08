@@ -469,7 +469,7 @@ impl RavenController {
         action: String,
         _payload: i32,
         active_window_id: Option<String>,
-        topology: &crate::infrastructure::dbus::KWinTopology,
+        topology: &crate::domain::geometry::Topology,
     ) -> Result<(bool, Vec<RavenAction>), RavenError> {
         self.active_window_id = active_window_id.clone();
         
@@ -492,6 +492,7 @@ impl RavenController {
 
                 if let Some(wid) = target_wid {
                     self.flap_registry.remove(&wid);
+                    self.last_known_layout.remove(&wid);
                     if self.engine.dynamic_floating_windows.contains(&wid) {
                         // Caso A: La ventana ya está en Quick Peek -> Devolverla al layout de mosaico (Tiling)
                         self.engine.dynamic_floating_windows.remove(&wid);
