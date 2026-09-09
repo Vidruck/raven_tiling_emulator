@@ -324,16 +324,19 @@ function isManageable(w) {
     if (!w || w.deleted || !w.managed) {
       return false;
     }
+    // Blindaje de ventanas hijas, menús desplegables (combobox/submenús), tooltips y popups
     if (
       w.popupWindow ||
       w.tooltip ||
       w.onScreenDisplay ||
       w.notification ||
-      w.specialWindow
+      w.specialWindow ||
+      w.splash ||
+      w.transientFor != null
     ) {
       return false;
     }
-    if (w.desktopWindow || w.dock || w.splash || w.skipTaskbar || w.skipPager) {
+    if (w.desktopWindow || w.dock || w.skipTaskbar || w.skipPager) {
       return false;
     }
 
@@ -344,6 +347,16 @@ function isManageable(w) {
       return false;
     }
     if (!w.normalWindow && !w.dialog && !w.utility) {
+      return false;
+    }
+
+    // Diálogos modales o auxiliares con ventana padre nunca son gestionados como mosaico
+    if (w.transient || (w.dialog && w.transientFor != null)) {
+      return false;
+    }
+
+    // Ventanas sin geometría válida
+    if (w.frameGeometry && (w.frameGeometry.width <= 0 || w.frameGeometry.height <= 0)) {
       return false;
     }
 
@@ -376,7 +389,7 @@ function isFloating(w) {
     if (w.__raven_dynamic_float) return true;
 
     // 1. Tipos de ventana nativos de Wayland / X11 auxiliares o transitorios
-    if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) return true;
+    if (w.dialog || w.utility || w.specialWindow || w.modal || w.transient || w.transientFor != null) return true;
 
     // 2. Fullscreen nativo (YouTube, juegos, etc.) NO es flotante:
     // se envía como fs=true al motor Rust que le asigna pantalla completa.
@@ -954,6 +967,12 @@ function applyCommands(commandsJson) {
                 break;
               }
 
+              // Si la ventana tiene ventanas hijas transitorias o popups activos (ej. menús desplegables),
+              // NO moverla bajo ninguna circunstancia para evitar que Wayland o Plasma cierren el menú emergente.
+              if (w.transientChildren && w.transientChildren.length > 0) {
+                break;
+              }
+
               // Si la ventana está maximizada por el usuario, respetar su estado y no forzar geometría
               if (w.maximizeMode !== 0 && !w.__raven_strict_birth) {
                 break;
@@ -969,7 +988,6 @@ function applyCommands(commandsJson) {
                 }
               }
 
-              w.__raven_mutating = true;
               const targetGeom = {
                 x: Math.round(cmd.x),
                 y: Math.round(cmd.y),
@@ -977,6 +995,19 @@ function applyCommands(commandsJson) {
                 height: Math.round(cmd.height),
               };
 
+              // Blindaje anti-redundancia: si la geometría actual ya coincide, no asignar para no disparar eventos innecesarios
+              const curFg = w.frameGeometry;
+              if (
+                curFg &&
+                Math.round(curFg.x) === targetGeom.x &&
+                Math.round(curFg.y) === targetGeom.y &&
+                Math.round(curFg.width) === targetGeom.width &&
+                Math.round(curFg.height) === targetGeom.height
+              ) {
+                break;
+              }
+
+              w.__raven_mutating = true;
               w.frameGeometry = targetGeom;
 
               (function (capturedWindow) {
@@ -988,7 +1019,24 @@ function applyCommands(commandsJson) {
               })(w);
             } catch (e) { }
           } else if (cmd.action === "focus") {
-            workspace.activeWindow = w;
+            try {
+              const currentActive = workspace.activeWindow;
+              // Si la ventana ya está activa, no reasignar
+              if (currentActive === w) {
+                break;
+              }
+              // Blindaje de popups/menús desplegables: Si la ventana activa actual es una ventana hija
+              // transitoria o popup de esta ventana (o de cualquier otra), NO robarle el foco.
+              if (
+                currentActive &&
+                (currentActive.transientFor === w ||
+                  currentActive.popupWindow ||
+                  !isManageable(currentActive))
+              ) {
+                break;
+              }
+              workspace.activeWindow = w;
+            } catch (eFocus) { }
           } else if (cmd.action === "request_feedback") {
             if (w.__raven_strict_birth) {
               w.__raven_strict_birth = false;
@@ -1187,6 +1235,12 @@ function bindWindow(w) {
         return;
       }
       if (w.__raven_mutating || w.__raven_ui_migrating) {
+        return;
+      }
+
+      // Si la ventana tiene ventanas hijas transitorias activas (popups, menús emergentes),
+      // no emitir delta sync para no alterar el layout ni provocar reclamos de geometría
+      if (w.transientChildren && w.transientChildren.length > 0) {
         return;
       }
 
@@ -1460,25 +1514,29 @@ function initDBusBridge() {
     requestStateSync();
   });
 
-  workspace.activeWindowChanged.connect(function () {
-    var aw = workspace.activeWindow;
-    if (aw && !isManageable(aw)) {
-      // Ignorar paneles, diálogos de escritorio y plasmoides para no perder el foco previo de apps
-      return;
-    }
-    var awId = aw ? getSafeWindowId(aw) : "";
-    if (awId) {
-      try {
-        callDBus(
-          "org.kde.raven.Daemon",
-          "/Events",
-          "org.kde.raven.Events",
-          "windowActivated",
-          awId
-        );
-      } catch (e) { }
-    }
-  });
+  if (workspace.windowActivated) {
+    workspace.windowActivated.connect(function (aw) {
+      if (!aw || aw.deleted) {
+        return;
+      }
+      // Blindaje de popups y menús desplegables: ignorar paneles, subventanas hijas y popups
+      if (!isManageable(aw) || aw.transientFor != null || aw.popupWindow) {
+        return;
+      }
+      var awId = getSafeWindowId(aw);
+      if (awId) {
+        try {
+          callDBus(
+            "org.kde.raven.Daemon",
+            "/Events",
+            "org.kde.raven.Events",
+            "windowActivated",
+            awId
+          );
+        } catch (e) { }
+      }
+    });
+  }
 
   workspace.currentDesktopChanged.connect(function () {
     requestStateSync();
@@ -1549,5 +1607,5 @@ try {
   initDBusBridge();
   Logger.info("Main", "Puente inicializado exitosamente");
 } catch (e) {
-  Logger.error("Main", "Error crítico al inicializar el puente", e);
+  Logger.error("Main", "Error crítico al inicializar el puente: " + (e.stack || e.message || e), e);
 }

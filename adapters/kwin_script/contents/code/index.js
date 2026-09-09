@@ -53,25 +53,29 @@ function initDBusBridge() {
     requestStateSync();
   });
 
-  workspace.activeWindowChanged.connect(function () {
-    var aw = workspace.activeWindow;
-    if (aw && !isManageable(aw)) {
-      // Ignorar paneles, diálogos de escritorio y plasmoides para no perder el foco previo de apps
-      return;
-    }
-    var awId = aw ? getSafeWindowId(aw) : "";
-    if (awId) {
-      try {
-        callDBus(
-          "org.kde.raven.Daemon",
-          "/Events",
-          "org.kde.raven.Events",
-          "windowActivated",
-          awId
-        );
-      } catch (e) { }
-    }
-  });
+  if (workspace.windowActivated) {
+    workspace.windowActivated.connect(function (aw) {
+      if (!aw || aw.deleted) {
+        return;
+      }
+      // Blindaje de popups y menús desplegables: ignorar paneles, subventanas hijas y popups
+      if (!isManageable(aw) || aw.transientFor != null || aw.popupWindow) {
+        return;
+      }
+      var awId = getSafeWindowId(aw);
+      if (awId) {
+        try {
+          callDBus(
+            "org.kde.raven.Daemon",
+            "/Events",
+            "org.kde.raven.Events",
+            "windowActivated",
+            awId
+          );
+        } catch (e) { }
+      }
+    });
+  }
 
   workspace.currentDesktopChanged.connect(function () {
     requestStateSync();

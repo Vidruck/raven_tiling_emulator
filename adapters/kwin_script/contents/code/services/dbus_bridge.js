@@ -396,6 +396,12 @@ function applyCommands(commandsJson) {
                 break;
               }
 
+              // Si la ventana tiene ventanas hijas transitorias o popups activos (ej. menús desplegables),
+              // NO moverla bajo ninguna circunstancia para evitar que Wayland o Plasma cierren el menú emergente.
+              if (w.transientChildren && w.transientChildren.length > 0) {
+                break;
+              }
+
               // Si la ventana está maximizada por el usuario, respetar su estado y no forzar geometría
               if (w.maximizeMode !== 0 && !w.__raven_strict_birth) {
                 break;
@@ -411,7 +417,6 @@ function applyCommands(commandsJson) {
                 }
               }
 
-              w.__raven_mutating = true;
               const targetGeom = {
                 x: Math.round(cmd.x),
                 y: Math.round(cmd.y),
@@ -419,6 +424,19 @@ function applyCommands(commandsJson) {
                 height: Math.round(cmd.height),
               };
 
+              // Blindaje anti-redundancia: si la geometría actual ya coincide, no asignar para no disparar eventos innecesarios
+              const curFg = w.frameGeometry;
+              if (
+                curFg &&
+                Math.round(curFg.x) === targetGeom.x &&
+                Math.round(curFg.y) === targetGeom.y &&
+                Math.round(curFg.width) === targetGeom.width &&
+                Math.round(curFg.height) === targetGeom.height
+              ) {
+                break;
+              }
+
+              w.__raven_mutating = true;
               w.frameGeometry = targetGeom;
 
               (function (capturedWindow) {
@@ -430,7 +448,24 @@ function applyCommands(commandsJson) {
               })(w);
             } catch (e) { }
           } else if (cmd.action === "focus") {
-            workspace.activeWindow = w;
+            try {
+              const currentActive = workspace.activeWindow;
+              // Si la ventana ya está activa, no reasignar
+              if (currentActive === w) {
+                break;
+              }
+              // Blindaje de popups/menús desplegables: Si la ventana activa actual es una ventana hija
+              // transitoria o popup de esta ventana (o de cualquier otra), NO robarle el foco.
+              if (
+                currentActive &&
+                (currentActive.transientFor === w ||
+                  currentActive.popupWindow ||
+                  !isManageable(currentActive))
+              ) {
+                break;
+              }
+              workspace.activeWindow = w;
+            } catch (eFocus) { }
           } else if (cmd.action === "request_feedback") {
             if (w.__raven_strict_birth) {
               w.__raven_strict_birth = false;
@@ -629,6 +664,12 @@ function bindWindow(w) {
         return;
       }
       if (w.__raven_mutating || w.__raven_ui_migrating) {
+        return;
+      }
+
+      // Si la ventana tiene ventanas hijas transitorias activas (popups, menús emergentes),
+      // no emitir delta sync para no alterar el layout ni provocar reclamos de geometría
+      if (w.transientChildren && w.transientChildren.length > 0) {
         return;
       }
 

@@ -122,16 +122,19 @@ function isManageable(w) {
     if (!w || w.deleted || !w.managed) {
       return false;
     }
+    // Blindaje de ventanas hijas, menús desplegables (combobox/submenús), tooltips y popups
     if (
       w.popupWindow ||
       w.tooltip ||
       w.onScreenDisplay ||
       w.notification ||
-      w.specialWindow
+      w.specialWindow ||
+      w.splash ||
+      w.transientFor != null
     ) {
       return false;
     }
-    if (w.desktopWindow || w.dock || w.splash || w.skipTaskbar || w.skipPager) {
+    if (w.desktopWindow || w.dock || w.skipTaskbar || w.skipPager) {
       return false;
     }
 
@@ -142,6 +145,16 @@ function isManageable(w) {
       return false;
     }
     if (!w.normalWindow && !w.dialog && !w.utility) {
+      return false;
+    }
+
+    // Diálogos modales o auxiliares con ventana padre nunca son gestionados como mosaico
+    if (w.transient || (w.dialog && w.transientFor != null)) {
+      return false;
+    }
+
+    // Ventanas sin geometría válida
+    if (w.frameGeometry && (w.frameGeometry.width <= 0 || w.frameGeometry.height <= 0)) {
       return false;
     }
 
@@ -174,7 +187,7 @@ function isFloating(w) {
     if (w.__raven_dynamic_float) return true;
 
     // 1. Tipos de ventana nativos de Wayland / X11 auxiliares o transitorios
-    if (w.dialog || w.utility || w.specialWindow || w.modal || w.transientFor) return true;
+    if (w.dialog || w.utility || w.specialWindow || w.modal || w.transient || w.transientFor != null) return true;
 
     // 2. Fullscreen nativo (YouTube, juegos, etc.) NO es flotante:
     // se envía como fs=true al motor Rust que le asigna pantalla completa.
