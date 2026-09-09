@@ -382,9 +382,13 @@ function isFloating(w) {
     // se envía como fs=true al motor Rust que le asigna pantalla completa.
     if (w.fullScreen) return false;
 
-    // Nota: w.maximizeMode !== 0 NO debe clasificar la ventana como flotante,
-    // pues muchas aplicaciones abren restauradas en estado maximizado por KWin
-    // y deben someterse al mosaico normal desmaximizándose automáticamente.
+    // 2.1 Si la ventana ha sido maximizada explícitamente por el usuario, debe flotar
+    // libremente sobre el mosaico sin que el motor fuerce su desmaximización ni pelee por sus dimensiones.
+    // Solo permitimos desmaximizar si la ventana está en nacimiento estricto (__raven_strict_birth)
+    // producto de una restauración de sesión de KWin.
+    if (w.maximizeMode !== 0 && !w.__raven_strict_birth) {
+      return true;
+    }
 
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
@@ -950,13 +954,18 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              // Si la ventana está maximizada por KWin, desmaximizarla de inmediato
-              // para permitir que adopte la geometría calculada por el motor de mosaico
-              if (w.maximizeMode !== 0) {
+              // Si la ventana está maximizada por el usuario, respetar su estado y no forzar geometría
+              if (w.maximizeMode !== 0 && !w.__raven_strict_birth) {
+                break;
+              }
+
+              // Si es una ventana naciente que KWin abrió maximizada por sesión previa,
+              // la desmaximizamos suavemente para incorporarla al mosaico
+              if (w.maximizeMode !== 0 && w.__raven_strict_birth) {
                 try {
                   w.setMaximize(false, false);
                 } catch (errMax) {
-                  Logger.debug("applyCommands", "Error forzando desmaximización: " + errMax);
+                  Logger.debug("applyCommands", "Error desmaximizando ventana naciente: " + errMax);
                 }
               }
 

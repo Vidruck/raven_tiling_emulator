@@ -702,12 +702,20 @@ impl RavenController {
                 }
             }
             "focus_next" | "focus_prev" => {
-                let active_windows: Vec<_> = windows
+                let mut active_windows: Vec<_> = windows
                     .into_iter()
                     .filter(|w| !w.is_floating && !w.is_minimized && !w.is_pip)
                     .collect();
 
                 if !active_windows.is_empty() {
+                    active_windows.sort_by_key(|w| {
+                        self.engine
+                            .window_history
+                            .iter()
+                            .position(|id| id == &w.window_id)
+                            .unwrap_or(usize::MAX)
+                    });
+
                     let current_idx = active_windows
                         .iter()
                         .position(|w| Some(&w.window_id) == active_window_id.as_ref())
@@ -740,10 +748,23 @@ impl RavenController {
                     })
                 });
 
+                let fallback_map: HashMap<String, Rect>;
+                let effective_layout = if self.last_known_layout.contains_key(effective_active_id.as_deref().unwrap_or("")) && self.last_known_layout.len() > 1 {
+                    &self.last_known_layout
+                } else {
+                    // Fallback resiliente: usar geometrías directas de windows si last_known_layout aún no ha sido confirmado por KWin
+                    fallback_map = windows.iter()
+                        .filter(|w| !w.is_floating && !w.is_minimized)
+                        .map(|w| (w.window_id.clone(), w.geometry))
+                        .collect();
+                    &fallback_map
+                };
+
+
                 if let Some(ref act_id) = effective_active_id {
                     if let Some(target_id) = crate::domain::layout::topology::find_directional_focus(
                         act_id,
-                        &self.last_known_layout,
+                        effective_layout,
                         dx,
                         dy,
                     ) {

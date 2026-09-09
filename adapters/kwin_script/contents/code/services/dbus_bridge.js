@@ -396,13 +396,18 @@ function applyCommands(commandsJson) {
                 break;
               }
 
-              // Si la ventana está maximizada por KWin, desmaximizarla de inmediato
-              // para permitir que adopte la geometría calculada por el motor de mosaico
-              if (w.maximizeMode !== 0) {
+              // Si la ventana está maximizada por el usuario, respetar su estado y no forzar geometría
+              if (w.maximizeMode !== 0 && !w.__raven_strict_birth) {
+                break;
+              }
+
+              // Si es una ventana naciente que KWin abrió maximizada por sesión previa,
+              // la desmaximizamos suavemente para incorporarla al mosaico
+              if (w.maximizeMode !== 0 && w.__raven_strict_birth) {
                 try {
                   w.setMaximize(false, false);
                 } catch (errMax) {
-                  Logger.debug("applyCommands", "Error forzando desmaximización: " + errMax);
+                  Logger.debug("applyCommands", "Error desmaximizando ventana naciente: " + errMax);
                 }
               }
 

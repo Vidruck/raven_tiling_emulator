@@ -40,7 +40,7 @@ QtObject {
     readonly property color cardBackground: RavenPlugin.SystemStats.cardBackground ///< Color de fondo para tarjetas e islas.
     readonly property color buttonBackground: RavenPlugin.SystemStats.buttonBgColor ///< Color de botones nativo de KDE.
     readonly property color buttonTextColor: RavenPlugin.SystemStats.buttonTextColor ///< Color de texto de botones nativo.
-    readonly property color cardBorder: isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.08) ///< Borde sutil de tarjeta.
+    readonly property color cardBorder: cardBackground ///< Borde del mismo color que el cuerpo para integrarse sin contraste visible.
     readonly property color hoverBackground: isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07) ///< Fondo al pasar el cursor (Hover).
     readonly property color surfaceElevated: isDark ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0, 0, 0, 0.04) ///< Superficie para sub-islas elevadas.
 

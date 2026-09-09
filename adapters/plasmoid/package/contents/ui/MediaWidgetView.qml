@@ -22,7 +22,7 @@ Rectangle {
     clip: true
     color: RavenPlugin.RavenTheme.cardBackground
     border.width: 1
-    border.color: RavenPlugin.RavenTheme.cardBorder
+    border.color: RavenPlugin.RavenTheme.cardBackground
 
     property alias active: media.active
 
@@ -147,18 +147,22 @@ Rectangle {
                 Rectangle {
                     visible: media.hasPlayer && media.playerName.length > 0
                     radius: 4
-                    height: 15
-                    width: playerBadgeText.implicitWidth + 8
+                    height: 18
                     Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: Math.min(Math.max(playerBadgeText.implicitWidth + 14, 60), 140)
+                    Layout.maximumWidth: 140
                     color: Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.2)
 
                     Text {
                         id: playerBadgeText
                         anchors.centerIn: parent
+                        width: Math.min(implicitWidth, parent.width - 8)
                         text: media.playerName
                         color: RavenPlugin.RavenTheme.highlightColor
-                        font.pixelSize: 8
+                        font.pixelSize: 9
                         font.bold: true
+                        elide: Text.ElideRight
+                        horizontalAlignment: Text.AlignHCenter
                     }
                 }
 

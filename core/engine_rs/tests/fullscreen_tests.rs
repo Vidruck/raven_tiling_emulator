@@ -143,3 +143,57 @@ async fn test_simultaneous_fullscreen_across_multiple_monitors() {
         }
     }
 }
+
+#[tokio::test]
+async fn test_maximized_window_does_not_fight_engine() {
+    let config = RavenConfig::default();
+    let engine = TilingEngine::new(config);
+    let mut controller = RavenController::new(engine);
+
+    let mut workspaces = HashMap::new();
+    let screen = Rect {
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+    };
+    workspaces.insert("ws1||HDMI-A-1".to_string(), screen);
+
+    // 1. Estado inicial con 2 ventanas en mosaico
+    let win1 = create_test_window("win-1", "ws1||HDMI-A-1", "HDMI-A-1", false);
+    let win2 = create_test_window("win-2", "ws1||HDMI-A-1", "HDMI-A-1", false);
+
+    let actions = controller
+        .handle_state_change(workspaces.clone(), vec![win1.clone(), win2.clone()])
+        .expect("Sincronización inicial exitosa");
+    assert_eq!(actions.len(), 2);
+
+    // 2. El usuario maximiza win-1 en KWin: el puente reporta is_floating = true
+    let win1_maximized = create_test_window("win-1", "ws1||HDMI-A-1", "HDMI-A-1", true);
+
+    let max_actions = controller
+        .handle_state_change(workspaces.clone(), vec![win1_maximized.clone(), win2.clone()])
+        .expect("Sincronización con ventana maximizada exitosa");
+
+    // win-1 NO debe recibir comando MoveWindow del motor; win-2 se expande para ocupar el espacio vacante
+    assert!(
+        !max_actions.iter().any(|cmd| match cmd {
+            raven_core::action::RavenAction::MoveWindow { window_id, .. } => window_id == "win-1",
+            _ => false,
+        }),
+        "La ventana maximizada no debe recibir comandos MoveWindow"
+    );
+
+    // 3. El usuario desmaximiza (restaura) win-1: el puente reporta is_floating = false
+    let restored_actions = controller
+        .handle_state_change(workspaces, vec![win1, win2])
+        .expect("Restauración tras desmaximizar");
+
+    // El mosaico reincorpora a win-1 suavemente
+    assert_eq!(restored_actions.len(), 2);
+    assert!(restored_actions.iter().any(|cmd| match cmd {
+        raven_core::action::RavenAction::MoveWindow { window_id, .. } => window_id == "win-1",
+        _ => false,
+    }));
+}
+

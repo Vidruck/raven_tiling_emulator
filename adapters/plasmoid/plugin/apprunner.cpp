@@ -79,6 +79,7 @@ QVariant AppListModel::data(const QModelIndex &index, int role) const
     case ExecRole: return entry.exec;
     case CategoriesRole: return entry.categories;
     case DesktopPathRole: return entry.desktopPath;
+    case ActionsRole: return entry.actions;
     default: return QVariant();
     }
 }
@@ -94,6 +95,7 @@ QHash<int, QByteArray> AppListModel::roleNames() const
     roles[ExecRole] = "execCmd";
     roles[CategoriesRole] = "categories";
     roles[DesktopPathRole] = "desktopPath";
+    roles[ActionsRole] = "actions";
     return roles;
 }
 
@@ -156,10 +158,22 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
 
     QTextStream in(&file);
     bool inDesktopEntry = false;
+    QString currentActionId;
+    bool inActionEntry = false;
     bool noDisplay = false;
     bool hidden = false;
     QString name, genericName, keywords, comment, icon, exec, categories, type = QStringLiteral("Application");
     QString tryExec, onlyShowIn, notShowIn;
+    QString actionsListStr;
+
+    struct RawAction {
+        QString id;
+        QString name;
+        QString exec;
+        QString icon;
+        bool hasLocName = false;
+    };
+    QMap<QString, RawAction> actionEntries;
 
     QString sysLocale = QLocale::system().name();
     QString langCode = sysLocale.left(2);
@@ -182,11 +196,26 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
         if (line.isEmpty() || line.startsWith(QLatin1Char('#'))) continue;
 
         if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
-            inDesktopEntry = (line == QStringLiteral("[Desktop Entry]"));
+            if (line == QStringLiteral("[Desktop Entry]")) {
+                inDesktopEntry = true;
+                inActionEntry = false;
+                currentActionId.clear();
+            } else if (line.startsWith(QStringLiteral("[Desktop Action ")) && line.endsWith(QLatin1Char(']'))) {
+                inDesktopEntry = false;
+                inActionEntry = true;
+                currentActionId = line.mid(16, line.length() - 17).trimmed();
+                if (!actionEntries.contains(currentActionId)) {
+                    RawAction act;
+                    act.id = currentActionId;
+                    actionEntries.insert(currentActionId, act);
+                }
+            } else {
+                inDesktopEntry = false;
+                inActionEntry = false;
+                currentActionId.clear();
+            }
             continue;
         }
-
-        if (!inDesktopEntry) continue;
 
         int eqPos = line.indexOf(QLatin1Char('='));
         if (eqPos <= 0) continue;
@@ -194,53 +223,69 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
         const QString key = line.left(eqPos).trimmed();
         const QString value = line.mid(eqPos + 1).trimmed();
 
-        // Name
-        if (key == nameLoc1 || key == nameLoc2) {
-            name = value;
-            hasLocName = true;
-        } else if (key == QStringLiteral("Name") && !hasLocName) {
-            name = value;
-        }
-        // GenericName
-        else if (key == genLoc1 || key == genLoc2) {
-            genericName = value;
-            hasLocGen = true;
-        } else if (key == QStringLiteral("GenericName") && !hasLocGen) {
-            genericName = value;
-        }
-        // Keywords
-        else if (key == keyLoc1 || key == keyLoc2) {
-            keywords = value;
-            hasLocKey = true;
-        } else if (key == QStringLiteral("Keywords") && !hasLocKey) {
-            keywords = value;
-        }
-        // Comment
-        else if (key == comLoc1 || key == comLoc2) {
-            comment = value;
-            hasLocCom = true;
-        } else if (key == QStringLiteral("Comment") && !hasLocCom) {
-            comment = value;
-        }
-        // General attributes
-        else if (key == QStringLiteral("Icon")) {
-            icon = value;
-        } else if (key == QStringLiteral("Exec")) {
-            exec = value;
-        } else if (key == QStringLiteral("Categories")) {
-            categories = value;
-        } else if (key == QStringLiteral("Type")) {
-            type = value;
-        } else if (key == QStringLiteral("TryExec")) {
-            tryExec = value;
-        } else if (key == QStringLiteral("OnlyShowIn")) {
-            onlyShowIn = value;
-        } else if (key == QStringLiteral("NotShowIn")) {
-            notShowIn = value;
-        } else if (key == QStringLiteral("NoDisplay")) {
-            noDisplay = (value.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0);
-        } else if (key == QStringLiteral("Hidden")) {
-            hidden = (value.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0);
+        if (inDesktopEntry) {
+            // Name
+            if (key == nameLoc1 || key == nameLoc2) {
+                name = value;
+                hasLocName = true;
+            } else if (key == QStringLiteral("Name") && !hasLocName) {
+                name = value;
+            }
+            // GenericName
+            else if (key == genLoc1 || key == genLoc2) {
+                genericName = value;
+                hasLocGen = true;
+            } else if (key == QStringLiteral("GenericName") && !hasLocGen) {
+                genericName = value;
+            }
+            // Keywords
+            else if (key == keyLoc1 || key == keyLoc2) {
+                keywords = value;
+                hasLocKey = true;
+            } else if (key == QStringLiteral("Keywords") && !hasLocKey) {
+                keywords = value;
+            }
+            // Comment
+            else if (key == comLoc1 || key == comLoc2) {
+                comment = value;
+                hasLocCom = true;
+            } else if (key == QStringLiteral("Comment") && !hasLocCom) {
+                comment = value;
+            }
+            // General attributes
+            else if (key == QStringLiteral("Icon")) {
+                icon = value;
+            } else if (key == QStringLiteral("Exec")) {
+                exec = value;
+            } else if (key == QStringLiteral("Categories")) {
+                categories = value;
+            } else if (key == QStringLiteral("Type")) {
+                type = value;
+            } else if (key == QStringLiteral("TryExec")) {
+                tryExec = value;
+            } else if (key == QStringLiteral("OnlyShowIn")) {
+                onlyShowIn = value;
+            } else if (key == QStringLiteral("NotShowIn")) {
+                notShowIn = value;
+            } else if (key == QStringLiteral("Actions")) {
+                actionsListStr = value;
+            } else if (key == QStringLiteral("NoDisplay")) {
+                noDisplay = (value.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0);
+            } else if (key == QStringLiteral("Hidden")) {
+                hidden = (value.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0);
+            }
+        } else if (inActionEntry && !currentActionId.isEmpty()) {
+            RawAction &act = actionEntries[currentActionId];
+            if (key == nameLoc1 || key == nameLoc2) {
+                act.name = value;
+                act.hasLocName = true;
+            } else if (key == QStringLiteral("Name") && !act.hasLocName) {
+                act.name = value;
+            } else if (key == QStringLiteral("Exec")) {
+                act.exec = value;
+            } else if (key == QStringLiteral("Icon")) {
+                act.icon = value;
+            }
         }
     }
 
@@ -301,6 +346,44 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
     entry.exec = exec.trimmed();
     entry.categories = categories;
     entry.desktopPath = filePath;
+
+    // Build Desktop Actions in defined order or order parsed
+    QVariantList parsedActions;
+    QStringList actionOrder = actionsListStr.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    if (!actionOrder.isEmpty()) {
+        for (const QString &actId : actionOrder) {
+            const QString cleanId = actId.trimmed();
+            if (actionEntries.contains(cleanId)) {
+                const RawAction &ra = actionEntries.value(cleanId);
+                if (!ra.exec.isEmpty()) {
+                    QString cleanActionExec = ra.exec;
+                    cleanActionExec.remove(QRegularExpression(QStringLiteral("%[a-zA-Z]")));
+                    QVariantMap actMap;
+                    actMap.insert(QStringLiteral("id"), cleanId);
+                    actMap.insert(QStringLiteral("name"), ra.name.isEmpty() ? cleanId : ra.name);
+                    actMap.insert(QStringLiteral("exec"), cleanActionExec.trimmed());
+                    actMap.insert(QStringLiteral("icon"), ra.icon.isEmpty() ? entry.icon : ra.icon);
+                    parsedActions.append(actMap);
+                }
+            }
+        }
+    } else {
+        // If Actions= wasn't specified but [Desktop Action ...] blocks exist
+        for (auto it = actionEntries.constBegin(); it != actionEntries.constEnd(); ++it) {
+            const RawAction &ra = it.value();
+            if (!ra.exec.isEmpty()) {
+                QString cleanActionExec = ra.exec;
+                cleanActionExec.remove(QRegularExpression(QStringLiteral("%[a-zA-Z]")));
+                QVariantMap actMap;
+                actMap.insert(QStringLiteral("id"), ra.id);
+                actMap.insert(QStringLiteral("name"), ra.name.isEmpty() ? ra.id : ra.name);
+                actMap.insert(QStringLiteral("exec"), cleanActionExec.trimmed());
+                actMap.insert(QStringLiteral("icon"), ra.icon.isEmpty() ? entry.icon : ra.icon);
+                parsedActions.append(actMap);
+            }
+        }
+    }
+    entry.actions = parsedActions;
 
     m_apps.append(entry);
 }
@@ -377,6 +460,13 @@ void AppFilterModel::launchIndex(int idx)
     QString execCmd = data(modelIdx, AppListModel::ExecRole).toString();
     QString desktopPath = data(modelIdx, AppListModel::DesktopPathRole).toString();
     launchApp(execCmd, desktopPath);
+}
+
+QVariantList AppFilterModel::getAppActions(int idx) const
+{
+    if (idx < 0 || idx >= rowCount()) return QVariantList();
+    QModelIndex modelIdx = index(idx, 0);
+    return data(modelIdx, AppListModel::ActionsRole).toList();
 }
 
 bool AppFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const

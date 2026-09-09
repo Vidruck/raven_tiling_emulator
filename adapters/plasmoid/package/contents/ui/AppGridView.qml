@@ -189,10 +189,16 @@ Item {
                             anchors.fill: parent
                             anchors.margins: 3
                             hoverEnabled: true
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
                             onEntered: root.selectedIndex = index
-                            onClicked: {
-                                appRunner.launchApp(model.execCmd, model.desktopPath)
-                                root.appLaunched(model.desktopPath, model.execCmd)
+                            onClicked: (mouse) => {
+                                if (mouse.button === Qt.RightButton) {
+                                    root.selectedIndex = index;
+                                    contextMenu.openMenuForApp(model.appName, model.iconName, model.execCmd, model.desktopPath, model.actions, ma);
+                                } else {
+                                    appRunner.launchApp(model.execCmd, model.desktopPath);
+                                    root.appLaunched(model.desktopPath, model.execCmd);
+                                }
                             }
 
                             Rectangle {
@@ -261,6 +267,57 @@ Item {
             scrollView.contentItem.contentY = itemY;
         } else if (itemY + 82 > scrollView.contentItem.contentY + scrollView.height) {
             scrollView.contentItem.contentY = itemY + 82 - scrollView.height;
+        }
+    }
+
+    // ── MENÚ CONTEXTUAL DE ACCIONES DE LA APLICACIÓN (CLICK DERECHO) ──
+    Menu {
+        id: contextMenu
+        title: i18n("Opciones de la aplicación")
+
+        property string targetAppName: ""
+        property string targetIconName: ""
+        property string targetExecCmd: ""
+        property string targetDesktopPath: ""
+        property var currentActionsList: []
+
+        function openMenuForApp(appName, iconName, execCmd, desktopPath, actionsList, visualParent) {
+            targetAppName = appName;
+            targetIconName = iconName;
+            targetExecCmd = execCmd;
+            targetDesktopPath = desktopPath;
+            currentActionsList = (actionsList && actionsList.length > 0) ? actionsList : [];
+            popup(visualParent, visualParent.width / 2, visualParent.height / 2);
+        }
+
+        // Opción principal: Abrir aplicación
+        MenuItem {
+            text: i18n("Abrir")
+            icon.name: contextMenu.targetIconName.length > 0 ? contextMenu.targetIconName : "application-x-executable"
+            onTriggered: {
+                appRunner.launchApp(contextMenu.targetExecCmd, contextMenu.targetDesktopPath);
+                root.appLaunched(contextMenu.targetDesktopPath, contextMenu.targetExecCmd);
+            }
+        }
+
+        MenuSeparator {
+            visible: contextMenu.currentActionsList.length > 0
+        }
+
+        // Acciones específicas del archivo .desktop (Desktop Actions)
+        Instantiator {
+            model: contextMenu.currentActionsList
+            MenuItem {
+                text: modelData.name || modelData.id
+                icon.name: (modelData.icon && modelData.icon.length > 0) ? modelData.icon : contextMenu.targetIconName
+                onTriggered: {
+                    var actionExec = modelData.exec || contextMenu.targetExecCmd;
+                    appRunner.launchApp(actionExec, contextMenu.targetDesktopPath);
+                    root.appLaunched(contextMenu.targetDesktopPath, actionExec);
+                }
+            }
+            onObjectAdded: (idx, obj) => contextMenu.insertItem(idx + 2, obj)
+            onObjectRemoved: (idx, obj) => contextMenu.removeItem(obj)
         }
     }
 }

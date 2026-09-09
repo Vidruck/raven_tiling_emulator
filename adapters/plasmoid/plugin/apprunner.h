@@ -14,6 +14,8 @@
 #include <QVector>
 #include <QString>
 #include <QSet>
+#include <QVariantList>
+#include <QVariantMap>
 #include <qqmlintegration.h>
 
 /**
@@ -29,6 +31,7 @@ struct AppEntry {
     QString exec;         ///< Comando ejecutable con flags de argumentos depurados (Exec).
     QString categories;   ///< Categorías XDG (ej. 'Network;WebBrowser;').
     QString desktopPath;  ///< Ruta absoluta al archivo .desktop en el disco.
+    QVariantList actions; ///< Acciones de escritorio adicionales (Desktop Actions).
 };
 
 /**
@@ -58,7 +61,8 @@ public:
         IconRole,                   ///< Identificador del icono gráfico.
         ExecRole,                   ///< Comando shell a ejecutar.
         CategoriesRole,             ///< Lista de categorías XDG.
-        DesktopPathRole             ///< Ruta al archivo .desktop.
+        DesktopPathRole,            ///< Ruta al archivo .desktop.
+        ActionsRole                 ///< Lista de acciones Desktop Actions (QVariantList).
     };
 
     /**
@@ -149,6 +153,13 @@ public:
      */
     Q_INVOKABLE void launchIndex(int index);
     
+    /**
+     * @brief Obtiene la lista de acciones de escritorio (Desktop Actions) para una aplicación.
+     * @param index Fila seleccionada en el delegado QML.
+     * @return Lista de mapas con claves 'name', 'exec', 'icon'.
+     */
+    Q_INVOKABLE QVariantList getAppActions(int index) const;
+
     /** @brief Recarga la base de aplicaciones desde el disco. */
     Q_INVOKABLE void refresh();
 
