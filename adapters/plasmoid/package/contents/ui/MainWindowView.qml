@@ -262,9 +262,9 @@ Item {
                             Layout.fillWidth: true
                             spacing: 8
 
-                            // [ SUB-ISLA PANTALLA ]
+                            // [ SUB-ISLA PANTALLA (REDiseñada estilo Carrusel / Escritorios) ]
                             Rectangle {
-                                Layout.preferredWidth: 110
+                                Layout.preferredWidth: 124
                                 Layout.preferredHeight: 48
                                 radius: 8
                                 color: RavenPlugin.RavenTheme.surfaceElevated || Qt.rgba(1, 1, 1, 0.05)
@@ -277,7 +277,7 @@ Item {
                                     spacing: 1
 
                                     Text {
-                                        text: i18n("Pantalla (%1)", RavenPlugin.RavenController.monitorCount)
+                                        text: i18n("Monitores")
                                         color: RavenPlugin.RavenTheme.subTextColor
                                         font.pixelSize: 8
                                         font.bold: true
@@ -286,15 +286,16 @@ Item {
 
                                     RowLayout {
                                         Layout.alignment: Qt.AlignHCenter
-                                        spacing: 4
+                                        spacing: 3
 
+                                        // Monitor Anterior (Meta+Shift+N)
                                         Rectangle {
-                                            width: 36; height: 22; radius: 5
+                                            width: 26; height: 22; radius: 5
                                             color: monPrevMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
                                             Kirigami.Icon {
                                                 anchors.centerIn: parent
                                                 source: "go-previous"
-                                                implicitWidth: 11; implicitHeight: 11
+                                                implicitWidth: 10; implicitHeight: 10
                                                 color: monPrevMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
                                             }
                                             MouseArea {
@@ -305,13 +306,42 @@ Item {
                                             ToolTip.text: i18n("Mover ventana al monitor anterior (Meta+Shift+N)")
                                         }
 
+                                        // Badge Monitor Central / Estado Activo
                                         Rectangle {
-                                            width: 36; height: 22; radius: 5
+                                            width: 52; height: 22; radius: 5
+                                            color: Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.20)
+                                            border.width: 1
+                                            border.color: RavenPlugin.RavenTheme.highlightColor
+
+                                            RowLayout {
+                                                anchors.centerIn: parent
+                                                spacing: 3
+
+                                                Kirigami.Icon {
+                                                    source: "video-display"
+                                                    implicitWidth: 10; implicitHeight: 10
+                                                    color: RavenPlugin.RavenTheme.highlightColor
+                                                }
+
+                                                Text {
+                                                    text: RavenPlugin.RavenController.monitorCount > 1
+                                                          ? i18n("%1 Disp.", RavenPlugin.RavenController.monitorCount)
+                                                          : i18n("1 Disp.")
+                                                    color: RavenPlugin.RavenTheme.highlightColor
+                                                    font.pixelSize: 8
+                                                    font.bold: true
+                                                }
+                                            }
+                                        }
+
+                                        // Monitor Siguiente (Meta+Shift+M)
+                                        Rectangle {
+                                            width: 26; height: 22; radius: 5
                                             color: monNextMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
                                             Kirigami.Icon {
                                                 anchors.centerIn: parent
                                                 source: "go-next"
-                                                implicitWidth: 11; implicitHeight: 11
+                                                implicitWidth: 10; implicitHeight: 10
                                                 color: monNextMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
                                             }
                                             MouseArea {

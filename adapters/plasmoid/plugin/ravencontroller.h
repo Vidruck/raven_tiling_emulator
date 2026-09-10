@@ -186,6 +186,12 @@ Q_SIGNALS:
 
 private:
     /**
+     * @brief Invoca un atajo global registrado en KWin vía org.kde.kglobalaccel.
+     * @param shortcutName Nombre de la acción en KWin (ej. 'RavenMigrateMonitor').
+     */
+    void invokeKWinShortcut(const QString &shortcutName);
+
+    /**
      * @brief Despacha un comando de acción D-Bus sin parámetros y retransmite directivas en tiempo real.
      * @param action Nombre del método en la interfaz org.kde.raven.Events.
      */

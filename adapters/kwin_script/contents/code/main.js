@@ -819,24 +819,6 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
           }
 
           try {
-            if (out.geometry && win.frameGeometry) {
-              const geom = out.geometry;
-              const curW = win.frameGeometry.width || 800;
-              const curH = win.frameGeometry.height || 600;
-              const newX = geom.x + Math.max(0, Math.floor((geom.width - curW) / 2));
-              const newY = geom.y + Math.max(0, Math.floor((geom.height - curH) / 2));
-              win.frameGeometry = {
-                x: newX,
-                y: newY,
-                width: Math.min(curW, geom.width),
-                height: Math.min(curH, geom.height)
-              };
-            }
-          } catch (errGeom) {
-            Logger.debug("migrateWindow", "win.frameGeometry relocation fallback: " + errGeom);
-          }
-
-          try {
             win.output = out;
           } catch (errOut) {}
           break;
@@ -957,8 +939,7 @@ function applyCommands(commandsJson) {
             try {
               if (
                 w.interactiveMove ||
-                w.interactiveResize ||
-                w.__raven_ui_migrating
+                w.interactiveResize
               ) {
                 break;
               }
@@ -1015,7 +996,7 @@ function applyCommands(commandsJson) {
                   if (capturedWindow && !capturedWindow.deleted) {
                     capturedWindow.__raven_mutating = false;
                   }
-                }, 120);
+                }, 80);
               })(w);
             } catch (e) { }
           } else if (cmd.action === "focus") {
@@ -1058,7 +1039,7 @@ function applyCommands(commandsJson) {
                   cw.__raven_mutating = false;
                   requestStateSync();
                 }
-              }, 100);
+              }, 80);
             })(w);
           } else if (cmd.action === "unminimize") {
             w.__raven_mutating = true;
@@ -1069,7 +1050,7 @@ function applyCommands(commandsJson) {
                   cw.__raven_mutating = false;
                   requestStateSync();
                 }
-              }, 100);
+              }, 80);
             })(w);
           } else if (cmd.action === "migrate_to_output") {
             w.__raven_mutating = true;
@@ -1080,7 +1061,7 @@ function applyCommands(commandsJson) {
                   cw.__raven_mutating = false;
                   requestStateSync();
                 }
-              }, 150);
+              }, 40);
             })(w);
           } else if (cmd.action === "migrate_to_desktop") {
             w.__raven_mutating = true;
@@ -1091,7 +1072,7 @@ function applyCommands(commandsJson) {
                   cw.__raven_mutating = false;
                   requestStateSync();
                 }
-              }, 150);
+              }, 40);
             })(w);
           } else if (cmd.action === "saturation_warning") {
             Logger.warn("Saturation", "Pantalla cerca de saturación: " + cmd.active + "/" + cmd.cmax + " ventanas");
@@ -1186,7 +1167,7 @@ function bindWindow(w) {
             if (cw && !cw.deleted) {
               cw.__raven_ui_migrating = false;
             }
-          }, 250);
+          }, 80);
         })(w);
       }
       requestStateSync();
@@ -1203,7 +1184,7 @@ function bindWindow(w) {
             if (cw && !cw.deleted) {
               cw.__raven_ui_migrating = false;
             }
-          }, 250);
+          }, 80);
         })(w);
       }
       requestStateSync();
@@ -1607,5 +1588,5 @@ try {
   initDBusBridge();
   Logger.info("Main", "Puente inicializado exitosamente");
 } catch (e) {
-  Logger.error("Main", "Error crítico al inicializar el puente: " + (e.stack || e.message || e), e);
+  Logger.error("Main", "Error crítico al inicializar el puente", e);
 }

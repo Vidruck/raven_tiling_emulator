@@ -73,6 +73,18 @@ void RavenController::refreshState()
     }
 }
 
+void RavenController::invokeKWinShortcut(const QString &shortcutName)
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.kde.kglobalaccel"),
+        QStringLiteral("/component/kwin"),
+        QStringLiteral("org.kde.kglobalaccel.Component"),
+        QStringLiteral("invokeShortcut")
+    );
+    msg << shortcutName;
+    QDBusConnection::sessionBus().send(msg);
+}
+
 void RavenController::sendDbusAction(const QString &action)
 {
     if (m_dbusInterface && m_dbusInterface->isValid()) {
@@ -246,22 +258,22 @@ void RavenController::focusNext()
 
 void RavenController::migrateActiveToScreen()
 {
-    sendDbusAction(QStringLiteral("migrateActiveToScreen"));
+    invokeKWinShortcut(QStringLiteral("RavenMigrateMonitor"));
 }
 
 void RavenController::migrateActiveToPrevScreen()
 {
-    sendDbusAction(QStringLiteral("migrateActiveToPrevScreen"));
+    invokeKWinShortcut(QStringLiteral("RavenMigratePrevMonitor"));
 }
 
 void RavenController::migrateActiveToDesktop()
 {
-    sendDbusAction(QStringLiteral("migrateActiveToDesktop"));
+    invokeKWinShortcut(QStringLiteral("RavenMigrateDesktop"));
 }
 
 void RavenController::migrateActiveToPrevDesktop()
 {
-    sendDbusAction(QStringLiteral("migrateActiveToPrevDesktop"));
+    invokeKWinShortcut(QStringLiteral("RavenMigratePrevDesktop"));
 }
 
 void RavenController::openControlCenter()

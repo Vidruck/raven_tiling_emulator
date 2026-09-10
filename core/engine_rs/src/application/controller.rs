@@ -31,6 +31,8 @@ struct FlapTracker {
     is_penalized: bool,
     /// Última geometría rectangular (rect) conocida para comparar cambios reales.
     last_rect: Option<Rect>,
+    /// Último monitor/pantalla conocido para no tratar saltos inter-monitor como flap.
+    last_output: Option<String>,
     /// Último estado de minimización conocido (minimized).
     last_minimized: bool,
 }
@@ -174,8 +176,19 @@ impl RavenController {
                 toggle_count: 0,
                 is_penalized: false,
                 last_rect: None,
+                last_output: Some(win.output.clone()),
                 last_minimized: win.is_minimized,
             });
+
+        // Si la ventana cambió de monitor/pantalla, el salto de coordenadas es legítimo.
+        // Reiniciamos inmediatamente el tracker de flap para evitar falsos positivos.
+        if tracker.last_output.as_ref() != Some(&win.output) {
+            tracker.last_output = Some(win.output.clone());
+            tracker.last_rect = Some(win.geometry);
+            tracker.toggle_count = 0;
+            tracker.is_penalized = false;
+            return false;
+        }
 
         if win.is_minimized != tracker.last_minimized {
             tracker.last_minimized = win.is_minimized;
@@ -184,7 +197,7 @@ impl RavenController {
         }
 
         if tracker.is_penalized {
-            if now - tracker.last_toggle_time > 8000 {
+            if now - tracker.last_toggle_time > 1500 {
                 tracker.is_penalized = false;
                 tracker.toggle_count = 0;
                 warn!(
@@ -210,9 +223,9 @@ impl RavenController {
         tracker.last_rect = Some(win.geometry);
 
         if is_jumping {
-            if now - tracker.last_toggle_time < 300 {
+            if now - tracker.last_toggle_time < 200 {
                 tracker.toggle_count += 1;
-                if tracker.toggle_count >= 5 {
+                if tracker.toggle_count >= 8 {
                     tracker.is_penalized = true;
                     warn!(
                         "[Controller] Ventana {} penalizada por oscilación (flap detectado).",
@@ -804,6 +817,8 @@ impl RavenController {
                                         window_id: wid.clone(),
                                         target_desktop: target_desk.clone(),
                                     });
+                                    self.flap_registry.remove(wid);
+                                    self.last_known_layout.remove(wid);
                                     if let Some(target_w) = self.engine.current_windows.get_mut(wid) {
                                         target_w.desktops = vec![target_desk.clone()];
                                         target_w.workspace_id = format!("{}||{}", target_w.output, target_desk);
@@ -831,6 +846,8 @@ impl RavenController {
                                         window_id: wid.clone(),
                                         target_output: target_out.clone(),
                                     });
+                                    self.flap_registry.remove(wid);
+                                    self.last_known_layout.remove(wid);
                                     if let Some(target_w) = self.engine.current_windows.get_mut(wid) {
                                         let desk = target_w.desktops.first().cloned().unwrap_or_default();
                                         target_w.output = target_out.clone();
