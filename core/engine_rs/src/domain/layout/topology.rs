@@ -46,6 +46,7 @@ pub fn calculate_global_topology(
     workspace_layouts: &HashMap<String, String>,
     active_window_id: Option<String>,
     pip_size_ratio: f32,
+    window_history: &[String],
 ) -> (HashMap<String, Rect>, Vec<String>) {
     let mut global_layout = HashMap::new();
     let mut global_evicted = Vec::new();
@@ -91,11 +92,29 @@ pub fn calculate_global_topology(
             let (effective_tiling, saturation_evicted): (Vec<WindowNode>, Vec<String>) =
                 if tiling_windows.len() > algo_cmax {
                     let excess = tiling_windows.len() - algo_cmax;
-                    // Las primeras 'excess' ventanas en la cola cronológica compartida se minimizan ordenadamente
-                    let evicted_ids: Vec<String> = tiling_windows.iter().take(excess).map(|w| w.window_id.clone()).collect();
-                    let remaining_wins: Vec<WindowNode> = tiling_windows.into_iter().skip(excess).collect();
+                    // Las ventanas más antiguas en el historial LRU (menor índice en window_history) se desalojan primero.
+                    let mut lru_sorted = tiling_windows.clone();
+                    lru_sorted.sort_by_key(|w| {
+                        window_history
+                            .iter()
+                            .position(|id| id == &w.window_id)
+                            .unwrap_or(0)
+                    });
+                    let evicted_ids: Vec<String> = lru_sorted
+                        .iter()
+                        .take(excess)
+                        .map(|w| w.window_id.clone())
+                        .collect();
+
+                    // Preservar exactamente el orden de llegada / orden espacial (spatial_order) de las sobrevivientes
+                    let remaining_wins: Vec<WindowNode> = tiling_windows
+                        .into_iter()
+                        .filter(|w| !evicted_ids.contains(&w.window_id))
+                        .collect();
+
                     (remaining_wins, evicted_ids)
                 } else {
+                    // Cuando no hay exceso por saturación, preservar el orden espacial tal como vino
                     (tiling_windows, Vec::new())
                 };
 

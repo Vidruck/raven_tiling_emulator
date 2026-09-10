@@ -257,14 +257,15 @@ Item {
                             }
                         }
 
-                        // ── FILA 1 DE CONTROLES: PANTALLA Y ESCRITORIOS VIRTUALES ──
+                        // ── FILA 1 DE CONTROLES: PANTALLA Y ESCRITORIOS VIRTUALES (SIMÉTRICOS) ──
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
 
-                            // [ SUB-ISLA PANTALLA (REDiseñada estilo Carrusel / Escritorios) ]
+                            // [ SUB-ISLA MONITORES (50% DEL ANCHO) ]
                             Rectangle {
-                                Layout.preferredWidth: 124
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
                                 Layout.preferredHeight: 48
                                 radius: 8
                                 color: RavenPlugin.RavenTheme.surfaceElevated || Qt.rgba(1, 1, 1, 0.05)
@@ -273,8 +274,8 @@ Item {
 
                                 ColumnLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 3
-                                    spacing: 1
+                                    anchors.margins: 4
+                                    spacing: 2
 
                                     Text {
                                         text: i18n("Monitores")
@@ -286,11 +287,14 @@ Item {
 
                                     RowLayout {
                                         Layout.alignment: Qt.AlignHCenter
-                                        spacing: 3
+                                        Layout.fillWidth: true
+                                        spacing: 4
 
                                         // Monitor Anterior (Meta+Shift+N)
                                         Rectangle {
-                                            width: 26; height: 22; radius: 5
+                                            Layout.preferredWidth: 28
+                                            Layout.preferredHeight: 22
+                                            radius: 5
                                             color: monPrevMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
                                             Kirigami.Icon {
                                                 anchors.centerIn: parent
@@ -308,7 +312,9 @@ Item {
 
                                         // Badge Monitor Central / Estado Activo
                                         Rectangle {
-                                            width: 52; height: 22; radius: 5
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 22
+                                            radius: 5
                                             color: Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.20)
                                             border.width: 1
                                             border.color: RavenPlugin.RavenTheme.highlightColor
@@ -336,7 +342,9 @@ Item {
 
                                         // Monitor Siguiente (Meta+Shift+M)
                                         Rectangle {
-                                            width: 26; height: 22; radius: 5
+                                            Layout.preferredWidth: 28
+                                            Layout.preferredHeight: 22
+                                            radius: 5
                                             color: monNextMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
                                             Kirigami.Icon {
                                                 anchors.centerIn: parent
@@ -355,9 +363,10 @@ Item {
                                 }
                             }
 
-                            // [ SUB-ISLA ESCRITORIOS VIRTUALES (CARRUSEL) ]
+                            // [ SUB-ISLA ESCRITORIOS VIRTUALES (50% DEL ANCHO) ]
                             Rectangle {
                                 Layout.fillWidth: true
+                                Layout.preferredWidth: 1
                                 Layout.preferredHeight: 48
                                 radius: 8
                                 color: RavenPlugin.RavenTheme.surfaceElevated || Qt.rgba(1, 1, 1, 0.05)
@@ -366,8 +375,8 @@ Item {
 
                                 ColumnLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 3
-                                    spacing: 1
+                                    anchors.margins: 4
+                                    spacing: 2
 
                                     Text {
                                         text: i18n("Escritorios Virtuales")
@@ -379,16 +388,19 @@ Item {
 
                                     RowLayout {
                                         Layout.alignment: Qt.AlignHCenter
+                                        Layout.fillWidth: true
                                         spacing: 4
 
                                         // Escritorio Anterior
                                         Rectangle {
-                                            width: 34; height: 22; radius: 5
+                                            Layout.preferredWidth: 28
+                                            Layout.preferredHeight: 22
+                                            radius: 5
                                             color: dskPrevMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
                                             RowLayout {
                                                 anchors.centerIn: parent; spacing: 2
                                                 Kirigami.Icon {
-                                                    source: "go-previous"; implicitWidth: 9; implicitHeight: 9
+                                                    source: "go-previous"; implicitWidth: 8; implicitHeight: 8
                                                     color: dskPrevMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
                                                 }
                                                 Text {
@@ -407,7 +419,9 @@ Item {
 
                                         // Badge Escritorio Actual
                                         Rectangle {
-                                            width: 48; height: 22; radius: 5
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 22
+                                            radius: 5
                                             color: Qt.rgba(RavenPlugin.RavenTheme.highlightColor.r, RavenPlugin.RavenTheme.highlightColor.g, RavenPlugin.RavenTheme.highlightColor.b, 0.20)
                                             border.width: 1
                                             border.color: RavenPlugin.RavenTheme.highlightColor
@@ -423,7 +437,9 @@ Item {
 
                                         // Escritorio Siguiente
                                         Rectangle {
-                                            width: 34; height: 22; radius: 5
+                                            Layout.preferredWidth: 28
+                                            Layout.preferredHeight: 22
+                                            radius: 5
                                             color: dskNextMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
                                             RowLayout {
                                                 anchors.centerIn: parent; spacing: 2
@@ -433,7 +449,7 @@ Item {
                                                     font.pixelSize: 8; font.bold: true
                                                 }
                                                 Kirigami.Icon {
-                                                    source: "go-next"; implicitWidth: 9; implicitHeight: 9
+                                                    source: "go-next"; implicitWidth: 8; implicitHeight: 8
                                                     color: dskNextMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
                                                 }
                                             }
@@ -449,14 +465,15 @@ Item {
                             }
                         }
 
-                        // ── FILA 2 DE CONTROLES: MÁRGENES (GAPS) + INTERCAMBIAR (SWAP) + FLOTAR ──
+                        // ── FILA 2 DE CONTROLES: MÁRGENES (50%) Y [INTERCAMBIAR + FLOTAR] (50%) ──
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
 
-                            // [ CONTENEDOR MÁRGENES (GAPS) ]
+                            // [ COLUMNA IZQUIERDA: MÁRGENES (50% DEL ANCHO - ALINEADO EXACTO CON MONITORES) ]
                             Rectangle {
-                                Layout.preferredWidth: 110
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 1
                                 Layout.preferredHeight: 48
                                 radius: 8
                                 color: RavenPlugin.RavenTheme.surfaceElevated || Qt.rgba(1, 1, 1, 0.05)
@@ -465,8 +482,8 @@ Item {
 
                                 ColumnLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 3
-                                    spacing: 1
+                                    anchors.margins: 4
+                                    spacing: 2
 
                                     Text {
                                         text: i18n("Márgenes")
@@ -478,11 +495,14 @@ Item {
 
                                     RowLayout {
                                         Layout.alignment: Qt.AlignHCenter
+                                        Layout.fillWidth: true
                                         spacing: 4
 
                                         // Botón -2
                                         Rectangle {
-                                            width: 36; height: 22; radius: 5
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 22
+                                            radius: 5
                                             color: gapsDecMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
                                             RowLayout {
                                                 anchors.centerIn: parent; spacing: 2
@@ -506,7 +526,9 @@ Item {
 
                                         // Botón +2
                                         Rectangle {
-                                            width: 36; height: 22; radius: 5
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 22
+                                            radius: 5
                                             color: gapsIncMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
                                             RowLayout {
                                                 anchors.centerIn: parent; spacing: 2
@@ -531,100 +553,113 @@ Item {
                                 }
                             }
 
-                            // [ CONTENEDOR INTERCAMBIAR POSICIÓN (SWAP) ]
-                            Rectangle {
+                            // [ COLUMNA DERECHA: INTERCAMBIAR + FLOTAR (50% DEL ANCHO - ALINEADO CON ESCRITORIOS) ]
+                            RowLayout {
                                 Layout.fillWidth: true
+                                Layout.preferredWidth: 1
                                 Layout.preferredHeight: 48
-                                radius: 8
-                                color: RavenPlugin.RavenTheme.surfaceElevated || Qt.rgba(1, 1, 1, 0.05)
-                                border.width: 1
-                                border.color: RavenPlugin.RavenTheme.cardBorder
+                                spacing: 8
 
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 3
-                                    spacing: 1
+                                // [ CONTENEDOR INTERCAMBIAR POSICIÓN (SWAP) ]
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 48
+                                    radius: 8
+                                    color: RavenPlugin.RavenTheme.surfaceElevated || Qt.rgba(1, 1, 1, 0.05)
+                                    border.width: 1
+                                    border.color: RavenPlugin.RavenTheme.cardBorder
 
-                                    Text {
-                                        text: i18n("Intercambiar")
-                                        color: RavenPlugin.RavenTheme.subTextColor
-                                        font.pixelSize: 8
-                                        font.bold: true
-                                        Layout.alignment: Qt.AlignHCenter
-                                    }
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 4
+                                        spacing: 2
 
-                                    RowLayout {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        spacing: 6
-
-                                        Rectangle {
-                                            width: 44; height: 22; radius: 5
-                                            color: swapPrevMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
-                                            Kirigami.Icon {
-                                                anchors.centerIn: parent
-                                                source: "go-previous"; implicitWidth: 11; implicitHeight: 11
-                                                color: swapPrevMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
-                                            }
-                                            MouseArea {
-                                                id: swapPrevMa; anchors.fill: parent; hoverEnabled: true
-                                                onClicked: RavenPlugin.RavenController.swapPrev()
-                                            }
-                                            ToolTip.visible: swapPrevMa.containsMouse
-                                            ToolTip.text: i18n("Intercambiar posición hacia atrás (Meta+Shift+K)")
+                                        Text {
+                                            text: i18n("Intercambiar")
+                                            color: RavenPlugin.RavenTheme.subTextColor
+                                            font.pixelSize: 8
+                                            font.bold: true
+                                            Layout.alignment: Qt.AlignHCenter
                                         }
 
-                                        Rectangle {
-                                            width: 44; height: 22; radius: 5
-                                            color: swapNextMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
-                                            Kirigami.Icon {
-                                                anchors.centerIn: parent
-                                                source: "go-next"; implicitWidth: 11; implicitHeight: 11
-                                                color: swapNextMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
+                                        RowLayout {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            Layout.fillWidth: true
+                                            spacing: 4
+
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 22
+                                                radius: 5
+                                                color: swapPrevMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
+                                                Kirigami.Icon {
+                                                    anchors.centerIn: parent
+                                                    source: "go-previous"; implicitWidth: 10; implicitHeight: 10
+                                                    color: swapPrevMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
+                                                }
+                                                MouseArea {
+                                                    id: swapPrevMa; anchors.fill: parent; hoverEnabled: true
+                                                    onClicked: RavenPlugin.RavenController.swapPrev()
+                                                }
+                                                ToolTip.visible: swapPrevMa.containsMouse
+                                                ToolTip.text: i18n("Intercambiar posición hacia atrás (Meta+Shift+K)")
                                             }
-                                            MouseArea {
-                                                id: swapNextMa; anchors.fill: parent; hoverEnabled: true
-                                                onClicked: RavenPlugin.RavenController.swapNext()
+
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 22
+                                                radius: 5
+                                                color: swapNextMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
+                                                Kirigami.Icon {
+                                                    anchors.centerIn: parent
+                                                    source: "go-next"; implicitWidth: 10; implicitHeight: 10
+                                                    color: swapNextMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
+                                                }
+                                                MouseArea {
+                                                    id: swapNextMa; anchors.fill: parent; hoverEnabled: true
+                                                    onClicked: RavenPlugin.RavenController.swapNext()
+                                                }
+                                                ToolTip.visible: swapNextMa.containsMouse
+                                                ToolTip.text: i18n("Intercambiar posición adelante (Meta+Shift+J)")
                                             }
-                                            ToolTip.visible: swapNextMa.containsMouse
-                                            ToolTip.text: i18n("Intercambiar posición adelante (Meta+Shift+J)")
                                         }
                                     }
                                 }
-                            }
 
-                            // [ BOTÓN FLOTAR (QUICK PEEK) ]
-                            Rectangle {
-                                Layout.preferredWidth: 64
-                                Layout.preferredHeight: 48
-                                radius: 8
-                                color: floatMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.hoverBackground
-                                border.width: 1
-                                border.color: RavenPlugin.RavenTheme.cardBorder
+                                // [ BOTÓN FLOTAR COMPACTO (ALINEADO Y PROPORCIONADO) ]
+                                Rectangle {
+                                    Layout.preferredWidth: 44
+                                    Layout.preferredHeight: 48
+                                    radius: 8
+                                    color: floatMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.surfaceElevated || Qt.rgba(1, 1, 1, 0.05)
+                                    border.width: 1
+                                    border.color: floatMa.containsMouse ? RavenPlugin.RavenTheme.highlightColor : RavenPlugin.RavenTheme.cardBorder
 
-                                ColumnLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 2
+                                    ColumnLayout {
+                                        anchors.centerIn: parent
+                                        spacing: 2
 
-                                    Kirigami.Icon {
-                                        source: "view-restore"; implicitWidth: 14; implicitHeight: 14
-                                        color: floatMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
-                                        Layout.alignment: Qt.AlignHCenter
+                                        Kirigami.Icon {
+                                            source: "view-restore"; implicitWidth: 13; implicitHeight: 13
+                                            color: floatMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+
+                                        Text {
+                                            text: i18n("Flotar")
+                                            color: floatMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
+                                            font.pixelSize: 8; font.bold: true
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
                                     }
 
-                                    Text {
-                                        text: i18n("Flotar")
-                                        color: floatMa.containsMouse ? "#FFFFFF" : RavenPlugin.RavenTheme.textColor
-                                        font.pixelSize: 8; font.bold: true
-                                        Layout.alignment: Qt.AlignHCenter
+                                    MouseArea {
+                                        id: floatMa; anchors.fill: parent; hoverEnabled: true
+                                        onClicked: RavenPlugin.RavenController.toggleFloating()
                                     }
+                                    ToolTip.visible: floatMa.containsMouse
+                                    ToolTip.text: i18n("Alternar ventana activa a flotante temporal (Meta+Shift+F)")
                                 }
-
-                                MouseArea {
-                                    id: floatMa; anchors.fill: parent; hoverEnabled: true
-                                    onClicked: RavenPlugin.RavenController.toggleFloating()
-                                }
-                                ToolTip.visible: floatMa.containsMouse
-                                ToolTip.text: i18n("Alternar ventana activa a flotante temporal (Meta+Shift+F)")
                             }
                         }
                     }

@@ -25,12 +25,18 @@ pub struct TilingEngine {
     pub is_tiling_enabled: bool,
     /// Historial cronológico de ventanas utilizado para la evicción (eviction) FIFO.
     pub window_history: VecDeque<String>,
+    /// Orden espacial estable de asignación de slots en el mosaico (layout order).
+    pub spatial_order: Vec<String>,
     /// Pila dinámica de identificadores de ventanas en modo flotante temporal (Quick Peek).
     pub dynamic_floating_windows: HashSet<String>,
     /// Mapa de las áreas de trabajo (workspaces) activas y sus geometrías útiles.
     pub current_workspaces: HashMap<String, Rect>,
     /// Mapa de todas las ventanas (windows) actualmente rastreadas por el motor.
     pub current_windows: HashMap<String, WindowNode>,
+    /// Timestamp of last history update for debounce.
+    pub last_history_update: Option<std::time::Instant>,
+    /// Mapa de estados de minimización por ventana.
+    pub minimized_windows: HashSet<String>,
 }
 
 impl TilingEngine {
@@ -43,9 +49,12 @@ impl TilingEngine {
             is_tiling_enabled: config.tiling_enabled_on_startup,
             config,
             window_history: VecDeque::new(),
+            spatial_order: Vec::new(),
             dynamic_floating_windows: HashSet::new(),
             current_workspaces: HashMap::new(),
             current_windows: HashMap::new(),
+            last_history_update: None,
+            minimized_windows: HashSet::new(),
         }
     }
 
@@ -56,6 +65,34 @@ impl TilingEngine {
     pub fn toggle_tiling(&mut self) -> bool {
         self.is_tiling_enabled = !self.is_tiling_enabled;
         self.is_tiling_enabled
+    }
+
+    /// Debounce duration in milliseconds to avoid excessive history updates.
+    pub const DEBOUNCE_DURATION_MS: u64 = 100;
+
+    /// Checks whether enough time has passed since the last history update.
+    fn should_update_history(&self) -> bool {
+        match self.last_history_update {
+            Some(last) => {
+                let now = std::time::Instant::now();
+                now.duration_since(last).as_millis() as u64 >= Self::DEBOUNCE_DURATION_MS
+            }
+            None => true,
+        }
+    }
+
+    /// Alterna el estado de minimización de una ventana específica.
+    pub fn toggle_minimize(&mut self, window_id: &str) {
+        if self.minimized_windows.contains(window_id) {
+            self.minimized_windows.remove(window_id);
+        } else {
+            self.minimized_windows.insert(window_id.to_string());
+        }
+    }
+
+    /// Verifica si una ventana está minimizada.
+    pub fn is_minimized(&self, window_id: &str) -> bool {
+        self.minimized_windows.contains(window_id)
     }
 
     /// Calcula la nueva disposición de ventanas basándose en el estado del dominio.
@@ -82,6 +119,7 @@ impl TilingEngine {
         // Evaluación y Arbitraje de Ventanas en Rust (Jerarquía de Precedencia Estricta)
         let effective_windows: Vec<WindowNode> = windows
             .iter()
+            .filter(|w| !self.minimized_windows.contains(&w.window_id))
             .map(|w| {
                 let mut cloned = w.clone();
                 let class_lower = cloned.resource_class.to_lowercase();
@@ -194,6 +232,8 @@ impl TilingEngine {
 
         let config_clone = self.config.clone();
 
+        let history_vec: Vec<String> = self.window_history.iter().cloned().collect();
+
         let (layout_map, evicted_windows) = calculate_global_topology(
             &effective_windows,
             workspaces,
@@ -205,6 +245,7 @@ impl TilingEngine {
             &config_clone.workspace_layouts,
             active_window_id,
             config_clone.pip_size_ratio,
+            &history_vec,
         );
         Ok((layout_map, evicted_windows))
     }
@@ -244,19 +285,38 @@ impl TilingEngine {
     /// # Parámetros
     /// * `current_windows` - Estado actual de ventanas activas reportadas por el compositor.
     pub fn update_history(&mut self, current_windows: &[WindowNode]) -> bool {
+        // Debounce: skip if called too frequently
+        if !self.should_update_history() {
+            return false;
+        }
+        let now = std::time::Instant::now();
+        self.last_history_update = Some(now);
+
         let initial_order = self.window_history.clone();
 
         self.window_history
+            .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
+
+        self.spatial_order
             .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
 
         // Limpiar de la pila flotante aquellas ventanas que hayan sido cerradas
         self.dynamic_floating_windows
             .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
 
+        // Limpiar de la lista de minimizadas aquellas ventanas que hayan sido cerradas
+        self.minimized_windows
+            .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
+
         for win in current_windows {
             let is_dyn_float = self.dynamic_floating_windows.contains(&win.window_id);
-            if !self.window_history.contains(&win.window_id) && !win.is_floating && !is_dyn_float {
-                self.window_history.push_back(win.window_id.clone());
+            if !win.is_floating && !is_dyn_float {
+                if !self.window_history.contains(&win.window_id) {
+                    self.window_history.push_back(win.window_id.clone());
+                }
+                if !self.spatial_order.contains(&win.window_id) {
+                    self.spatial_order.push(win.window_id.clone());
+                }
             }
         }
 

@@ -720,40 +720,40 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
     }
 
     // Foco Direccional en Layout Tall:
-    // En Tall con nmaster=1, la ventana más reciente (win-2) es Master a la izquierda (x: 10, w: 945).
-    // Las ventanas del stack están a la derecha (x: 965): win-3 arriba (y: 10) y win-1 abajo (y: 545).
-    // Meta+Right (focusRight) desde win-2 hacia la columna derecha (win-3 o win-1)
-    let (_, cmds) = controller.handle_shortcut("focus_right".to_string(), 0, Some("win-2".to_string()), &topology).unwrap();
+    // En Tall con nmaster=1, la ventana maestra está a la izquierda (win-1, x: 10, w: 945).
+    // Las ventanas del stack están a la derecha (x: 965): win-2 arriba (y: 10) y win-3 abajo (y: 545).
+    // Meta+Right (focusRight) desde win-1 hacia la columna derecha (win-2 o win-3)
+    let (_, cmds) = controller.handle_shortcut("focus_right".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
     assert_eq!(cmds.len(), 1);
     let right_target = match &cmds[0] {
         raven_core::action::RavenAction::FocusWindow { window_id } => {
-            assert!(window_id == "win-3" || window_id == "win-1");
+            assert!(window_id == "win-2" || window_id == "win-3");
             window_id.clone()
         }
         _ => panic!("Esperado FocusWindow a la derecha"),
     };
 
-    // Meta+Left (focusLeft) desde la ventana derecha hacia win-2 (Master a la izquierda)
+    // Meta+Left (focusLeft) desde la ventana derecha hacia win-1 (Master a la izquierda)
     let (_, cmds) = controller.handle_shortcut("focus_left".to_string(), 0, Some(right_target), &topology).unwrap();
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-2"),
+        raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-1"),
         _ => panic!("Esperado FocusWindow a la izquierda"),
     }
 
-    // Meta+Down (focusDown) desde win-3 (arriba) hacia win-1 (abajo)
-    let (_, cmds) = controller.handle_shortcut("focus_down".to_string(), 0, Some("win-3".to_string()), &topology).unwrap();
-    assert_eq!(cmds.len(), 1);
-    match &cmds[0] {
-        raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-1"),
-        _ => panic!("Esperado FocusWindow abajo"),
-    }
-
-    // Meta+Up (focusUp) desde win-1 (abajo) hacia win-3 (arriba)
-    let (_, cmds) = controller.handle_shortcut("focus_up".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    // Meta+Down (focusDown) desde win-2 (arriba) hacia win-3 (abajo)
+    let (_, cmds) = controller.handle_shortcut("focus_down".to_string(), 0, Some("win-2".to_string()), &topology).unwrap();
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
         raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-3"),
+        _ => panic!("Esperado FocusWindow abajo"),
+    }
+
+    // Meta+Up (focusUp) desde win-3 (abajo) hacia win-2 (arriba)
+    let (_, cmds) = controller.handle_shortcut("focus_up".to_string(), 0, Some("win-3".to_string()), &topology).unwrap();
+    assert_eq!(cmds.len(), 1);
+    match &cmds[0] {
+        raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-2"),
         _ => panic!("Esperado FocusWindow arriba"),
     }
 
@@ -825,5 +825,82 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
     assert!(recalc);
     assert!(controller.is_tiling_enabled());
 }
+
+#[tokio::test]
+async fn test_window_focus_does_not_swap_spatial_order() {
+    // Test de regresión: Garantizar que al enfocar o activar una ventana,
+    // el orden espacial (spatial_order) y las geometrías de las ventanas NO se alteren.
+    let config = RavenConfig {
+        default_gaps: 10,
+        master_ratio: 0.6,
+        nmaster: 1,
+        layout_type: "raven".to_string(),
+        ..Default::default()
+    };
+    let engine = TilingEngine::new(config);
+    let mut controller = RavenController::new(engine);
+
+    let ws = "DP-1||desk_1".to_string();
+    let mut workspaces = HashMap::new();
+    workspaces.insert(ws.clone(), Rect { x: 0, y: 0, width: 1920, height: 1080 });
+
+    let make_window = |id: &str| WindowNode {
+        window_id: id.to_string(),
+        workspace_id: ws.clone(),
+        output: "DP-1".to_string(),
+        desktops: vec!["desk_1".to_string()],
+        is_floating: false,
+        is_minimized: false,
+        is_pip: false,
+        geometry: Rect { x: 0, y: 0, width: 100, height: 100 },
+        min_w: 100,
+        min_h: 100,
+        strict_birth: false,
+        is_quarantined: false,
+        is_fullscreen: false,
+        resource_class: "app".to_string(),
+        caption: id.to_string(),
+        custom_w_ratio: None,
+        custom_h_ratio: None,
+    };
+
+    let windows = vec![
+        make_window("win-1"),
+        make_window("win-2"),
+        make_window("win-3"),
+        make_window("win-4"),
+    ];
+
+    // Estado inicial: calcular geometrías iniciales
+    let actions_init = controller.handle_state_change(workspaces.clone(), windows.clone()).unwrap();
+    let mut geoms_initial: HashMap<String, Rect> = HashMap::new();
+    for act in &actions_init {
+        if let raven_core::action::RavenAction::MoveWindow { window_id, x, y, width, height } = act {
+            geoms_initial.insert(window_id.clone(), Rect { x: *x, y: *y, width: *width, height: *height });
+        }
+    }
+    assert_eq!(geoms_initial.len(), 4);
+
+    // Simular que el usuario hace click o enfoca en win-2 (o win-4)
+    controller.active_window_id = Some("win-2".to_string());
+    let actions_after_focus = controller.handle_state_change(workspaces.clone(), windows.clone()).unwrap();
+    let mut geoms_after_focus: HashMap<String, Rect> = HashMap::new();
+    for act in &actions_after_focus {
+        if let raven_core::action::RavenAction::MoveWindow { window_id, x, y, width, height } = act {
+            geoms_after_focus.insert(window_id.clone(), Rect { x: *x, y: *y, width: *width, height: *height });
+        }
+    }
+
+    // Comprobar que NINGUNA ventana cambió de geometría o de slot visual
+    for id in ["win-1", "win-2", "win-3", "win-4"] {
+        assert_eq!(
+            geoms_initial.get(id),
+            geoms_after_focus.get(id),
+            "Regresión detectada: La geometría de {} cambió simplemente al recibir foco!",
+            id
+        );
+    }
+}
+
 
 

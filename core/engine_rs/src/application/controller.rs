@@ -290,9 +290,12 @@ impl RavenController {
             self.last_active_window_count = active_count;
         }
 
+        // Para preservar la estabilidad espacial del layout (evitando swaps visuales al enfocar o interactuar),
+        // las ventanas se ordenan por `spatial_order`.
+        // La evicción por saturación (si excede Cmax) utilizará independientemente `window_history` para desalojar las más antiguas.
         windows.sort_by_key(|w| {
             self.engine
-                .window_history
+                .spatial_order
                 .iter()
                 .position(|id| id == &w.window_id)
                 .unwrap_or(usize::MAX)
@@ -669,11 +672,11 @@ impl RavenController {
                         let is_strict = w.min_w > 0 || w.min_h > 0;
                         let pos = self
                             .engine
-                            .window_history
+                            .spatial_order
                             .iter()
                             .position(|id| id == &w.window_id)
                             .unwrap_or(usize::MAX);
-                        (!is_strict, std::cmp::Reverse(pos))
+                        (!is_strict, pos)
                     });
 
                     let effective_active_id = active_window_id.clone().or_else(|| {
@@ -695,20 +698,35 @@ impl RavenController {
                             let target_idx = (current_idx + step) % active_windows.len();
                             let target_id = &active_windows[target_idx].window_id;
 
-                            let pos_active = self
+                            let s_pos_active = self
+                                .engine
+                                .spatial_order
+                                .iter()
+                                .position(|id| id == active_id);
+                            let s_pos_target = self
+                                .engine
+                                .spatial_order
+                                .iter()
+                                .position(|id| id == target_id);
+
+                            if let (Some(p_act), Some(p_tar)) = (s_pos_active, s_pos_target) {
+                                self.engine.spatial_order.swap(p_act, p_tar);
+                                needs_recalc = true;
+                            }
+
+                            let h_pos_active = self
                                 .engine
                                 .window_history
                                 .iter()
                                 .position(|id| id == active_id);
-                            let pos_target = self
+                            let h_pos_target = self
                                 .engine
                                 .window_history
                                 .iter()
                                 .position(|id| id == target_id);
 
-                            if let (Some(p_act), Some(p_tar)) = (pos_active, pos_target) {
+                            if let (Some(p_act), Some(p_tar)) = (h_pos_active, h_pos_target) {
                                 self.engine.window_history.swap(p_act, p_tar);
-                                needs_recalc = true;
                             }
                         }
                     }
@@ -723,7 +741,7 @@ impl RavenController {
                 if !active_windows.is_empty() {
                     active_windows.sort_by_key(|w| {
                         self.engine
-                            .window_history
+                            .spatial_order
                             .iter()
                             .position(|id| id == &w.window_id)
                             .unwrap_or(usize::MAX)
