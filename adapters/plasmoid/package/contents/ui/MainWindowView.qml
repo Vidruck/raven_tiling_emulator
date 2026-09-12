@@ -57,7 +57,7 @@ Item {
 
     RavenPlugin.SystemController  { id: sysControl }
 
-    // ── Circular Gauge Component ────────────────────────────────────────────
+    // ── Componente de Medidor Circular ────────────────────────────────────────────
     component CircularGauge : Item {
         id: gaugeRoot
         width: 46
@@ -79,7 +79,7 @@ Item {
                 var totalAngle = Math.PI * 1.5;
                 var endAngle = startAngle + (totalAngle * Math.min(Math.max(gaugeRoot.value, 0), 100) / 100.0);
 
-                // Background Track
+                // Pista de fondo
                 ctx.beginPath();
                 ctx.arc(cx, cy, radius, startAngle, startAngle + totalAngle, false);
                 ctx.strokeStyle = RavenPlugin.RavenTheme.isDark ? "rgba(255, 255, 255, 0.10)" : "rgba(0, 0, 0, 0.08)";
@@ -87,7 +87,7 @@ Item {
                 ctx.lineCap = "round";
                 ctx.stroke();
 
-                // Value Arc
+                // Arco de valor
                 ctx.beginPath();
                 ctx.arc(cx, cy, radius, startAngle, endAngle, false);
                 if (gaugeRoot.colorOverride !== "") {
@@ -134,7 +134,7 @@ Item {
         }
     }
 
-    // ── Island / Card Component (Frosted Privacy Glass Satinado) ────────────
+    // ── Componente de Isla / Tarjeta (Cristal Satinado Esmerilado) ────────────
     component Island : Rectangle {
         color: RavenPlugin.RavenTheme.cardBackground
         border.color: RavenPlugin.RavenTheme.cardBackground
@@ -148,9 +148,7 @@ Item {
         anchors.fill: parent
         spacing: 8
 
-        // ==========================================
         // COLUMNA PRINCIPAL DE ISLAS VERTICALES
-        // ==========================================
         ScrollView {
             id: mainScroll
             Layout.fillWidth: true

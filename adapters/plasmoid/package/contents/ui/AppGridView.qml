@@ -36,7 +36,7 @@ Item {
         anchors.fill: parent
         spacing: 8
 
-        // Search bar
+        // Barra de búsqueda
         TextField {
             id: searchField
             Layout.fillWidth: true
@@ -59,7 +59,7 @@ Item {
                 opacity: 0.6
             }
 
-            // Clear search button
+            // Botón para limpiar la búsqueda
             Kirigami.Icon {
                 anchors.right: parent.right
                 anchors.rightMargin: 8
@@ -160,7 +160,7 @@ Item {
             }
         }
 
-        // App grid with ScrollView & ScrollBar
+        // Cuadrícula de aplicaciones con ScrollView y ScrollBar
         ScrollView {
             id: scrollView
             Layout.fillWidth: true
