@@ -839,16 +839,13 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
   }
 }
 
-var _isBatchMutating = false;
-var _batchMutateTimer = null;
-
 /**
  * @brief Procesa y aplica en KWin la lista atómica de comandos JSON calculados por el demonio Rust.
  *
  * Ejecuta en dos pasadas:
  * 1. Mutaciones de estado y flotación (`set_floating`, `keepAbove`).
  * 2. Transformaciones geométricas (`move`, `focus`, `minimize`, `unminimize`, `migrate_to_output`).
- * Incorpora banderas `__raven_mutating` y `_isBatchMutating` para suprimir ciclos recursivos de feedback con KWin.
+ * Incorpora banderas `__raven_mutating` para suprimir ciclos recursivos de feedback con KWin.
  *
  * @param {string} commandsJson Cadena JSON con el vector de RavenAction devuelto por el demonio.
  */
@@ -856,15 +853,6 @@ function applyCommands(commandsJson) {
   if (!commandsJson) {
     return;
   }
-  _isBatchMutating = true;
-  if (_batchMutateTimer) {
-    try {
-      if (typeof _batchMutateTimer.stop === "function") _batchMutateTimer.stop();
-    } catch(e) {}
-  }
-  _batchMutateTimer = setKWinTimeout(function() {
-    _isBatchMutating = false;
-  }, 150);
   try {
     const cmds = JSON.parse(commandsJson);
     const windows = workspace.windowList();
@@ -1008,7 +996,7 @@ function applyCommands(commandsJson) {
                   if (capturedWindow && !capturedWindow.deleted) {
                     capturedWindow.__raven_mutating = false;
                   }
-                }, 150);
+                }, 80);
               })(w);
             } catch (e) { }
           } else if (cmd.action === "focus") {
@@ -1227,7 +1215,7 @@ function bindWindow(w) {
         requestStateSync();
         return;
       }
-      if (_isBatchMutating || w.__raven_mutating || w.__raven_ui_migrating) {
+      if (w.__raven_mutating || w.__raven_ui_migrating) {
         return;
       }
 

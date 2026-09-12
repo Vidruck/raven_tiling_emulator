@@ -1,3 +1,11 @@
+/**
+ * @file systemstats.cpp
+ * @brief Implementación del monitor del sistema y sincronizador del tema visual.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
+ * @license GPL-3.0
+ */
+
 #include "systemstats.h"
 #include <QGuiApplication>
 #include <QPalette>
@@ -12,6 +20,15 @@
 #include <QRegularExpression>
 #include <sys/utsname.h>
 
+/**
+ * @brief Constructor de la clase SystemStats.
+ *
+ * Inicializa la información estática (hardware, OS), carga los colores del tema actual,
+ * configura los timers de refresco de estadísticas y añade watchers para los archivos de configuración
+ * de Plasma (`kdeglobals`).
+ *
+ * @param parent Objeto padre (opcional).
+ */
 SystemStats::SystemStats(QObject *parent)
     : QObject(parent)
 {
@@ -39,13 +56,19 @@ SystemStats::SystemStats(QObject *parent)
     }
 }
 
+/**
+ * @brief Activa o desactiva la recolección periódica de estadísticas.
+ *
+ * Para optimizar el rendimiento, el monitor debe detenerse cuando la interfaz no sea visible.
+ * @param active booleano que indica si se debe activar el polling.
+ */
 void SystemStats::setActive(bool active)
 {
     if (m_active == active) return;
     m_active = active;
     
     if (m_active) {
-        updateStats(); // Force an immediate update
+        updateStats(); // Forzar una actualización inmediata
         m_timer->start();
     } else {
         m_timer->stop();
@@ -54,9 +77,16 @@ void SystemStats::setActive(bool active)
     emit activeChanged();
 }
 
+/**
+ * @brief Carga y procesa toda la información estática del sistema.
+ *
+ * Esta función es pesada pero solo se ejecuta una vez al inicio del módulo.
+ * Detecta la distribución (mediante `/etc/os-release`), el entorno de escritorio, el procesador,
+ * y deduce variables estéticas como el `vendorColor` (color representativo de la marca de CPU).
+ */
 void SystemStats::loadStaticInfo()
 {
-    // 1. OS Name & Distro Icon
+    // 1. Nombre del SO e Icono de la Distribución
     m_osName = QStringLiteral("Linux");
     m_distroIcon = QStringLiteral("start-here-kde");
     QString distroId;
@@ -124,7 +154,7 @@ void SystemStats::loadStaticInfo()
         m_distroIcon = QStringLiteral("plasma");
     }
 
-    // 2. Kernel Version
+    // 2. Versión del Kernel
     struct utsname buf;
     if (uname(&buf) == 0) {
         m_kernelVersion = QString::fromLatin1(buf.release);
@@ -132,7 +162,7 @@ void SystemStats::loadStaticInfo()
         m_kernelVersion = QStringLiteral("Linux");
     }
 
-    // 3. Compositor & Session Type
+    // 3. Compositor y Tipo de Sesión
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     QString sessionType = env.value(QStringLiteral("XDG_SESSION_TYPE"));
     if (sessionType.isEmpty()) {
@@ -147,7 +177,7 @@ void SystemStats::loadStaticInfo()
         m_compositor = QStringLiteral("%1 (%2)").arg(desktop.isEmpty() ? QStringLiteral("Desktop") : desktop, sessionType);
     }
 
-    // 4. CPU Model, Brand & Vendor Color
+    // 4. Modelo de CPU, Marca y Color Corporativo del Fabricante
     // Lee la información de CPU desde /proc/cpuinfo (clave 'model name' o 'Processor')
     QFile cpuInfo(QStringLiteral("/proc/cpuinfo"));
     if (cpuInfo.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -218,33 +248,47 @@ void SystemStats::loadStaticInfo()
 
     if (m_cpuVendor == QLatin1String("intel")) {
         QRegularExpression matchCore(QStringLiteral("Core\\s+i[3579](?:-[0-9A-Za-z]+)?"), QRegularExpression::CaseInsensitiveOption);
-        auto match = matchCore.match(clean);
-        if (match.hasMatch()) {
-            m_cpuBrandName = QStringLiteral("Intel %1").arg(match.captured(0));
+        QRegularExpression matchXeon(QStringLiteral("Xeon\\s+[A-Za-z0-9-]+(?:\\s+v\\d+)?"), QRegularExpression::CaseInsensitiveOption);
+        
+        auto coreMatch = matchCore.match(clean);
+        auto xeonMatch = matchXeon.match(clean);
+        
+        if (coreMatch.hasMatch()) {
+            m_cpuBrandName = QStringLiteral("Intel %1").arg(coreMatch.captured(0));
+        } else if (xeonMatch.hasMatch()) {
+            m_cpuBrandName = QStringLiteral("Intel %1").arg(xeonMatch.captured(0));
         } else if (clean.contains(QLatin1String("Xeon"), Qt::CaseInsensitive)) {
-            QRegularExpression matchXeon(QStringLiteral("Xeon\\s+[A-Za-z0-9-]+(?:\\s+v\\d+)?"), QRegularExpression::CaseInsensitiveOption);
-            auto mX = matchXeon.match(clean);
-            m_cpuBrandName = mX.hasMatch() ? QStringLiteral("Intel %1").arg(mX.captured(0)) : QStringLiteral("Intel Xeon");
+            m_cpuBrandName = QStringLiteral("Intel Xeon");
+        } else if (clean.isEmpty()) {
+            m_cpuBrandName = QStringLiteral("Intel Core");
+        } else if (clean.startsWith(QLatin1String("Intel"), Qt::CaseInsensitive)) {
+            m_cpuBrandName = clean;
         } else {
-            m_cpuBrandName = clean.isEmpty() ? QStringLiteral("Intel Core") : (clean.startsWith(QLatin1String("Intel"), Qt::CaseInsensitive) ? clean : QStringLiteral("Intel %1").arg(clean));
+            m_cpuBrandName = QStringLiteral("Intel %1").arg(clean);
         }
     } else if (m_cpuVendor == QLatin1String("amd")) {
         QRegularExpression matchRyzen(QStringLiteral("Ryzen\\s+[3579](?:\\s+[A-Za-z0-9-]+)?"), QRegularExpression::CaseInsensitiveOption);
-        auto match = matchRyzen.match(clean);
-        if (match.hasMatch()) {
-            m_cpuBrandName = QStringLiteral("AMD %1").arg(match.captured(0));
+        auto ryzenMatch = matchRyzen.match(clean);
+        
+        if (ryzenMatch.hasMatch()) {
+            m_cpuBrandName = QStringLiteral("AMD %1").arg(ryzenMatch.captured(0));
         } else if (clean.contains(QLatin1String("EPYC"), Qt::CaseInsensitive)) {
             m_cpuBrandName = QStringLiteral("AMD EPYC");
         } else if (clean.contains(QLatin1String("Threadripper"), Qt::CaseInsensitive)) {
             m_cpuBrandName = QStringLiteral("AMD Threadripper");
+        } else if (clean.isEmpty()) {
+            m_cpuBrandName = QStringLiteral("AMD Ryzen");
+        } else if (clean.startsWith(QLatin1String("AMD"), Qt::CaseInsensitive)) {
+            m_cpuBrandName = clean;
         } else {
-            m_cpuBrandName = clean.isEmpty() ? QStringLiteral("AMD Ryzen") : (clean.startsWith(QLatin1String("AMD"), Qt::CaseInsensitive) ? clean : QStringLiteral("AMD %1").arg(clean));
+            m_cpuBrandName = QStringLiteral("AMD %1").arg(clean);
         }
     } else if (m_cpuVendor == QLatin1String("qualcomm")) {
         QRegularExpression matchSnap(QStringLiteral("Snapdragon\\s+[A-Za-z0-9\\s-]+"), QRegularExpression::CaseInsensitiveOption);
-        auto match = matchSnap.match(clean);
-        if (match.hasMatch()) {
-            m_cpuBrandName = match.captured(0).split(QLatin1Char('-')).first().trimmed();
+        auto snapMatch = matchSnap.match(clean);
+        
+        if (snapMatch.hasMatch()) {
+            m_cpuBrandName = snapMatch.captured(0).split(QLatin1Char('-')).first().trimmed();
         } else {
             m_cpuBrandName = QStringLiteral("Snapdragon CPU");
         }
@@ -252,29 +296,40 @@ void SystemStats::loadStaticInfo()
         m_cpuBrandName = clean.isEmpty() ? QStringLiteral("CPU") : clean;
     }
 
-    // 5. User Name & Avatar
+    // 5. Nombre de Usuario y Avatar
     m_userName = qEnvironmentVariable("USER");
     if (m_userName.isEmpty()) {
         m_userName = QDir::home().dirName();
     }
     
-    QString facePath = QDir::homePath() + QStringLiteral("/.face.icon");
-    if (!QFile::exists(facePath)) {
-        facePath = QDir::homePath() + QStringLiteral("/.face");
-        if (!QFile::exists(facePath)) {
-            facePath = QStringLiteral("/var/lib/AccountsService/icons/") + m_userName;
+    // Buscar la imagen de perfil del usuario iterando sobre las ubicaciones estándar
+    m_userFace.clear();
+    
+    const QString homePath = QDir::homePath();
+    const QStringList facePaths = {
+        homePath + QStringLiteral("/.face.icon"),
+        homePath + QStringLiteral("/.face"),
+        QStringLiteral("/var/lib/AccountsService/icons/") + m_userName
+    };
+
+    for (const QString &path : facePaths) {
+        if (QFile::exists(path)) {
+            m_userFace = QUrl::fromLocalFile(path).toString();
+            break;
         }
-    }
-    if (QFile::exists(facePath)) {
-        m_userFace = QUrl::fromLocalFile(facePath).toString();
-    } else {
-        m_userFace = QString();
     }
 }
 
+/**
+ * @brief Lee la configuración de colores y tipografías global de KDE.
+ *
+ * Interpreta el archivo `kdeglobals` en la ruta de configuración del usuario
+ * para adaptar el diseño interno del hub al esquema de colores activo en Plasma 6,
+ * detectando automáticamente si se trata de un tema oscuro o claro.
+ */
 void SystemStats::readKdeGlobalsTheme()
 {
-    // Raven Dark Base Defaults (Frosted Privacy Glass - opacidad 0.92)
+    // Valores predeterminados para Raven Dark Base (Cristal esmerilado - opacidad 0.92)
     m_windowBgColor = QStringLiteral("#0f131a");
     m_viewBgColor = QStringLiteral("#151922");
     m_cardBackground = QStringLiteral("#EB151922");
@@ -289,7 +344,7 @@ void SystemStats::readKdeGlobalsTheme()
     int winR = 15, winG = 19, winB = 26;
     int viewR = 21, viewG = 25, viewB = 34;
 
-    // Read explicit values from ~/.config/kdeglobals if present
+    // Leer valores explícitos desde ~/.config/kdeglobals si están presentes
     QString configPath = QDir::homePath() + QStringLiteral("/.config/kdeglobals");
     QFile file(configPath);
     if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -437,6 +492,12 @@ void SystemStats::readKdeGlobalsTheme()
     emit themeChanged();
 }
 
+/**
+ * @brief Calcula el uso actual de la CPU analizando el archivo `/proc/stat`.
+ *
+ * Compara los ticks del procesador entre la lectura anterior y la actual para obtener el
+ * porcentaje de uso relativo de la CPU en el intervalo.
+ */
 void SystemStats::readCpuStats()
 {
     QFile file(QStringLiteral("/proc/stat"));
@@ -476,6 +537,12 @@ void SystemStats::readCpuStats()
     m_prevTotal = total;
 }
 
+/**
+ * @brief Lee y calcula la memoria RAM en uso analizando `/proc/meminfo`.
+ *
+ * Extrae valores como `MemTotal`, `MemAvailable`, `Buffers` y `Cached` para aproximar
+ * con alta precisión el uso de la memoria física de forma equivalente a `htop`.
+ */
 void SystemStats::readRamStats()
 {
     QFile file(QStringLiteral("/proc/meminfo"));
@@ -522,6 +589,12 @@ void SystemStats::readRamStats()
     m_ramTotalString = QString::number(totalGb, 'f', 1) + QLatin1String(" GB");
 }
 
+/**
+ * @brief Sondea el estado y nivel de la(s) batería(s) del equipo físico.
+ *
+ * Lee directamente del subsistema `/sys/class/power_supply` para evitar las demoras de D-Bus
+ * o UPower, y promedia la capacidad en dispositivos multi-batería.
+ */
 void SystemStats::readBatteryStats()
 {
     QDir powerSupply(QStringLiteral("/sys/class/power_supply"));
@@ -542,7 +615,7 @@ void SystemStats::readBatteryStats()
     for (const QString &batName : batteries) {
         QString batPath = powerSupply.absoluteFilePath(batName);
         
-        // Read capacity
+        // Leer capacidad de la batería
         QFile capacityFile(batPath + QStringLiteral("/capacity"));
         if (capacityFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
             bool ok = false;
@@ -554,7 +627,7 @@ void SystemStats::readBatteryStats()
             capacityFile.close();
         }
         
-        // Read status
+        // Leer estado de carga
         QFile statusFile(batPath + QStringLiteral("/status"));
         if (statusFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QString status = QString::fromUtf8(statusFile.readAll()).trimmed();
@@ -569,6 +642,12 @@ void SystemStats::readBatteryStats()
     m_isCharging = isAnyCharging;
 }
 
+/**
+ * @brief Extrae el tiempo de actividad ininterrumpido (Uptime) del sistema.
+ *
+ * Extrae la información desde `/proc/uptime` y la formatea en días/horas/minutos para 
+ * exposición directa a la UI.
+ */
 void SystemStats::readUptime()
 {
     QFile file(QStringLiteral("/proc/uptime"));
@@ -593,6 +672,11 @@ void SystemStats::readUptime()
     }
 }
 
+/**
+ * @brief Orquestador central de recolección métrica.
+ *
+ * Ejecuta sincronizadamente la lectura de CPU, RAM, Batería y Uptime.
+ */
 void SystemStats::updateStats()
 {
     readCpuStats();
@@ -602,11 +686,17 @@ void SystemStats::updateStats()
     emit statsChanged();
 }
 
+/**
+ * @brief Fuerza una recarga completa del esquema de colores.
+ */
 void SystemStats::updateTheme()
 {
     readKdeGlobalsTheme();
 }
 
+/**
+ * @brief Método expuesto al QML para disparar manualmente una recarga absoluta de estado y tema.
+ */
 void SystemStats::refresh()
 {
     readKdeGlobalsTheme();

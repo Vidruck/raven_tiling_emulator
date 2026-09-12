@@ -19,10 +19,7 @@ qt_add_qml_module(ravenplugin
         mediacontroller.h
         systemstats.cpp
         systemstats.h
-        colorextractor.cpp
-        colorextractor.h
-        weathercontroller.cpp
-        weathercontroller.h
+
 
     QML_FILES
         RavenTheme.qml

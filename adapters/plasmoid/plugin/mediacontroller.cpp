@@ -1,3 +1,11 @@
+/**
+ * @file mediacontroller.cpp
+ * @brief Implementación del controlador multimedia MPRIS2 para KDE Plasma.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
+ * @license GPL-3.0
+ */
+
 #include "mediacontroller.h"
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
@@ -8,10 +16,14 @@
 #include <QDBusObjectPath>
 #include <QDebug>
 
+/**
+ * @brief Constructor del controlador multimedia MPRIS.
+ * @param parent Objeto padre.
+ */
 MediaController::MediaController(QObject *parent)
     : QObject(parent)
 {
-    // DBus name owner change subscription
+    // Suscripción a cambios de propietario de nombres en D-Bus
     QDBusConnection::sessionBus().connect(
         QStringLiteral("org.freedesktop.DBus"),
         QStringLiteral("/org/freedesktop/DBus"),
@@ -37,6 +49,12 @@ MediaController::MediaController(QObject *parent)
     findActivePlayer();
 }
 
+/**
+ * @brief Escanea la sesión de D-Bus para encontrar un reproductor multimedia activo.
+ *
+ * Busca servicios registrados que implementen la interfaz `org.mpris.MediaPlayer2`.
+ * Da prioridad a aquellos reproductores cuyo estado sea 'Playing' (Reproduciendo).
+ */
 void MediaController::findActivePlayer()
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
@@ -59,7 +77,7 @@ void MediaController::findActivePlayer()
                                                               QStringLiteral("Get"));
             msg << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("PlaybackStatus");
             
-            // Short timeout (100ms) to never block Plasma GUI
+            // Tiempo de espera corto (100ms) para nunca bloquear la GUI de Plasma
             QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 100);
             if (reply.isValid()) {
                 QString status = reply.value().variant().toString();
@@ -92,6 +110,14 @@ void MediaController::findActivePlayer()
     }
 }
 
+/**
+ * @brief Conecta el controlador a un reproductor MPRIS específico.
+ *
+ * Limpia el nombre del reproductor para propósitos de visualización en la UI
+ * (ej. "spotify" a "Spotify") y se suscribe a los cambios de propiedades del mismo.
+ *
+ * @param service Nombre del servicio D-Bus del reproductor.
+ */
 void MediaController::connectToPlayer(const QString &service)
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
@@ -144,6 +170,13 @@ void MediaController::connectToPlayer(const QString &service)
     refresh();
 }
 
+/**
+ * @brief Slot manejador que reacciona cuando un reproductor se abre o se cierra en el sistema.
+ *
+ * @param name Nombre del servicio que cambió.
+ * @param oldOwner Antiguo propietario del servicio.
+ * @param newOwner Nuevo propietario del servicio.
+ */
 void MediaController::onNameOwnerChanged(const QString &name, const QString &oldOwner, const QString &newOwner)
 {
     if (!name.startsWith(QLatin1String("org.mpris.MediaPlayer2."))) {
@@ -159,6 +192,16 @@ void MediaController::onNameOwnerChanged(const QString &name, const QString &old
     }
 }
 
+/**
+ * @brief Slot manejador para la señal PropertiesChanged de MPRIS.
+ *
+ * Escucha cambios en tiempo real del estado de reproducción, metadatos y controles
+ * disponibles (CanGoNext, CanGoPrevious) para reflejarlos instantáneamente en la interfaz.
+ *
+ * @param interfaceName Nombre de la interfaz que emitió el cambio.
+ * @param changedProperties Mapa de propiedades modificadas.
+ * @param invalidatedProperties Lista de propiedades invalidadas.
+ */
 void MediaController::onPropertiesChanged(const QString &interfaceName, const QVariantMap &changedProperties, const QStringList &/*invalidatedProperties*/)
 {
     if (interfaceName != QLatin1String("org.mpris.MediaPlayer2.Player")) {
@@ -199,6 +242,14 @@ void MediaController::onPropertiesChanged(const QString &interfaceName, const QV
     emit mediaChanged();
 }
 
+/**
+ * @brief Actualiza las variables internas con los metadatos recibidos del reproductor.
+ *
+ * Extrae título, artista, álbum, carátula (artUrl) y URL de pista. Si el reproductor
+ * es un navegador con YouTube, intenta generar la carátula automáticamente.
+ *
+ * @param metadata Mapa de metadatos (xesam, mpris).
+ */
 void MediaController::updateMetadata(const QVariantMap &metadata)
 {
     QString newTitle = metadata.value(QLatin1String("xesam:title")).toString();
@@ -230,7 +281,7 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
     m_album = metadata.value(QLatin1String("xesam:album")).toString();
     m_artUrl = metadata.value(QLatin1String("mpris:artUrl")).toString();
 
-    // Fallback: If no artUrl but YouTube URL in xesam:url
+    // Respaldo: Si no hay artUrl pero es una URL de YouTube en xesam:url
     if (m_artUrl.isEmpty()) {
         QRegularExpression ytRegex(QStringLiteral("(?:v=|/v/|youtu\\.be/)([a-zA-Z0-9_-]{11})"));
         QRegularExpressionMatch match = ytRegex.match(newTrackUrl);
@@ -240,7 +291,7 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
         }
     }
 
-    // Extract mpris:length (convert from microseconds to seconds)
+    // Extraer mpris:length (convertir de microsegundos a segundos)
     qint64 lenMicro = 0;
     if (metadata.contains(QLatin1String("mpris:length"))) {
         QVariant lenVar = metadata.value(QLatin1String("mpris:length"));
@@ -256,6 +307,13 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
     queryPositionDirect();
 }
 
+/**
+ * @brief Activa o desactiva la actualización periódica de la posición multimedia.
+ *
+ * Utilizado para ahorrar recursos cuando el widget no está visible en la interfaz.
+ *
+ * @param active booleano que indica si se debe monitorizar activamente.
+ */
 void MediaController::setActive(bool active)
 {
     if (m_active == active) return;
@@ -270,6 +328,12 @@ void MediaController::setActive(bool active)
     }
 }
 
+/**
+ * @brief Incrementa suavemente el segundero de posición en la interfaz.
+ *
+ * Realiza una extrapolación en vivo mientras se reproduce, evitando inundar a D-Bus
+ * con llamadas innecesarias a cada segundo.
+ */
 void MediaController::updatePosition()
 {
     if (!m_active || m_currentService.isEmpty()) return;
@@ -285,6 +349,9 @@ void MediaController::updatePosition()
     queryPositionDirect();
 }
 
+/**
+ * @brief Solicita asíncronamente la posición actual de reproducción por D-Bus.
+ */
 void MediaController::queryPositionDirect()
 {
     if (m_currentService.isEmpty()) {
@@ -307,6 +374,11 @@ void MediaController::queryPositionDirect()
     connect(m_posWatcher, &QDBusPendingCallWatcher::finished, this, &MediaController::onPositionReply);
 }
 
+/**
+ * @brief Slot manejador para sincronizar la respuesta asíncrona de la posición con la propiedad interna.
+ *
+ * @param watcher Vigía de la llamada asíncrona.
+ */
 void MediaController::onPositionReply(QDBusPendingCallWatcher *watcher)
 {
     if (watcher == m_posWatcher) {
@@ -330,6 +402,9 @@ void MediaController::onPositionReply(QDBusPendingCallWatcher *watcher)
     watcher->deleteLater();
 }
 
+/**
+ * @brief Fuerza una consulta completa del estado, propiedades y metadatos del reproductor.
+ */
 void MediaController::refresh()
 {
     if (m_currentService.isEmpty()) {
@@ -339,7 +414,7 @@ void MediaController::refresh()
 
     QDBusConnection bus = QDBusConnection::sessionBus();
 
-    // Query PlaybackStatus
+    // Consultar el estado de reproducción (PlaybackStatus)
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(m_currentService,
                                                           QStringLiteral("/org/mpris/MediaPlayer2"),
@@ -357,7 +432,7 @@ void MediaController::refresh()
         }
     }
 
-    // Query Metadata
+    // Consultar los metadatos (Metadata)
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(m_currentService,
                                                           QStringLiteral("/org/mpris/MediaPlayer2"),
@@ -381,6 +456,9 @@ void MediaController::refresh()
     emit mediaChanged();
 }
 
+/**
+ * @brief Envía el comando de Iniciar Reproducción.
+ */
 void MediaController::play()
 {
     if (m_currentService.isEmpty()) return;
@@ -390,6 +468,9 @@ void MediaController::play()
     playerIface.call(QStringLiteral("Play"));
 }
 
+/**
+ * @brief Envía el comando de Pausar Reproducción.
+ */
 void MediaController::pause()
 {
     if (m_currentService.isEmpty()) return;
@@ -399,6 +480,9 @@ void MediaController::pause()
     playerIface.call(QStringLiteral("Pause"));
 }
 
+/**
+ * @brief Envía el comando de Alternar (Reproducir/Pausar).
+ */
 void MediaController::playPause()
 {
     if (m_currentService.isEmpty()) {
@@ -411,6 +495,9 @@ void MediaController::playPause()
     playerIface.call(QStringLiteral("PlayPause"));
 }
 
+/**
+ * @brief Envía el comando de Pista Siguiente.
+ */
 void MediaController::next()
 {
     if (m_currentService.isEmpty()) return;
@@ -420,6 +507,9 @@ void MediaController::next()
     playerIface.call(QStringLiteral("Next"));
 }
 
+/**
+ * @brief Envía el comando de Pista Anterior.
+ */
 void MediaController::previous()
 {
     if (m_currentService.isEmpty()) return;
@@ -429,6 +519,9 @@ void MediaController::previous()
     playerIface.call(QStringLiteral("Previous"));
 }
 
+/**
+ * @brief Envía el comando de Detener.
+ */
 void MediaController::stop()
 {
     if (m_currentService.isEmpty()) return;
@@ -438,6 +531,11 @@ void MediaController::stop()
     playerIface.call(QStringLiteral("Stop"));
 }
 
+/**
+ * @brief Ajusta la posición del cabezal de reproducción.
+ *
+ * @param positionSec Segundos exactos en los que se debe reanudar la pista.
+ */
 void MediaController::setPosition(qint64 positionSec)
 {
     if (m_currentService.isEmpty() || m_trackId.isEmpty()) return;
@@ -448,6 +546,12 @@ void MediaController::setPosition(qint64 positionSec)
     playerIface.call(QStringLiteral("SetPosition"), QVariant::fromValue(QDBusObjectPath(m_trackId)), posMicro);
 }
 
+/**
+ * @brief Formatea un valor en segundos a una cadena MM:SS legible por humanos.
+ *
+ * @param seconds Cantidad de segundos totales.
+ * @return Cadena formateada.
+ */
 QString MediaController::formatTime(qint64 seconds) const
 {
     if (seconds < 0) seconds = 0;

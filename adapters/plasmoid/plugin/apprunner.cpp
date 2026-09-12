@@ -1,3 +1,11 @@
+/**
+ * @file apprunner.cpp
+ * @brief Implementación del indexador y lanzador de aplicaciones del sistema XDG.
+ * @author Alejandro González Hernández (Vidruck)
+ * @version 3.4
+ * @license GPL-3.0
+ */
+
 #include "apprunner.h"
 #include <QDir>
 #include <QFile>
@@ -18,6 +26,15 @@ static QFileSystemWatcher *s_appWatcher = nullptr;
 static QTimer *s_reloadTimer = nullptr;
 static QList<QPointer<AppListModel>> s_activeModels;
 
+/**
+ * @brief Constructor de la clase AppListModel.
+ *
+ * Inicializa el modelo principal que almacena en memoria la base de datos de 
+ * aplicaciones (.desktop) parseada. Instancia un watcher global para detectar
+ * instalaciones o desinstalaciones en tiempo real.
+ *
+ * @param parent Objeto padre.
+ */
 AppListModel::AppListModel(QObject *parent)
     : QAbstractListModel(parent)
 {
@@ -53,17 +70,31 @@ AppListModel::AppListModel(QObject *parent)
     }
 }
 
+/**
+ * @brief Destructor de la clase AppListModel.
+ */
 AppListModel::~AppListModel()
 {
     s_activeModels.removeAll(this);
 }
 
+/**
+ * @brief Devuelve la cantidad de aplicaciones en el índice actual.
+ * @param parent Índice del elemento padre (usado en modelos de árbol).
+ * @return Número de aplicaciones.
+ */
 int AppListModel::rowCount(const QModelIndex &parent) const
 {
     if (parent.isValid()) return 0;
     return m_apps.size();
 }
 
+/**
+ * @brief Retorna el dato correspondiente a la aplicación según su índice y el rol solicitado.
+ * @param index Índice de la aplicación en el modelo.
+ * @param role Tipo de dato a solicitar (ej. NameRole, ExecRole).
+ * @return El dato envuelto en QVariant.
+ */
 QVariant AppListModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_apps.size())
@@ -84,6 +115,10 @@ QVariant AppListModel::data(const QModelIndex &index, int role) const
     }
 }
 
+/**
+ * @brief Mapea los roles C++ con nombres de propiedades exportados a QML.
+ * @return Mapeo entre enumeradores de rol y strings de QML.
+ */
 QHash<int, QByteArray> AppListModel::roleNames() const
 {
     QHash<int, QByteArray> roles;
@@ -99,6 +134,12 @@ QHash<int, QByteArray> AppListModel::roleNames() const
     return roles;
 }
 
+/**
+ * @brief Escanea y recarga la lista completa de aplicaciones en memoria.
+ *
+ * Lee los directorios estándar del sistema en busca de archivos `.desktop`,
+ * parseando sus contenidos y almacenando el resultado en un caché estático.
+ */
 void AppListModel::reloadApplications()
 {
     beginResetModel();
@@ -107,7 +148,7 @@ void AppListModel::reloadApplications()
 
     QSet<QString> processedDesktopIds;
 
-    // Standard XDG application search paths in priority order (User -> Flatpak -> Snap -> System)
+    // Rutas de búsqueda de aplicaciones XDG estándar en orden de prioridad (Usuario -> Flatpak -> Snap -> Sistema)
     QStringList searchPaths = {
         QDir::homePath() + QStringLiteral("/.local/share/applications"),
         QDir::homePath() + QStringLiteral("/.local/share/flatpak/exports/share/applications"),
@@ -145,12 +186,22 @@ void AppListModel::reloadApplications()
     endResetModel();
 }
 
+/**
+ * @brief Analiza sintácticamente un archivo .desktop y lo añade al índice.
+ *
+ * Valida los parámetros requeridos (Name, Exec, Type=Application), resuelve
+ * rutas, localizaciones y acciones secundarias. Descarta aplicaciones marcadas
+ * como `NoDisplay` o `Hidden`.
+ *
+ * @param filePath Ruta absoluta al archivo `.desktop`.
+ * @param processedDesktopIds Conjunto de IDs ya procesados para evitar duplicidad.
+ */
 void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &processedDesktopIds)
 {
     QFileInfo fi(filePath);
     QString desktopId = fi.fileName();
     if (processedDesktopIds.contains(desktopId)) {
-        return; // Higher priority search path already provided this desktop ID
+        return; // Una ruta de búsqueda de mayor prioridad ya proveyó este ID de escritorio
     }
 
     QFile file(filePath);
@@ -224,35 +275,35 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
         const QString value = line.mid(eqPos + 1).trimmed();
 
         if (inDesktopEntry) {
-            // Name
+            // Nombre
             if (key == nameLoc1 || key == nameLoc2) {
                 name = value;
                 hasLocName = true;
             } else if (key == QStringLiteral("Name") && !hasLocName) {
                 name = value;
             }
-            // GenericName
+            // Nombre genérico
             else if (key == genLoc1 || key == genLoc2) {
                 genericName = value;
                 hasLocGen = true;
             } else if (key == QStringLiteral("GenericName") && !hasLocGen) {
                 genericName = value;
             }
-            // Keywords
+            // Palabras clave
             else if (key == keyLoc1 || key == keyLoc2) {
                 keywords = value;
                 hasLocKey = true;
             } else if (key == QStringLiteral("Keywords") && !hasLocKey) {
                 keywords = value;
             }
-            // Comment
+            // Comentario
             else if (key == comLoc1 || key == comLoc2) {
                 comment = value;
                 hasLocCom = true;
             } else if (key == QStringLiteral("Comment") && !hasLocCom) {
                 comment = value;
             }
-            // General attributes
+            // Atributos generales
             else if (key == QStringLiteral("Icon")) {
                 icon = value;
             } else if (key == QStringLiteral("Exec")) {
@@ -295,7 +346,7 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
         return;
     }
 
-    // Check OnlyShowIn (only filter out if explicitly assigned and doesn't match KDE/Plasma/Qt)
+    // Comprobar OnlyShowIn (filtrar solo si está explícitamente asignado y no coincide con KDE/Plasma/Qt)
     if (!onlyShowIn.isEmpty()) {
         QStringList allowed = onlyShowIn.split(QLatin1Char(';'), Qt::SkipEmptyParts);
         bool matchesKde = false;
@@ -311,7 +362,7 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
         if (!matchesKde) return;
     }
 
-    // Check NotShowIn
+    // Comprobar NotShowIn
     if (!notShowIn.isEmpty()) {
         QStringList blocked = notShowIn.split(QLatin1Char(';'), Qt::SkipEmptyParts);
         for (const QString &env : blocked) {
@@ -323,7 +374,7 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
         }
     }
 
-    // Check TryExec if present
+    // Comprobar TryExec si está presente
     if (!tryExec.isEmpty()) {
         if (tryExec.startsWith(QLatin1Char('/'))) {
             if (!QFile::exists(tryExec)) return;
@@ -334,7 +385,7 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
 
     processedDesktopIds.insert(desktopId);
 
-    // Clean Exec field codes %u, %f, %U, %F, %i, %c, %k
+    // Limpiar códigos de campo Exec como %u, %f, %U, %F, %i, %c, %k
     exec.remove(QRegularExpression(QStringLiteral("%[a-zA-Z]")));
 
     AppEntry entry;
@@ -347,7 +398,7 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
     entry.categories = categories;
     entry.desktopPath = filePath;
 
-    // Build Desktop Actions in defined order or order parsed
+    // Construir Acciones de Escritorio en el orden definido o parseado
     QVariantList parsedActions;
     QStringList actionOrder = actionsListStr.split(QLatin1Char(';'), Qt::SkipEmptyParts);
     if (!actionOrder.isEmpty()) {
@@ -368,7 +419,7 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
             }
         }
     } else {
-        // If Actions= wasn't specified but [Desktop Action ...] blocks exist
+        // Si Actions= no se especificó pero existen bloques [Desktop Action ...]
         for (auto it = actionEntries.constBegin(); it != actionEntries.constEnd(); ++it) {
             const RawAction &ra = it.value();
             if (!ra.exec.isEmpty()) {
@@ -390,6 +441,14 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
 
 // --- AppFilterModel ---
 
+/**
+ * @brief Constructor del modelo de filtrado de aplicaciones.
+ *
+ * Instancia el modelo envolvente `QSortFilterProxyModel` que se conecta al
+ * `AppListModel` para filtrar los resultados en la cuadrícula o buscador.
+ *
+ * @param parent Objeto padre.
+ */
 AppFilterModel::AppFilterModel(QObject *parent)
     : QSortFilterProxyModel(parent)
 {
@@ -399,6 +458,10 @@ AppFilterModel::AppFilterModel(QObject *parent)
     sort(0, Qt::AscendingOrder);
 }
 
+/**
+ * @brief Establece el término de búsqueda para filtrar la lista en tiempo real.
+ * @param search Texto ingresado por el usuario.
+ */
 void AppFilterModel::setSearchFilter(const QString &search)
 {
     if (m_searchFilter == search) return;
@@ -408,6 +471,10 @@ void AppFilterModel::setSearchFilter(const QString &search)
     emit countChanged();
 }
 
+/**
+ * @brief Establece el filtro categórico de la lista de aplicaciones.
+ * @param category Nombre interno de la categoría (ej. "favorites", "network").
+ */
 void AppFilterModel::setCategoryFilter(const QString &category)
 {
     if (m_categoryFilter == category) return;
@@ -417,6 +484,9 @@ void AppFilterModel::setCategoryFilter(const QString &category)
     emit countChanged();
 }
 
+/**
+ * @brief Fuerza una recarga completa del modelo subyacente.
+ */
 void AppFilterModel::refresh()
 {
     s_appsLoaded = false;
@@ -425,9 +495,15 @@ void AppFilterModel::refresh()
     emit countChanged();
 }
 
+/**
+ * @brief Intenta lanzar el ejecutable de una aplicación de forma segura.
+ *
+ * @param execCmd Comando base que define el archivo `.desktop`.
+ * @param desktopPath Ruta absoluta hacia el `.desktop` para permitir que `gio` lo resuelva.
+ */
 void AppFilterModel::launchApp(const QString &execCmd, const QString &desktopPath)
 {
-    // Preferred: Launch via desktop file ID or gio
+    // Preferido: Lanzar mediante ID de archivo de escritorio o gio
     if (!desktopPath.isEmpty() && QFile::exists(desktopPath)) {
         QFileInfo fi(desktopPath);
         QString desktopId = fi.fileName();
@@ -439,7 +515,7 @@ void AppFilterModel::launchApp(const QString &execCmd, const QString &desktopPat
         }
     }
 
-    // Safe execution without shell string evaluation
+    // Ejecución segura sin evaluación de cadenas de shell
     if (!execCmd.isEmpty()) {
         QString cleanCmd = execCmd;
         cleanCmd = cleanCmd.remove(QRegularExpression(QStringLiteral("%[a-zA-Z]"))).trimmed();
@@ -453,6 +529,10 @@ void AppFilterModel::launchApp(const QString &execCmd, const QString &desktopPat
     }
 }
 
+/**
+ * @brief Lanza una aplicación basándose en su índice filtrado activo en la vista.
+ * @param idx Fila correspondiente a la aplicación clickeada en la interfaz QML.
+ */
 void AppFilterModel::launchIndex(int idx)
 {
     if (idx < 0 || idx >= rowCount()) return;
@@ -462,6 +542,11 @@ void AppFilterModel::launchIndex(int idx)
     launchApp(execCmd, desktopPath);
 }
 
+/**
+ * @brief Recupera las acciones secundarias de una aplicación por su índice en la vista.
+ * @param idx Fila de la aplicación clickeada con clic derecho en QML.
+ * @return Lista de variantes estructuradas con `id`, `name`, `exec` e `icon`.
+ */
 QVariantList AppFilterModel::getAppActions(int idx) const
 {
     if (idx < 0 || idx >= rowCount()) return QVariantList();
@@ -469,12 +554,21 @@ QVariantList AppFilterModel::getAppActions(int idx) const
     return data(modelIdx, AppListModel::ActionsRole).toList();
 }
 
+/**
+ * @brief Algoritmo interno de filtrado para decidir si una fila del modelo subyacente se muestra o se oculta.
+ *
+ * Cruza las restricciones de búsqueda por texto y la restricción por categoría.
+ *
+ * @param sourceRow Índice de la fila original en `AppListModel`.
+ * @param sourceParent Índice del padre de la fila original.
+ * @return True si la aplicación cumple los filtros, False si debe ocultarse.
+ */
 bool AppFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
     QModelIndex idx = sourceModel()->index(sourceRow, 0, sourceParent);
     if (!idx.isValid()) return false;
 
-    // Search filter: matches Name, GenericName, Keywords, or Comment
+    // Filtro de búsqueda: comprueba coincidencias en Nombre, Nombre Genérico, Palabras Clave o Comentario
     if (!m_searchFilter.isEmpty()) {
         QString appName = sourceModel()->data(idx, AppListModel::NameRole).toString();
         QString genericName = sourceModel()->data(idx, AppListModel::GenericNameRole).toString();
@@ -491,7 +585,7 @@ bool AppFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourcePa
         }
     }
 
-    // Category filter
+    // Filtro por categoría
     if (!m_categoryFilter.isEmpty() && m_categoryFilter != QStringLiteral("all")) {
         if (m_categoryFilter == QStringLiteral("favorites")) {
             return true;
