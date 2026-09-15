@@ -26,6 +26,10 @@ use raven_core::geometry::{Rect, WindowNode};
 use crate::state::WaylandState;
 
 /// Adaptador de backend para compositores Wayland nativos.
+/// 
+/// Establece y mantiene una conexión directa con el compositor (e.g., KWin, Sway) 
+/// utilizando el protocolo base de Wayland y extensiones como `wlr-foreign-toplevel-management`.
+/// Su función principal es actuar como proveedor de topología y sensores de estado con latencia sub-milisegundo.
 #[derive(Clone)]
 pub struct WaylandBackend {
     name: &'static str,
@@ -40,6 +44,9 @@ impl Default for WaylandBackend {
 
 impl WaylandBackend {
     /// Crea una nueva instancia de `WaylandBackend`.
+    ///
+    /// Inicializa el estado compartido concurrente (`Arc<Mutex<WaylandState>>`) que almacenará
+    /// y actualizará la información de salidas (monitores) y ventanas (toplevels) en tiempo real.
     pub fn new() -> Self {
         Self {
             name: "wayland",
@@ -54,7 +61,12 @@ impl CompositorBackend for WaylandBackend {
         self.name
     }
 
-    /// Inicia el bucle de eventos asíncrono escuchando el socket Wayland.
+    /// Inicia el bucle de eventos escuchando el socket de Wayland.
+    ///
+    /// # Comportamiento
+    /// Crea un hilo dedicado (`raven-wayland-event-loop`) que gestiona la cola de eventos
+    /// de Wayland de forma bloqueante (`blocking_dispatch`). Los eventos procesados son
+    /// traducidos a `CompositorEvent` y emitidos asíncronamente al motor a través del canal `event_tx`.
     async fn start_listener(
         &self,
         event_tx: mpsc::Sender<CompositorEvent>,
@@ -66,7 +78,7 @@ impl CompositorBackend for WaylandBackend {
 
         let (state_tx, mut state_rx) = mpsc::channel(128);
 
-        // Forwarder task de eventos normalizados hacia el engine
+        // Hilo asíncrono para reenviar eventos normalizados hacia el motor principal
         tokio::spawn(async move {
             while let Some(ev) = state_rx.recv().await {
                 if event_tx.send(ev).await.is_err() {
@@ -77,7 +89,7 @@ impl CompositorBackend for WaylandBackend {
 
         let state_clone = self.state.clone();
 
-        // Lanzar hilo dedicado para la cola de eventos síncrona de Wayland
+        // Hilo dedicado para la cola de eventos síncrona y continua de Wayland
         std::thread::Builder::new()
             .name("raven-wayland-event-loop".to_string())
             .spawn(move || {
@@ -89,7 +101,7 @@ impl CompositorBackend for WaylandBackend {
 
                 let mut local_state = WaylandState::new(Some(state_tx));
 
-                // Realizar roundtrip inicial para descubrir outputs y toplevel managers
+                // Roundtrip inicial: sincroniza y descubre outputs y toplevel managers activos
                 if let Err(e) = event_queue.roundtrip(&mut local_state) {
                     error!("[WAYLAND-BACKEND] Fallo en roundtrip inicial: {}", e);
                     return;
@@ -103,7 +115,7 @@ impl CompositorBackend for WaylandBackend {
                         break;
                     }
 
-                    // Sincronizar estado compartido para query_initial_state
+                    // Sincronizar estado concurrente para llamadas de consulta iniciales (query_initial_state)
                     if let Ok(mut lock) = state_clone.lock() {
                         lock.outputs = local_state.outputs.clone();
                     }
@@ -114,7 +126,11 @@ impl CompositorBackend for WaylandBackend {
         Ok(())
     }
 
-    /// Aplica acciones hacia el compositor (foco, activación, etc.).
+    /// Aplica acciones emitidas por el motor hacia el compositor Wayland.
+    ///
+    /// *Nota:* En la arquitectura "Thin Bridge" actual para KDE Plasma, los cambios geométricos
+    /// (movimiento/redimensionamiento) se delegan al script de KWin debido al modelo de seguridad.
+    /// Este método atiende interacciones directas (como foco o minimización) mediante `toplevel_handle`.
     async fn apply_actions(
         &self,
         actions: Vec<RavenAction>,
@@ -123,7 +139,7 @@ impl CompositorBackend for WaylandBackend {
             match action {
                 RavenAction::FocusWindow { window_id } => {
                     info!("[WAYLAND-BACKEND] Solicitud de foco para ventana: {}", window_id);
-                    // Los toplevel handles pueden invocar handle.set_activated()
+                    // TODO: Invocar handle.set_activated() sobre el toplevel_handle correspondiente
                 }
                 RavenAction::MinimizeWindow { window_id } => {
                     info!("[WAYLAND-BACKEND] Solicitud de minimizar ventana: {}", window_id);
@@ -137,7 +153,9 @@ impl CompositorBackend for WaylandBackend {
         Ok(())
     }
 
-    /// Consulta inicial para descubrir las pantallas registradas al arrancar.
+    /// Consulta inicial para descubrir las pantallas (workspaces virtuales) registradas al arrancar.
+    ///
+    /// Extrae las dimensiones nativas de los monitores descubiertos durante el `roundtrip` inicial.
     async fn query_initial_state(
         &self,
     ) -> Result<(HashMap<String, Rect>, Vec<WindowNode>), BackendError> {

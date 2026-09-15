@@ -17,7 +17,10 @@ use wayland_protocols_wlr::foreign_toplevel::v1::client::{
 use raven_core::backend::CompositorEvent;
 use raven_core::geometry::{OutputNode, Rect, Topology, WindowNode};
 
-/// Información descubierta de una pantalla/monitor `wl_output`.
+/// Contiene la información extraída de una salida física o virtual (`wl_output`) descubierta en el compositor.
+///
+/// Proporciona detalles como nombre (usualmente el identificador del hardware, e.g., "eDP-1"),
+/// la geometría actual (resolución física en el sistema de coordenadas globales) y el factor de escala UI.
 #[derive(Debug, Clone)]
 pub struct OutputInfo {
     pub name: String,
@@ -37,7 +40,10 @@ impl Default for OutputInfo {
     }
 }
 
-/// Información interna de una ventana descubierta por foreign toplevel.
+/// Mantiene el estado en tiempo real de una ventana gestionada por `zwlr_foreign_toplevel_manager_v1`.
+///
+/// Almacena propiedades descriptivas como el título de la ventana y el identificador de aplicación (`app_id`),
+/// junto con indicadores booleanos que reflejan su estado (maximizado, minimizado, foco, fullscreen).
 #[derive(Debug, Clone, Default)]
 pub struct ToplevelInfo {
     pub title: String,
@@ -49,7 +55,12 @@ pub struct ToplevelInfo {
     pub output_name: Option<String>,
 }
 
-/// Estado global de conexión Wayland gestionado por el bucle de eventos.
+/// Estado global de conexión Wayland gestionado de forma síncrona por el bucle de eventos.
+///
+/// Actúa como un contenedor mutable (`Dispatch handler`) para todos los objetos Wayland. 
+/// Registra y actualiza las salidas físicas (`outputs`) y las ventanas activas (`toplevels`).
+/// Permite inyectar un transmisor (`event_tx`) para emitir variaciones de estado asíncronamente
+/// hacia el controlador (e.g., `TopologyChanged`).
 pub struct WaylandState {
     pub outputs: HashMap<WlOutput, OutputInfo>,
     pub toplevel_manager: Option<ZwlrForeignToplevelManagerV1>,
@@ -67,7 +78,10 @@ impl WaylandState {
         }
     }
 
-    /// Genera la topología actual de pantallas en formato agnóstico `raven_core::geometry::Topology`.
+    /// Construye y devuelve la topología espacial actual basada en los datos recopilados de Wayland.
+    ///
+    /// Transforma el diccionario de `wl_output` en una estructura genérica [`Topology`], 
+    /// la cual es digerida directamente por el `TilingEngine` de `raven_core` para su distribución.
     pub fn build_topology(&self) -> Topology {
         let mut output_nodes = Vec::new();
         let mut outputs = Vec::new();
@@ -96,6 +110,10 @@ impl WaylandState {
 }
 
 // ── Registry Dispatch ──
+
+/// Implementación de despachador para el registro global de Wayland.
+/// Escucha anuncios de interfaces globales y vincula protocolos esenciales como `wl_output`
+/// y la extensión de manejo de ventanas `zwlr_foreign_toplevel_manager_v1`.
 impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -137,6 +155,10 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
 }
 
 // ── WlOutput Dispatch ──
+
+/// Implementación de despachador para las salidas físicas o virtuales (`wl_output`).
+/// Extrae la geometría posicional global, la resolución del modo actual y la escala UI,
+/// emitiendo automáticamente un evento `CompositorEvent::TopologyChanged` al concluir un bloque de configuración (`Done`).
 impl Dispatch<WlOutput, ()> for WaylandState {
     fn event(
         state: &mut Self,

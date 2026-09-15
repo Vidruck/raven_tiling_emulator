@@ -1,3 +1,12 @@
+//! # Utilidad de Inspección Wayland (Probe)
+//!
+//! Herramienta de diagnóstico por CLI para verificar la ingestión de eventos nativos 
+//! directamente desde el socket de Wayland (`$WAYLAND_DISPLAY`).
+//! 
+//! Inicializa el adaptador `WaylandBackend` de forma aislada, sin levantar el motor completo,
+//! e imprime en la salida estándar los eventos traducidos (`CompositorEvent`) durante 5 segundos.
+//! Es fundamental para depurar la topología de monitores y el comportamiento del compositor anfitrión.
+
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::Level;
