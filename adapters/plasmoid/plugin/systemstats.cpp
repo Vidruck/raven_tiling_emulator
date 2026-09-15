@@ -329,10 +329,10 @@ void SystemStats::loadStaticInfo()
  */
 void SystemStats::readKdeGlobalsTheme()
 {
-    // Valores predeterminados para Raven Dark Base (Cristal esmerilado - opacidad 0.92)
+    // Valores predeterminados para Raven Dark Base (Cristal esmerilado - opacidad 0.88)
     m_windowBgColor = QStringLiteral("#0f131a");
     m_viewBgColor = QStringLiteral("#151922");
-    m_cardBackground = QStringLiteral("#EB151922");
+    m_cardBackground = QStringLiteral("#E0151922");
     m_cardBorder = QStringLiteral("#20FFFFFF");
     m_hoverBackground = QStringLiteral("#24FFFFFF");
     m_surfaceElevated = QStringLiteral("#14FFFFFF");
@@ -464,8 +464,8 @@ void SystemStats::readKdeGlobalsTheme()
         m_textColor = QStringLiteral("#FFFFFF");
         m_subTextColor = QStringLiteral("#A0AEC0"); // Gris claro de alta legibilidad (Tailwind/Nord Slate)
 
-        // Fondo de tarjeta con translucidez difusa satinada (Frosted Privacy Glass - opacidad 0.92 = alpha EB)
-        m_cardBackground = QStringLiteral("#EB%1%2%3")
+        // Fondo de tarjeta con translucidez difusa satinada (Frosted Privacy Glass - opacidad 0.88 = alpha E0)
+        m_cardBackground = QStringLiteral("#E0%1%2%3")
                            .arg(viewR, 2, 16, QLatin1Char('0'))
                            .arg(viewG, 2, 16, QLatin1Char('0'))
                            .arg(viewB, 2, 16, QLatin1Char('0'));
@@ -479,7 +479,7 @@ void SystemStats::readKdeGlobalsTheme()
         m_textColor = QStringLiteral("#111827");
         m_subTextColor = QStringLiteral("#4B5563");
 
-        m_cardBackground = QStringLiteral("#EB%1%2%3")
+        m_cardBackground = QStringLiteral("#E0%1%2%3")
                            .arg(viewR, 2, 16, QLatin1Char('0'))
                            .arg(viewG, 2, 16, QLatin1Char('0'))
                            .arg(viewB, 2, 16, QLatin1Char('0'));

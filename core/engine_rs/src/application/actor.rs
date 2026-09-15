@@ -86,16 +86,48 @@ impl RavenControllerActor {
                             }
                         }
                         CompositorEvent::TopologyChanged(topology) => {
+                            info!("[WAYLAND] Topología actualizada recibida directamente de Wayland: {} salidas descubiertas", topology.output_nodes.len());
+                            let engine = self.controller.get_engine_mut();
+                            for node in &topology.output_nodes {
+                                // Para cada pantalla detectada por Wayland, mapear o actualizar su geometría nativa
+                                let ws_prefix = format!("{}||", node.name);
+                                for (ws_id, rect) in engine.current_workspaces.iter_mut() {
+                                    if ws_id.starts_with(&ws_prefix) {
+                                        *rect = node.rect;
+                                    }
+                                }
+                                // Si no existía para default, asegurarla
+                                let default_ws = format!("{}||default", node.name);
+                                engine.current_workspaces.entry(default_ws).or_insert(node.rect);
+                            }
                             self.current_topology = topology;
+                            let _ = self.controller.commit_layout();
                         }
                     }
                 }
                 RavenMessage::KWinBridge(kwin_msg) => match kwin_msg {
                     KWinBridgeMessage::SyncState { payload_json, reply } => {
                         self.last_payload_json = payload_json.clone();
-                        let (workspaces, mut windows, topology) = parse_payload(&payload_json)
+                        let (mut workspaces, mut windows, topology) = parse_payload(&payload_json)
                             .unwrap_or_else(|_| (HashMap::new(), Vec::new(), Topology::default()));
                         
+                        // Si KWin no envía geometrías de pantalla o vienen incompletas,
+                        // las complementamos automáticamente con la topología autoritativa de Wayland
+                        if !self.current_topology.output_nodes.is_empty() {
+                            let desks = if !topology.desktops.is_empty() {
+                                topology.desktops.clone()
+                            } else {
+                                vec!["default_desk".to_string()]
+                            };
+
+                            for node in &self.current_topology.output_nodes {
+                                for desk in &desks {
+                                    let ws_id = format!("{}||{}", node.name, desk);
+                                    workspaces.entry(ws_id).or_insert(node.rect);
+                                }
+                            }
+                        }
+
                         // Preservar la bandera de flotación dinámica si Rust ya mantiene la ventana en Quick Peek
                         for win in &mut windows {
                             if self.controller.get_engine().dynamic_floating_windows.contains(&win.window_id) {
@@ -103,7 +135,11 @@ impl RavenControllerActor {
                             }
                         }
 
-                        self.current_topology = topology.clone();
+                        if !topology.outputs.is_empty() || !topology.desktops.is_empty() {
+                            self.current_topology.outputs = topology.outputs;
+                            self.current_topology.desktops = topology.desktops;
+                            self.current_topology.current_desktop = topology.current_desktop;
+                        }
                         self.controller.active_window_id = self.active_window_id.clone();
                         
                         let mut all_commands = Vec::new();

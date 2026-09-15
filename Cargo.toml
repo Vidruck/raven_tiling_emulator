@@ -2,6 +2,7 @@
 members = [
     "crates/raven_core",
     "crates/raven_backend_kwin",
+    "crates/raven_backend_wayland",
     "core/engine_rs",
     "raven_gui"
 ]

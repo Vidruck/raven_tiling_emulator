@@ -47,26 +47,20 @@ function syncState() {
   const desks = workspace.desktops || [];
   const currentDesk = workspace.currentDesktop;
 
+  // Wayland provee la topología autoritativa de monitores directamente en Rust (raven_backend_wayland).
+  // Únicamente si se requiere fallback inicial o calibración de paneles Plasma, podemos obtener el área útil.
+  // Evitamos iterar pesadamente combinatorias innecesarias en cada syncState.
   try {
     for (let o = 0; o < outs.length; o++) {
       const output = outs[o];
       const outName = output ? output.name : "default";
-
-      if (desks && desks.length > 0) {
-        for (let d = 0; d < desks.length; d++) {
-          const desktop = desks[d];
-          const deskId = desktop ? desktop.id.toString() : "default_desk";
-          const wsId = outName + "||" + deskId;
-          screens[wsId] = getSafeScreenGeometry(output, desktop);
-        }
-      } else {
-        const deskId = currentDesk ? currentDesk.id.toString() : "default_desk";
-        const wsId = outName + "||" + deskId;
-        screens[wsId] = getSafeScreenGeometry(output, currentDesk);
-      }
+      // Solo registramos el área útil básica por pantalla para respetar paneles de Plasma
+      const deskId = currentDesk ? currentDesk.id.toString() : "default_desk";
+      const wsId = outName + "||" + deskId;
+      screens[wsId] = getSafeScreenGeometry(output, currentDesk);
     }
   } catch (e) {
-    Logger.error("syncState", "Error iterando topología de pantallas", e);
+    Logger.error("syncState", "Error ligero obteniendo topología de pantallas", e);
   }
 
   for (let i = 0; i < windows.length; i++) {

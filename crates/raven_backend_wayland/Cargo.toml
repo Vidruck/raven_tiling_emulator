@@ -1,0 +1,19 @@
+[package]
+name = "raven_backend_wayland"
+version = "4.0.0"
+edition = "2021"
+description = "Adaptador de backend Wayland nativo para Raven Tiling mediante wayland-client y protocolos extendidos"
+license = "GPL-3.0"
+
+[dependencies]
+raven_core = { path = "../raven_core" }
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging", "unstable"] }
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+tokio = { version = "1.37", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+futures = "0.3"

@@ -20,6 +20,15 @@ Con el lanzamiento de la **Versión 3.4**, Raven consolida su suite completa que
 
 ---
 
+## ⚡ Novedades Principales de la Versión 3.4
+
+### 🌉 Arquitectura "Thin Bridge" y Backend Wayland Nativo
+- **Integración Nativa a Wayland (`raven_backend_wayland`)**: El motor de Rust ahora se conecta directamente al socket `$WAYLAND_DISPLAY` para consumir el protocolo `wl_output`. Las resoluciones, coordenadas físicas y escalas de los monitores se leen en tiempo real con latencia sub-milisegundo, sin depender de D-Bus ni de scripts lentos.
+- **Adelgazamiento del Puente KWin ("Thin Bridge")**: El script de KWin fue despojado de sus pesados cálculos combinatorios de geometría espacial. KWin ahora opera exclusivamente en su rol irremplazable: un sensor de ventanas (para detectar foco) y un actuador ultraligero (para aplicar comandos geométricos).
+- **Fusión Sensorial en Rust**: El motor `raven_engine` unifica transparentemente la topología autoritativa y ultrarrápida proveniente de Wayland con el estado de las ventanas proveniente de KWin, eliminando la redundancia y estabilizando el layout ante desconexiones de monitores.
+
+---
+
 ## ⚡ Novedades Principales de la Versión 3.3
 
 ### 🛸 1. Raven Plasmoid & Hub Fusionado (v3.3)
@@ -94,9 +103,9 @@ Raven Tiling se encuentra en una transición arquitectónica mayor hacia una **a
 
 ## 🔮 Hoja de Ruta hacia la Versión 4.0 (Wayland Native Protocols)
 
-Para la futura versión **v4.0.0**, Raven tiene programado llevar la ingestión y control de ventanas al **nivel nativo del protocolo Wayland**, complementando y superando la dependencia exclusiva de scripts intermediarios:
+Para la futura versión **v4.0.0**, Raven expandirá la integración inicial de Wayland (introducida en la v3.4 con `wl_output`) para llevar la ingestión total y control de ventanas al **nivel nativo del protocolo Wayland**, superando definitivamente la dependencia de scripts intermediarios:
 
-1. **Ingestión Directa mediante Protocolos Wayland**:
+1. **Ingestión de Ventanas mediante Protocolos Wayland**:
    - Soporte nativo de `zwlr_foreign_toplevel_manager_v1` y `ext-foreign-toplevel-list-v1`: Descubrimiento, foco, minimización y cierre de superficies gestionado directamente desde Rust en espacio de usuario.
    - Soporte del protocolo `ext-workspace-v1` para la administración de escritorios virtuales independientes.
    - **Latencia Sub-milisegundo**: Tiempos de reacción de sincronización inferiores a 1 ms al interactuar directamente con el socket del servidor Wayland.
@@ -316,9 +325,9 @@ Puedes consultar los términos legales completos en el archivo [LICENSE.txt](LIC
 
 ## ⚠️ Descargo de Responsabilidad (Disclaimer)
 
-**Este software se proporciona "tal cual" (AS IS), sin garantía de ningún tipo.** Raven interactúa directamente con el compositor KWin y el bus D-Bus de Plasma. El usuario asume la responsabilidad de su uso.
+**Este software se proporciona "tal cual" (AS IS), sin garantía de ningún tipo.** Raven interactúa directamente con protocolos de Wayland, el compositor KWin y el bus D-Bus de Plasma. El usuario asume la responsabilidad de su uso.
 
 ---
 
-*Desarrollado por **Alejandro González Hernández (Vidruck)** — Licencia **GPL-3.0**.*  
+*Desarrollado por **Alejandro González Hernández (Vidruck)**.*  
 *¡Huélum!*
