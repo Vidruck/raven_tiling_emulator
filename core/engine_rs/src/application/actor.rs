@@ -204,7 +204,7 @@ impl RavenControllerActor {
                                 let target_id = win.window_id.clone();
                                 let tx_clone = self.tx.clone();
                                 tokio::spawn(async move {
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(480)).await;
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(120)).await;
                                     let _ = tx_clone.send(RavenMessage::Compositor(
                                         raven_core::backend::CompositorEvent::ReleaseQuarantine(target_id)
                                     )).await;
@@ -274,7 +274,7 @@ impl RavenControllerActor {
                                 let target_id = win_node.window_id.clone();
                                 let tx_clone = self.tx.clone();
                                 tokio::spawn(async move {
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(480)).await;
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(60)).await;
                                     let _ = tx_clone.send(RavenMessage::Compositor(
                                         raven_core::backend::CompositorEvent::ReleaseQuarantine(target_id)
                                     )).await;
