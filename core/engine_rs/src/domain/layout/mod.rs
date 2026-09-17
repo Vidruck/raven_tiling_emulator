@@ -7,12 +7,15 @@
 pub mod divisor;
 pub mod dwindle_bsp;
 pub mod inverted_strict_dwindle;
+pub mod lua_layout;
 pub mod monocle;
 pub mod strategy;
 pub mod strict_dwindle;
 pub mod tall;
 pub mod topology;
 pub mod utils;
+
+pub use lua_layout::LuaLayoutStrategy;
 
 pub use divisor::DivisorStrategy;
 pub use dwindle_bsp::DwindleBSPStrategy;

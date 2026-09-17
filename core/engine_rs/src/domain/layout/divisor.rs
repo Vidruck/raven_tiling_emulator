@@ -60,7 +60,10 @@ impl LayoutStrategy for DivisorStrategy {
         };
 
         // 3. Dividir el ancho del contenedor respetando requerimientos mínimos y ratios horizontales
-        let mins: Vec<i32> = active_windows.iter().map(|w| std::cmp::max(w.min_w, 80)).collect();
+        let mins: Vec<i32> = active_windows
+            .iter()
+            .map(|w| std::cmp::max(w.min_w, 80))
+            .collect();
         let weights: Vec<Option<f32>> = active_windows.iter().map(|w| w.custom_w_ratio).collect();
         let widths = distribute_weighted_sizes(container.width, &mins, &weights);
 

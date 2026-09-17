@@ -105,7 +105,7 @@ impl RavenController {
             path.push("raven");
             let _ = tokio::fs::create_dir_all(&path).await;
             path.push("history.json");
-            
+
             if let Ok(json) = serde_json::to_string(&history) {
                 let _ = tokio::fs::write(path, json).await;
             }
@@ -159,10 +159,15 @@ impl RavenController {
     /// # Retorno
     /// Verdadero (true) si la ventana está penalizada u oscilando; falso (false) de lo contrario.
     fn is_window_flapping(&mut self, win: &WindowNode) -> bool {
-        if win.strict_birth || self.engine.dynamic_floating_windows.contains(&win.window_id) {
+        if win.strict_birth
+            || self
+                .engine
+                .dynamic_floating_windows
+                .contains(&win.window_id)
+        {
             return false; // Las apps en cuarentena o en Quick Peek tienen pase libre
         }
-        
+
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -255,13 +260,14 @@ impl RavenController {
         workspaces: HashMap<String, Rect>,
         windows: Vec<WindowNode>,
     ) -> Result<Vec<RavenAction>, RavenError> {
-
         let mut history_changed = self.engine.update_history(&windows);
 
         // Si hay una ventana activa especificada, promoverla como MRU en el historial cíclico
         if let Some(ref act_id) = self.active_window_id {
             if !act_id.is_empty()
-                && windows.iter().any(|w| &w.window_id == act_id && !w.is_floating)
+                && windows
+                    .iter()
+                    .any(|w| &w.window_id == act_id && !w.is_floating)
                 && self.engine.promote_to_recent(act_id)
             {
                 history_changed = true;
@@ -342,7 +348,6 @@ impl RavenController {
                     });
                 }
             }
-
         }
 
         for evicted_id in &evicted_windows {
@@ -370,8 +375,6 @@ impl RavenController {
                         continue;
                     }
                 }
-
-
 
                 info!(
                     "[TOPOLOGY] Desalojo BSP sin escape para {}. Minimizando.",
@@ -415,7 +418,9 @@ impl RavenController {
                     // Ya manejado por evicted_windows arriba
                     tracing::warn!(
                         "[SATURACIÓN] Pantalla {} sobrecargada: {} ventanas / Cmax={}",
-                        ws_id, ws_active, cap.cmax
+                        ws_id,
+                        ws_active,
+                        cap.cmax
                     );
                 }
                 SaturationState::Fluid => {}
@@ -433,7 +438,7 @@ impl RavenController {
                 let dy = (win_node.geometry.y - rect.y).abs();
                 let dw = (win_node.geometry.width - rect.width).abs();
                 let dh = (win_node.geometry.height - rect.height).abs();
-                
+
                 // Tolerancia de 2px para redondeos enteros de gaps
                 if dx <= 2 && dy <= 2 && dw <= 2 && dh <= 2 {
                     confirmed_layout.insert(wid.clone(), *rect);
@@ -488,7 +493,7 @@ impl RavenController {
         topology: &crate::domain::geometry::Topology,
     ) -> Result<(bool, Vec<RavenAction>), RavenError> {
         self.active_window_id = active_window_id.clone();
-        
+
         let windows: Vec<WindowNode> = self.engine.current_windows.values().cloned().collect();
         self.engine.update_history(&windows);
         let mut needs_recalc = false;
@@ -502,7 +507,10 @@ impl RavenController {
                 // en su defecto, recurre al historial reciente de ventanas no minimizadas.
                 let target_wid = self.active_window_id.clone().or_else(|| {
                     self.engine.window_history.back().cloned().or_else(|| {
-                        windows.iter().find(|w| !w.is_minimized).map(|w| w.window_id.clone())
+                        windows
+                            .iter()
+                            .find(|w| !w.is_minimized)
+                            .map(|w| w.window_id.clone())
                     })
                 });
 
@@ -515,7 +523,10 @@ impl RavenController {
                         if let Some(win) = self.engine.current_windows.get_mut(&wid) {
                             win.is_floating = false;
                         }
-                        info!("[CONTROLLER] Ventana {} devuelta a la pila de mosaico (Tiling)", wid);
+                        info!(
+                            "[CONTROLLER] Ventana {} devuelta a la pila de mosaico (Tiling)",
+                            wid
+                        );
                         commands.push(RavenAction::SetFloating {
                             window_id: wid,
                             floating: false,
@@ -543,7 +554,10 @@ impl RavenController {
                 let enabled = self.engine.toggle_tiling();
                 self.last_known_layout.clear();
                 if enabled {
-                    Self::send_osd_notification("Modo Mosaico", "Activado (Reorganizando ventanas)");
+                    Self::send_osd_notification(
+                        "Modo Mosaico",
+                        "Activado (Reorganizando ventanas)",
+                    );
                 } else {
                     Self::send_osd_notification("Modo Mosaico", "Desactivado (Modo Flotante)");
                 }
@@ -551,12 +565,18 @@ impl RavenController {
             }
             "cycle_layout" => {
                 let current_ws = self.active_window_id.as_ref().and_then(|wid| {
-                    self.engine.current_windows.get(wid).map(|w| w.workspace_id.clone())
+                    self.engine
+                        .current_windows
+                        .get(wid)
+                        .map(|w| w.workspace_id.clone())
                 });
 
                 let new_layout_name;
                 if let Some(ws_id) = current_ws {
-                    let current = self.engine.config.workspace_layouts
+                    let current = self
+                        .engine
+                        .config
+                        .workspace_layouts
                         .get(&ws_id)
                         .cloned()
                         .unwrap_or_else(|| self.engine.config.layout_type.clone());
@@ -569,11 +589,18 @@ impl RavenController {
                         "inverted_strict_dwindle" => "divisor",
                         "divisor" => "raven",
                         _ => "raven",
-                    }.to_string();
+                    }
+                    .to_string();
 
                     new_layout_name = next.clone();
-                    self.engine.config.workspace_layouts.insert(ws_id.clone(), next.clone());
-                    info!("[CONTROLLER] Layout de Workspace {} cambiado a: {}", ws_id, next);
+                    self.engine
+                        .config
+                        .workspace_layouts
+                        .insert(ws_id.clone(), next.clone());
+                    info!(
+                        "[CONTROLLER] Layout de Workspace {} cambiado a: {}",
+                        ws_id, next
+                    );
                 } else {
                     self.engine.config.layout_type = match self.engine.config.layout_type.as_str() {
                         "raven" => "tall".to_string(),
@@ -585,9 +612,12 @@ impl RavenController {
                         _ => "raven".to_string(),
                     };
                     new_layout_name = self.engine.config.layout_type.clone();
-                    info!("[CONTROLLER] Layout global cambiado a: {}", self.engine.config.layout_type);
+                    info!(
+                        "[CONTROLLER] Layout global cambiado a: {}",
+                        self.engine.config.layout_type
+                    );
                 }
-                
+
                 let readable_name = match new_layout_name.as_str() {
                     "tall" => "Tall (Columna)",
                     "monocle" => "Monocle (Monocromático)",
@@ -596,7 +626,10 @@ impl RavenController {
                     "divisor" => "Divisor (Cuadrícula)",
                     _ => "Raven BSP (Foveal)",
                 };
-                Self::send_osd_notification("Disposición de Ventanas", &format!("Layout: {}", readable_name));
+                Self::send_osd_notification(
+                    "Disposición de Ventanas",
+                    &format!("Layout: {}", readable_name),
+                );
 
                 needs_recalc = true;
                 config_changed = true;
@@ -604,21 +637,29 @@ impl RavenController {
             "increment_gaps" => {
                 self.engine.config.default_gaps =
                     std::cmp::max(0, self.engine.config.default_gaps + _payload);
-                let sign = if _payload >= 0 { format!("+{}", _payload) } else { format!("{}", _payload) };
-                Self::send_osd_notification("Márgenes de Ventana", &format!("Gaps {} px (Total: {} px)", sign, self.engine.config.default_gaps));
+                let sign = if _payload >= 0 {
+                    format!("+{}", _payload)
+                } else {
+                    format!("{}", _payload)
+                };
+                Self::send_osd_notification(
+                    "Márgenes de Ventana",
+                    &format!(
+                        "Gaps {} px (Total: {} px)",
+                        sign, self.engine.config.default_gaps
+                    ),
+                );
                 needs_recalc = true;
                 config_changed = true;
             }
             // BUG-01: handlers de nmaster ahora implementados correctamente
             "increment_nmaster" => {
-                self.engine.config.nmaster =
-                    (self.engine.config.nmaster + 1).min(8);
+                self.engine.config.nmaster = (self.engine.config.nmaster + 1).min(8);
                 needs_recalc = true;
                 config_changed = true;
             }
             "decrement_nmaster" => {
-                self.engine.config.nmaster =
-                    self.engine.config.nmaster.saturating_sub(1).max(1);
+                self.engine.config.nmaster = self.engine.config.nmaster.saturating_sub(1).max(1);
                 needs_recalc = true;
                 config_changed = true;
             }
@@ -680,9 +721,11 @@ impl RavenController {
                     });
 
                     let effective_active_id = active_window_id.clone().or_else(|| {
-                        self.engine.window_history.back().cloned().or_else(|| {
-                            active_windows.first().map(|w| w.window_id.clone())
-                        })
+                        self.engine
+                            .window_history
+                            .back()
+                            .cloned()
+                            .or_else(|| active_windows.first().map(|w| w.window_id.clone()))
                     });
 
                     if let Some(ref active_id) = effective_active_id {
@@ -775,22 +818,29 @@ impl RavenController {
 
                 let effective_active_id = active_window_id.clone().or_else(|| {
                     self.engine.window_history.back().cloned().or_else(|| {
-                        windows.iter().find(|w| !w.is_floating && !w.is_minimized).map(|w| w.window_id.clone())
+                        windows
+                            .iter()
+                            .find(|w| !w.is_floating && !w.is_minimized)
+                            .map(|w| w.window_id.clone())
                     })
                 });
 
                 let fallback_map: HashMap<String, Rect>;
-                let effective_layout = if self.last_known_layout.contains_key(effective_active_id.as_deref().unwrap_or("")) && self.last_known_layout.len() > 1 {
+                let effective_layout = if self
+                    .last_known_layout
+                    .contains_key(effective_active_id.as_deref().unwrap_or(""))
+                    && self.last_known_layout.len() > 1
+                {
                     &self.last_known_layout
                 } else {
                     // Fallback resiliente: usar geometrías directas de windows si last_known_layout aún no ha sido confirmado por KWin
-                    fallback_map = windows.iter()
+                    fallback_map = windows
+                        .iter()
                         .filter(|w| !w.is_floating && !w.is_minimized)
                         .map(|w| (w.window_id.clone(), w.geometry))
                         .collect();
                     &fallback_map
                 };
-
 
                 if let Some(ref act_id) = effective_active_id {
                     if let Some(target_id) = crate::domain::layout::topology::find_directional_focus(
@@ -811,7 +861,10 @@ impl RavenController {
             | "migrate_active_to_prev_desktop" => {
                 let target_wid = active_window_id.clone().or_else(|| {
                     self.engine.window_history.back().cloned().or_else(|| {
-                        windows.iter().find(|w| !w.is_floating && !w.is_minimized).map(|w| w.window_id.clone())
+                        windows
+                            .iter()
+                            .find(|w| !w.is_floating && !w.is_minimized)
+                            .map(|w| w.window_id.clone())
                     })
                 });
 
@@ -821,15 +874,22 @@ impl RavenController {
                         let is_prev = action.contains("prev");
                         if is_desktop {
                             let desktops = &topology.desktops;
-                            let current_desk = win_node.desktops.first().cloned().unwrap_or_default();
-                            
-                            if let Some(current_idx) = desktops.iter().position(|d| d == &current_desk) {
+                            let current_desk =
+                                win_node.desktops.first().cloned().unwrap_or_default();
+
+                            if let Some(current_idx) =
+                                desktops.iter().position(|d| d == &current_desk)
+                            {
                                 let target_idx = if is_prev {
-                                    if current_idx == 0 { desktops.len() - 1 } else { current_idx - 1 }
+                                    if current_idx == 0 {
+                                        desktops.len() - 1
+                                    } else {
+                                        current_idx - 1
+                                    }
                                 } else {
                                     (current_idx + 1) % desktops.len()
                                 };
-                                
+
                                 if let Some(target_desk) = desktops.get(target_idx) {
                                     commands.push(RavenAction::MigrateToDesktop {
                                         window_id: wid.clone(),
@@ -837,9 +897,11 @@ impl RavenController {
                                     });
                                     self.flap_registry.remove(wid);
                                     self.last_known_layout.remove(wid);
-                                    if let Some(target_w) = self.engine.current_windows.get_mut(wid) {
+                                    if let Some(target_w) = self.engine.current_windows.get_mut(wid)
+                                    {
                                         target_w.desktops = vec![target_desk.clone()];
-                                        target_w.workspace_id = format!("{}||{}", target_w.output, target_desk);
+                                        target_w.workspace_id =
+                                            format!("{}||{}", target_w.output, target_desk);
                                     }
                                     needs_recalc = true;
                                     Self::send_osd_notification(
@@ -851,14 +913,19 @@ impl RavenController {
                         } else {
                             let outputs = &topology.outputs;
                             let current_out = &win_node.output;
-                            
-                            if let Some(current_idx) = outputs.iter().position(|o| o == current_out) {
+
+                            if let Some(current_idx) = outputs.iter().position(|o| o == current_out)
+                            {
                                 let target_idx = if is_prev {
-                                    if current_idx == 0 { outputs.len() - 1 } else { current_idx - 1 }
+                                    if current_idx == 0 {
+                                        outputs.len() - 1
+                                    } else {
+                                        current_idx - 1
+                                    }
                                 } else {
                                     (current_idx + 1) % outputs.len()
                                 };
-                                
+
                                 if let Some(target_out) = outputs.get(target_idx) {
                                     commands.push(RavenAction::MigrateToOutput {
                                         window_id: wid.clone(),
@@ -866,8 +933,10 @@ impl RavenController {
                                     });
                                     self.flap_registry.remove(wid);
                                     self.last_known_layout.remove(wid);
-                                    if let Some(target_w) = self.engine.current_windows.get_mut(wid) {
-                                        let desk = target_w.desktops.first().cloned().unwrap_or_default();
+                                    if let Some(target_w) = self.engine.current_windows.get_mut(wid)
+                                    {
+                                        let desk =
+                                            target_w.desktops.first().cloned().unwrap_or_default();
                                         target_w.output = target_out.clone();
                                         target_w.workspace_id = format!("{}||{}", target_out, desk);
                                     }
@@ -889,7 +958,7 @@ impl RavenController {
                 warn!("[CONTROLLER] Error al persistir configuración: {}", e);
             }
         }
-        
+
         Ok((needs_recalc, commands))
     }
 }

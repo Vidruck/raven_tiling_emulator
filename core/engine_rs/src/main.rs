@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (actor_tx, actor_rx) = tokio::sync::mpsc::channel(256);
     let actor = raven_engine::application::actor::RavenControllerActor::new(controller, actor_rx);
-    
+
     // Iniciar el actor en un hilo en background
     tokio::spawn(actor.run());
 
@@ -46,13 +46,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let actor_tx_wl = actor_tx.clone();
     tokio::spawn(async move {
         while let Some(event) = wl_rx.recv().await {
-            let _ = actor_tx_wl.send(raven_engine::application::actor::RavenMessage::Compositor(event)).await;
+            let _ = actor_tx_wl
+                .send(raven_engine::application::actor::RavenMessage::Compositor(
+                    event,
+                ))
+                .await;
         }
     });
 
     use raven_core::backend::CompositorBackend;
     if let Err(e) = wayland_backend.start_listener(wl_tx).await {
-        tracing::warn!("⚠️ No se pudo inicializar listener Wayland nativo: {}. Se continuará con KWin.", e);
+        tracing::warn!(
+            "⚠️ No se pudo inicializar listener Wayland nativo: {}. Se continuará con KWin.",
+            e
+        );
     } else {
         info!("🚀 Listener nativo Wayland conectado y escuchando socket exitosamente.");
     }

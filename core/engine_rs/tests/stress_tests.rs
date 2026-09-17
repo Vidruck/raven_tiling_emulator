@@ -25,7 +25,12 @@ async fn test_saturation_flood() {
                 is_floating: false,
                 is_minimized: false,
                 is_pip: false,
-                geometry: Rect { x: 0, y: 0, width: 800, height: 600 },
+                geometry: Rect {
+                    x: 0,
+                    y: 0,
+                    width: 800,
+                    height: 600,
+                },
                 min_w: 0,
                 min_h: 0,
                 strict_birth: false,
@@ -44,7 +49,7 @@ async fn test_saturation_flood() {
     for task in tasks {
         let _ = task.await;
     }
-    
+
     let mut guard = controller.lock().await;
     let _ = guard.commit_layout(); // Execute the geometry calculation once at the end
     assert!(guard.is_tiling_enabled());
@@ -57,7 +62,15 @@ async fn test_rebellious_window_eviction() {
     let mut controller = RavenController::new(engine);
 
     let mut workspaces = HashMap::new();
-    workspaces.insert("default||default".to_string(), Rect { x: 0, y: 0, width: 1000, height: 1000 });
+    workspaces.insert(
+        "default||default".to_string(),
+        Rect {
+            x: 0,
+            y: 0,
+            width: 1000,
+            height: 1000,
+        },
+    );
 
     let mut windows = vec![];
     for i in 0..4 {
@@ -69,7 +82,12 @@ async fn test_rebellious_window_eviction() {
             is_floating: false,
             is_minimized: false,
             is_pip: false,
-            geometry: Rect { x: 0, y: 0, width: 100, height: 100 },
+            geometry: Rect {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+            },
             min_w: if i == 2 { 2000 } else { 0 }, // Rebellious window demands 2000px width on a 1000px screen
             min_h: 0,
             strict_birth: false,
@@ -89,11 +107,16 @@ async fn test_rebellious_window_eviction() {
     // En v3.0, utils::distribute_sizes sanitiza defensivamente min_w para evitar colapsos.
     // Verificamos que la ventana rebelde no desborde la pantalla (width <= 1000) y reciba comandos válidos.
     let win2_command = commands.iter().find(|cmd| match cmd {
-        raven_engine::domain::action::RavenAction::MoveWindow { window_id, width, .. } => window_id == "win-2" && *width <= 1000,
+        raven_engine::domain::action::RavenAction::MoveWindow {
+            window_id, width, ..
+        } => window_id == "win-2" && *width <= 1000,
         _ => false,
     });
-    
-    assert!(win2_command.is_some(), "Rebellious window should be safely clamped within screen bounds");
+
+    assert!(
+        win2_command.is_some(),
+        "Rebellious window should be safely clamped within screen bounds"
+    );
 }
 
 #[tokio::test]
@@ -136,7 +159,7 @@ async fn test_concurrent_settings_conflict() {
 
     let guard = controller.lock().await;
     let final_gaps = guard.get_config().default_gaps;
-    
+
     // Mientras no entre en pánico, maneja la concurrencia de forma segura.
     // El valor final debe ser lógicamente consistente (por ejemplo, 6).
     assert!(final_gaps == 6 || final_gaps > 0);
@@ -152,7 +175,15 @@ async fn test_rebellious_window_flood() {
     let workspace_id = format!("{}||{}", desktop, output);
 
     let mut workspaces = HashMap::new();
-    workspaces.insert(workspace_id.clone(), raven_core::geometry::Rect { x: 0, y: 0, width: 1920, height: 1080 });
+    workspaces.insert(
+        workspace_id.clone(),
+        raven_core::geometry::Rect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        },
+    );
 
     // 1. Simular rebelde enviando geometrías basura rápidamente (tormenta de nacimiento)
     for i in 0..100 {
@@ -164,7 +195,12 @@ async fn test_rebellious_window_flood() {
             is_floating: false,
             is_minimized: false,
             is_pip: false,
-            geometry: raven_core::geometry::Rect { x: i, y: i, width: 800 + i, height: 600 + i },
+            geometry: raven_core::geometry::Rect {
+                x: i,
+                y: i,
+                width: 800 + i,
+                height: 600 + i,
+            },
             min_w: 500,
             min_h: 500,
             strict_birth: true,
@@ -177,8 +213,10 @@ async fn test_rebellious_window_flood() {
         }];
 
         let mut guard = controller.lock().await;
-        let actions = guard.handle_state_change(workspaces.clone(), windows).unwrap();
-        
+        let actions = guard
+            .handle_state_change(workspaces.clone(), windows)
+            .unwrap();
+
         // Como es la única ventana, Rust debe exigir que ocupe todo el ancho
         // Como cambia la geometría, Rust debe emitir comandos RequestFeedback
         assert!(!actions.is_empty());
@@ -194,7 +232,12 @@ async fn test_rebellious_window_flood() {
             is_floating: false,
             is_minimized: false,
             is_pip: false,
-            geometry: raven_core::geometry::Rect { x: 0, y: 0, width: 800, height: 600 },
+            geometry: raven_core::geometry::Rect {
+                x: 0,
+                y: 0,
+                width: 800,
+                height: 600,
+            },
             min_w: 500,
             min_h: 500,
             strict_birth: false,
@@ -213,7 +256,12 @@ async fn test_rebellious_window_flood() {
             is_floating: false,
             is_minimized: false,
             is_pip: false,
-            geometry: raven_core::geometry::Rect { x: 0, y: 0, width: 200, height: 200 },
+            geometry: raven_core::geometry::Rect {
+                x: 0,
+                y: 0,
+                width: 200,
+                height: 200,
+            },
             min_w: 100,
             min_h: 100,
             strict_birth: false,
@@ -223,11 +271,13 @@ async fn test_rebellious_window_flood() {
             caption: String::new(),
             custom_w_ratio: None,
             custom_h_ratio: None,
-        }
+        },
     ];
 
     let mut guard = controller.lock().await;
-    let actions = guard.handle_state_change(workspaces.clone(), windows).unwrap();
+    let actions = guard
+        .handle_state_change(workspaces.clone(), windows)
+        .unwrap();
 
     // Rust no debe ahogarse. Debe emitir comandos para 2 ventanas.
     // Verificamos que se calculó el layout partiéndolo en 2 (ej. anchos de ~948).
@@ -238,7 +288,7 @@ async fn test_rebellious_window_flood() {
             move_count += 1;
         }
     }
-    
+
     assert_eq!(move_count, 2);
 }
 
@@ -262,7 +312,15 @@ async fn test_all_windows_dynamically_floated_and_restored() {
 
     let workspace_id = "DP-1||desk_1".to_string();
     let mut workspaces = HashMap::new();
-    workspaces.insert(workspace_id.clone(), Rect { x: 0, y: 0, width: 1920, height: 1080 });
+    workspaces.insert(
+        workspace_id.clone(),
+        Rect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        },
+    );
 
     let window_count = 10;
     let mut windows = Vec::new();
@@ -275,7 +333,12 @@ async fn test_all_windows_dynamically_floated_and_restored() {
             is_floating: false,
             is_minimized: false,
             is_pip: false,
-            geometry: Rect { x: 0, y: 0, width: 400, height: 300 },
+            geometry: Rect {
+                x: 0,
+                y: 0,
+                width: 400,
+                height: 300,
+            },
             min_w: 100,
             min_h: 100,
             strict_birth: false,
@@ -289,21 +352,35 @@ async fn test_all_windows_dynamically_floated_and_restored() {
     }
 
     // Registrar estado inicial de 10 ventanas en mosaico
-    let initial_actions = controller.handle_state_change(workspaces.clone(), windows.clone()).unwrap();
-    assert!(!initial_actions.is_empty(), "El estado inicial de 10 ventanas debe generar layout");
+    let initial_actions = controller
+        .handle_state_change(workspaces.clone(), windows.clone())
+        .unwrap();
+    assert!(
+        !initial_actions.is_empty(),
+        "El estado inicial de 10 ventanas debe generar layout"
+    );
 
     // 1. El usuario presiona Meta+Shift+F en cada una de las 10 ventanas consecutivamente
     for i in 0..window_count {
         let win_id = format!("app-{}", i);
         let (needs_recalc, shortcut_cmds) = controller
-            .handle_shortcut("toggle_floating".to_string(), 0, Some(win_id.clone()), &topology)
+            .handle_shortcut(
+                "toggle_floating".to_string(),
+                0,
+                Some(win_id.clone()),
+                &topology,
+            )
             .expect("handle_shortcut no debe fallar con toggle_floating");
 
         assert!(needs_recalc);
         assert_eq!(shortcut_cmds.len(), 1);
 
         match &shortcut_cmds[0] {
-            raven_core::action::RavenAction::SetFloating { window_id, floating, keep_above } => {
+            raven_core::action::RavenAction::SetFloating {
+                window_id,
+                floating,
+                keep_above,
+            } => {
                 assert_eq!(window_id, &win_id);
                 assert!(*floating);
                 assert!(*keep_above);
@@ -312,31 +389,48 @@ async fn test_all_windows_dynamically_floated_and_restored() {
         }
 
         // Simular que el actor / pipeline ejecuta commit_layout tras needs_recalc
-        let recalc_cmds = controller.commit_layout().expect("commit_layout no debe entrar en pánico");
-        
+        let recalc_cmds = controller
+            .commit_layout()
+            .expect("commit_layout no debe entrar en pánico");
+
         // El número de ventanas restantes en el mosaico disminuye progresivamente: (window_count - 1 - i)
         let remaining_tiled = window_count - 1 - i;
         if remaining_tiled == 0 {
             // Cuando TODAS las ventanas están flotando dinámicamente, el layout de mosaico queda vacío de forma segura
-            assert!(recalc_cmds.is_empty(), "Con 0 ventanas en mosaico no debe haber comandos de movimiento");
+            assert!(
+                recalc_cmds.is_empty(),
+                "Con 0 ventanas en mosaico no debe haber comandos de movimiento"
+            );
         }
     }
 
     // Validar que las 10 ventanas están en dynamic_floating_windows
-    assert_eq!(controller.get_engine().dynamic_floating_windows.len(), window_count);
+    assert_eq!(
+        controller.get_engine().dynamic_floating_windows.len(),
+        window_count
+    );
 
     // 2. El usuario presiona Meta+Shift+F de nuevo para restaurar todas las ventanas al mosaico
     for i in 0..window_count {
         let win_id = format!("app-{}", i);
         let (needs_recalc, shortcut_cmds) = controller
-            .handle_shortcut("toggle_floating".to_string(), 0, Some(win_id.clone()), &topology)
+            .handle_shortcut(
+                "toggle_floating".to_string(),
+                0,
+                Some(win_id.clone()),
+                &topology,
+            )
             .expect("handle_shortcut debe permitir restaurar ventanas al mosaico");
 
         assert!(needs_recalc);
         assert_eq!(shortcut_cmds.len(), 1);
 
         match &shortcut_cmds[0] {
-            raven_core::action::RavenAction::SetFloating { window_id, floating, keep_above } => {
+            raven_core::action::RavenAction::SetFloating {
+                window_id,
+                floating,
+                keep_above,
+            } => {
                 assert_eq!(window_id, &win_id);
                 assert!(!*floating);
                 assert!(!*keep_above);
@@ -344,13 +438,22 @@ async fn test_all_windows_dynamically_floated_and_restored() {
             _ => panic!("Comando inesperado retornado por toggle_floating al restaurar"),
         }
 
-        let recalc_cmds = controller.commit_layout().expect("commit_layout debe reconstruir el mosaico");
-        assert!(!recalc_cmds.is_empty(), "Al reinsertar ventanas, el motor recalcula geometrías válidas");
+        let recalc_cmds = controller
+            .commit_layout()
+            .expect("commit_layout debe reconstruir el mosaico");
+        assert!(
+            !recalc_cmds.is_empty(),
+            "Al reinsertar ventanas, el motor recalcula geometrías válidas"
+        );
         let has_move_target = recalc_cmds.iter().any(|c| match c {
             raven_core::action::RavenAction::MoveWindow { window_id, .. } => window_id == &win_id,
             _ => false,
         });
-        assert!(has_move_target, "La ventana {} restaurada al mosaico debe recibir comando MoveWindow", win_id);
+        assert!(
+            has_move_target,
+            "La ventana {} restaurada al mosaico debe recibir comando MoveWindow",
+            win_id
+        );
     }
 
     // Validar que la pila flotante quedó totalmente vacía y limpia
@@ -429,7 +532,12 @@ async fn test_saturation_cyclic_stack_stress_60_windows() {
 
     // Paso 1: Introducir las 60 ventanas inicialmente todas abiertas
     let mut current_windows: Vec<WindowNode> = (0..total_windows)
-        .map(|i| window_pool.get(&format!("stress-win-{:02}", i)).unwrap().clone())
+        .map(|i| {
+            window_pool
+                .get(&format!("stress-win-{:02}", i))
+                .unwrap()
+                .clone()
+        })
         .collect();
 
     let initial_actions = controller
@@ -440,7 +548,9 @@ async fn test_saturation_cyclic_stack_stress_60_windows() {
     let evicted_ids: Vec<String> = initial_actions
         .iter()
         .filter_map(|action| match action {
-            raven_core::action::RavenAction::MinimizeWindow { window_id } => Some(window_id.clone()),
+            raven_core::action::RavenAction::MinimizeWindow { window_id } => {
+                Some(window_id.clone())
+            }
             _ => None,
         })
         .collect();
@@ -486,7 +596,12 @@ async fn test_saturation_cyclic_stack_stress_60_windows() {
 
         // Preparamos el payload completo de ventanas reflejando el nuevo estado
         current_windows = (0..total_windows)
-            .map(|i| window_pool.get(&format!("stress-win-{:02}", i)).unwrap().clone())
+            .map(|i| {
+                window_pool
+                    .get(&format!("stress-win-{:02}", i))
+                    .unwrap()
+                    .clone()
+            })
             .collect();
 
         let actions = controller
@@ -496,7 +611,9 @@ async fn test_saturation_cyclic_stack_stress_60_windows() {
         let new_evictions: Vec<String> = actions
             .iter()
             .filter_map(|action| match action {
-                raven_core::action::RavenAction::MinimizeWindow { window_id } => Some(window_id.clone()),
+                raven_core::action::RavenAction::MinimizeWindow { window_id } => {
+                    Some(window_id.clone())
+                }
                 _ => None,
             })
             .collect();
@@ -559,7 +676,15 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
 
     let ws1 = "DP-1||desk_1".to_string();
     let mut workspaces = HashMap::new();
-    workspaces.insert(ws1.clone(), Rect { x: 0, y: 0, width: 1920, height: 1080 });
+    workspaces.insert(
+        ws1.clone(),
+        Rect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        },
+    );
 
     // 1. Inicializar 3 ventanas en mosaico
     let mut windows = vec![
@@ -571,7 +696,12 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
             is_floating: false,
             is_minimized: false,
             is_pip: false,
-            geometry: Rect { x: 0, y: 0, width: 960, height: 1080 },
+            geometry: Rect {
+                x: 0,
+                y: 0,
+                width: 960,
+                height: 1080,
+            },
             min_w: 100,
             min_h: 100,
             strict_birth: false,
@@ -590,7 +720,12 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
             is_floating: false,
             is_minimized: false,
             is_pip: false,
-            geometry: Rect { x: 960, y: 0, width: 960, height: 540 },
+            geometry: Rect {
+                x: 960,
+                y: 0,
+                width: 960,
+                height: 540,
+            },
             min_w: 100,
             min_h: 100,
             strict_birth: false,
@@ -609,7 +744,12 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
             is_floating: false,
             is_minimized: false,
             is_pip: false,
-            geometry: Rect { x: 960, y: 540, width: 960, height: 540 },
+            geometry: Rect {
+                x: 960,
+                y: 540,
+                width: 960,
+                height: 540,
+            },
             min_w: 100,
             min_h: 100,
             strict_birth: false,
@@ -622,7 +762,9 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
         },
     ];
 
-    let init_actions = controller.handle_state_change(workspaces.clone(), windows.clone()).unwrap();
+    let init_actions = controller
+        .handle_state_change(workspaces.clone(), windows.clone())
+        .unwrap();
     assert_eq!(init_actions.len(), 3);
 
     // Activar win-1
@@ -630,92 +772,246 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
 
     // --- A. Atajos de Gaps ---
     // Meta+= (incrementGaps +2)
-    let (recalc, _) = controller.handle_shortcut("increment_gaps".to_string(), 2, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "increment_gaps".to_string(),
+            2,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert_eq!(controller.get_config().default_gaps, 12);
 
     // Meta+- (decrementGaps -2)
-    let (recalc, _) = controller.handle_shortcut("increment_gaps".to_string(), -2, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "increment_gaps".to_string(),
+            -2,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert_eq!(controller.get_config().default_gaps, 10);
 
     // --- B. Atajos de Master (Capacidad y Ratio) ---
     // Meta+] (incrementMaster)
-    let (recalc, _) = controller.handle_shortcut("increment_nmaster".to_string(), 1, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "increment_nmaster".to_string(),
+            1,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert_eq!(controller.get_config().nmaster, 2);
 
     // Meta+[ (decrementMaster)
-    let (recalc, _) = controller.handle_shortcut("decrement_nmaster".to_string(), 1, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "decrement_nmaster".to_string(),
+            1,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert_eq!(controller.get_config().nmaster, 1);
 
     // Meta+H (increaseRatio)
     let initial_ratio = controller.get_config().master_ratio;
-    let (recalc, _) = controller.handle_shortcut("increase_ratio".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "increase_ratio".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert!((controller.get_config().master_ratio - (initial_ratio + 0.05)).abs() < 0.001);
 
     // Meta+L (decreaseRatio)
-    let (recalc, _) = controller.handle_shortcut("decrease_ratio".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "decrease_ratio".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert!((controller.get_config().master_ratio - initial_ratio).abs() < 0.001);
 
     // --- C. Atajos de Ciclado de Layout ---
     // Meta+Shift+L (cycleLayout)
-    let (recalc, _) = controller.handle_shortcut("cycle_layout".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "cycle_layout".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     // raven -> tall
-    let cur_layout = controller.get_config().workspace_layouts.get(&ws1).cloned().unwrap_or(controller.get_config().layout_type.clone());
+    let cur_layout = controller
+        .get_config()
+        .workspace_layouts
+        .get(&ws1)
+        .cloned()
+        .unwrap_or(controller.get_config().layout_type.clone());
     assert_eq!(cur_layout, "tall");
     // Al cambiar de layout, el actor ejecuta commit_layout() para actualizar geometrías
     let move_cmds = controller.commit_layout().unwrap();
     assert!(!move_cmds.is_empty());
     // Simular que KWin converge las ventanas al nuevo layout Tall (win-1 Master izquierda, win-2 Stack der arriba, win-3 Stack der abajo)
     for cmd in move_cmds {
-        if let raven_core::action::RavenAction::MoveWindow { window_id, x, y, width, height } = cmd {
+        if let raven_core::action::RavenAction::MoveWindow {
+            window_id,
+            x,
+            y,
+            width,
+            height,
+        } = cmd
+        {
             if let Some(w) = windows.iter_mut().find(|w| w.window_id == window_id) {
-                w.geometry = Rect { x, y, width, height };
+                w.geometry = Rect {
+                    x,
+                    y,
+                    width,
+                    height,
+                };
             }
         }
     }
-    let _ = controller.handle_state_change(workspaces.clone(), windows.clone()).unwrap();
+    let _ = controller
+        .handle_state_change(workspaces.clone(), windows.clone())
+        .unwrap();
 
     // --- D. Atajos de Redimensionamiento Fino (Window Resizing) ---
     // Meta+Alt+Right (resize_width_inc)
-    let (recalc, _) = controller.handle_shortcut("resize_width_inc".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "resize_width_inc".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
-    assert!(controller.get_engine().current_windows.get("win-1").unwrap().custom_w_ratio.unwrap() > 1.0);
+    assert!(
+        controller
+            .get_engine()
+            .current_windows
+            .get("win-1")
+            .unwrap()
+            .custom_w_ratio
+            .unwrap()
+            > 1.0
+    );
 
     // Meta+Alt+Left (resize_width_dec)
-    let (recalc, _) = controller.handle_shortcut("resize_width_dec".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "resize_width_dec".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
-    assert!((controller.get_engine().current_windows.get("win-1").unwrap().custom_w_ratio.unwrap() - 1.0).abs() < 0.001);
+    assert!(
+        (controller
+            .get_engine()
+            .current_windows
+            .get("win-1")
+            .unwrap()
+            .custom_w_ratio
+            .unwrap()
+            - 1.0)
+            .abs()
+            < 0.001
+    );
 
     // Meta+Alt+Down (resize_height_inc)
-    let (recalc, _) = controller.handle_shortcut("resize_height_inc".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "resize_height_inc".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
-    assert!(controller.get_engine().current_windows.get("win-1").unwrap().custom_h_ratio.unwrap() > 1.0);
+    assert!(
+        controller
+            .get_engine()
+            .current_windows
+            .get("win-1")
+            .unwrap()
+            .custom_h_ratio
+            .unwrap()
+            > 1.0
+    );
 
     // Meta+Alt+Up (resize_height_dec)
-    let (recalc, _) = controller.handle_shortcut("resize_height_dec".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "resize_height_dec".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
-    assert!((controller.get_engine().current_windows.get("win-1").unwrap().custom_h_ratio.unwrap() - 1.0).abs() < 0.001);
+    assert!(
+        (controller
+            .get_engine()
+            .current_windows
+            .get("win-1")
+            .unwrap()
+            .custom_h_ratio
+            .unwrap()
+            - 1.0)
+            .abs()
+            < 0.001
+    );
 
     // --- E. Atajos de Navegación de Foco ---
     // Meta+J (focusNext)
-    let (_, cmds) = controller.handle_shortcut("focus_next".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (_, cmds) = controller
+        .handle_shortcut(
+            "focus_next".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-2"),
+        raven_core::action::RavenAction::FocusWindow { window_id } => {
+            assert_eq!(window_id, "win-2")
+        }
         _ => panic!("Esperado FocusWindow"),
     }
 
     // Meta+K (focusPrev)
-    let (_, cmds) = controller.handle_shortcut("focus_prev".to_string(), 0, Some("win-2".to_string()), &topology).unwrap();
+    let (_, cmds) = controller
+        .handle_shortcut(
+            "focus_prev".to_string(),
+            0,
+            Some("win-2".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-1"),
+        raven_core::action::RavenAction::FocusWindow { window_id } => {
+            assert_eq!(window_id, "win-1")
+        }
         _ => panic!("Esperado FocusWindow"),
     }
 
@@ -723,7 +1019,14 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
     // En Tall con nmaster=1, la ventana maestra está a la izquierda (win-1, x: 10, w: 945).
     // Las ventanas del stack están a la derecha (x: 965): win-2 arriba (y: 10) y win-3 abajo (y: 545).
     // Meta+Right (focusRight) desde win-1 hacia la columna derecha (win-2 o win-3)
-    let (_, cmds) = controller.handle_shortcut("focus_right".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (_, cmds) = controller
+        .handle_shortcut(
+            "focus_right".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert_eq!(cmds.len(), 1);
     let right_target = match &cmds[0] {
         raven_core::action::RavenAction::FocusWindow { window_id } => {
@@ -734,45 +1037,91 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
     };
 
     // Meta+Left (focusLeft) desde la ventana derecha hacia win-1 (Master a la izquierda)
-    let (_, cmds) = controller.handle_shortcut("focus_left".to_string(), 0, Some(right_target), &topology).unwrap();
+    let (_, cmds) = controller
+        .handle_shortcut("focus_left".to_string(), 0, Some(right_target), &topology)
+        .unwrap();
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-1"),
+        raven_core::action::RavenAction::FocusWindow { window_id } => {
+            assert_eq!(window_id, "win-1")
+        }
         _ => panic!("Esperado FocusWindow a la izquierda"),
     }
 
     // Meta+Down (focusDown) desde win-2 (arriba) hacia win-3 (abajo)
-    let (_, cmds) = controller.handle_shortcut("focus_down".to_string(), 0, Some("win-2".to_string()), &topology).unwrap();
+    let (_, cmds) = controller
+        .handle_shortcut(
+            "focus_down".to_string(),
+            0,
+            Some("win-2".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-3"),
+        raven_core::action::RavenAction::FocusWindow { window_id } => {
+            assert_eq!(window_id, "win-3")
+        }
         _ => panic!("Esperado FocusWindow abajo"),
     }
 
     // Meta+Up (focusUp) desde win-3 (abajo) hacia win-2 (arriba)
-    let (_, cmds) = controller.handle_shortcut("focus_up".to_string(), 0, Some("win-3".to_string()), &topology).unwrap();
+    let (_, cmds) = controller
+        .handle_shortcut(
+            "focus_up".to_string(),
+            0,
+            Some("win-3".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::FocusWindow { window_id } => assert_eq!(window_id, "win-2"),
+        raven_core::action::RavenAction::FocusWindow { window_id } => {
+            assert_eq!(window_id, "win-2")
+        }
         _ => panic!("Esperado FocusWindow arriba"),
     }
 
     // --- F. Intercambio de Posiciones (Swap) ---
     // Meta+Shift+J (swapNext)
-    let (recalc, _) = controller.handle_shortcut("swap_next".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "swap_next".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
 
     // Meta+Shift+K (swapPrev)
-    let (recalc, _) = controller.handle_shortcut("swap_prev".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut(
+            "swap_prev".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
 
     // --- G. Migración de Escritorios y Pantallas ---
     // Meta+Shift+Right (migrateActiveToDesktop: desk_1 -> desk_2)
-    let (recalc, cmds) = controller.handle_shortcut("migrate_active_to_desktop".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, cmds) = controller
+        .handle_shortcut(
+            "migrate_active_to_desktop".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::MigrateToDesktop { window_id, target_desktop } => {
+        raven_core::action::RavenAction::MigrateToDesktop {
+            window_id,
+            target_desktop,
+        } => {
             assert_eq!(window_id, "win-1");
             assert_eq!(target_desktop, "desk_2");
         }
@@ -780,11 +1129,21 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
     }
 
     // Meta+Shift+Left (migrateActiveToPrevDesktop: desk_2 -> desk_1)
-    let (recalc, cmds) = controller.handle_shortcut("migrate_active_to_prev_desktop".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, cmds) = controller
+        .handle_shortcut(
+            "migrate_active_to_prev_desktop".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::MigrateToDesktop { window_id, target_desktop } => {
+        raven_core::action::RavenAction::MigrateToDesktop {
+            window_id,
+            target_desktop,
+        } => {
             assert_eq!(window_id, "win-1");
             assert_eq!(target_desktop, "desk_1");
         }
@@ -792,11 +1151,21 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
     }
 
     // Meta+Shift+M (migrateActiveToScreen: DP-1 -> HDMI-A-1)
-    let (recalc, cmds) = controller.handle_shortcut("migrate_active_to_screen".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, cmds) = controller
+        .handle_shortcut(
+            "migrate_active_to_screen".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::MigrateToOutput { window_id, target_output } => {
+        raven_core::action::RavenAction::MigrateToOutput {
+            window_id,
+            target_output,
+        } => {
             assert_eq!(window_id, "win-1");
             assert_eq!(target_output, "HDMI-A-1");
         }
@@ -804,11 +1173,21 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
     }
 
     // Meta+Shift+N (migrateActiveToPrevScreen: HDMI-A-1 -> DP-1)
-    let (recalc, cmds) = controller.handle_shortcut("migrate_active_to_prev_screen".to_string(), 0, Some("win-1".to_string()), &topology).unwrap();
+    let (recalc, cmds) = controller
+        .handle_shortcut(
+            "migrate_active_to_prev_screen".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
     assert!(recalc);
     assert_eq!(cmds.len(), 1);
     match &cmds[0] {
-        raven_core::action::RavenAction::MigrateToOutput { window_id, target_output } => {
+        raven_core::action::RavenAction::MigrateToOutput {
+            window_id,
+            target_output,
+        } => {
             assert_eq!(window_id, "win-1");
             assert_eq!(target_output, "DP-1");
         }
@@ -817,11 +1196,15 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
 
     // --- H. Alternar Tiling On/Off ---
     // Meta+Space (toggleTiling)
-    let (recalc, _) = controller.handle_shortcut("toggle_tiling".to_string(), 0, None, &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut("toggle_tiling".to_string(), 0, None, &topology)
+        .unwrap();
     assert!(recalc);
     assert!(!controller.is_tiling_enabled());
 
-    let (recalc, _) = controller.handle_shortcut("toggle_tiling".to_string(), 0, None, &topology).unwrap();
+    let (recalc, _) = controller
+        .handle_shortcut("toggle_tiling".to_string(), 0, None, &topology)
+        .unwrap();
     assert!(recalc);
     assert!(controller.is_tiling_enabled());
 }
@@ -842,7 +1225,15 @@ async fn test_window_focus_does_not_swap_spatial_order() {
 
     let ws = "DP-1||desk_1".to_string();
     let mut workspaces = HashMap::new();
-    workspaces.insert(ws.clone(), Rect { x: 0, y: 0, width: 1920, height: 1080 });
+    workspaces.insert(
+        ws.clone(),
+        Rect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        },
+    );
 
     let make_window = |id: &str| WindowNode {
         window_id: id.to_string(),
@@ -852,7 +1243,12 @@ async fn test_window_focus_does_not_swap_spatial_order() {
         is_floating: false,
         is_minimized: false,
         is_pip: false,
-        geometry: Rect { x: 0, y: 0, width: 100, height: 100 },
+        geometry: Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        },
         min_w: 100,
         min_h: 100,
         strict_birth: false,
@@ -872,22 +1268,56 @@ async fn test_window_focus_does_not_swap_spatial_order() {
     ];
 
     // Estado inicial: calcular geometrías iniciales
-    let actions_init = controller.handle_state_change(workspaces.clone(), windows.clone()).unwrap();
+    let actions_init = controller
+        .handle_state_change(workspaces.clone(), windows.clone())
+        .unwrap();
     let mut geoms_initial: HashMap<String, Rect> = HashMap::new();
     for act in &actions_init {
-        if let raven_core::action::RavenAction::MoveWindow { window_id, x, y, width, height } = act {
-            geoms_initial.insert(window_id.clone(), Rect { x: *x, y: *y, width: *width, height: *height });
+        if let raven_core::action::RavenAction::MoveWindow {
+            window_id,
+            x,
+            y,
+            width,
+            height,
+        } = act
+        {
+            geoms_initial.insert(
+                window_id.clone(),
+                Rect {
+                    x: *x,
+                    y: *y,
+                    width: *width,
+                    height: *height,
+                },
+            );
         }
     }
     assert_eq!(geoms_initial.len(), 4);
 
     // Simular que el usuario hace click o enfoca en win-2 (o win-4)
     controller.active_window_id = Some("win-2".to_string());
-    let actions_after_focus = controller.handle_state_change(workspaces.clone(), windows.clone()).unwrap();
+    let actions_after_focus = controller
+        .handle_state_change(workspaces.clone(), windows.clone())
+        .unwrap();
     let mut geoms_after_focus: HashMap<String, Rect> = HashMap::new();
     for act in &actions_after_focus {
-        if let raven_core::action::RavenAction::MoveWindow { window_id, x, y, width, height } = act {
-            geoms_after_focus.insert(window_id.clone(), Rect { x: *x, y: *y, width: *width, height: *height });
+        if let raven_core::action::RavenAction::MoveWindow {
+            window_id,
+            x,
+            y,
+            width,
+            height,
+        } = act
+        {
+            geoms_after_focus.insert(
+                window_id.clone(),
+                Rect {
+                    x: *x,
+                    y: *y,
+                    width: *width,
+                    height: *height,
+                },
+            );
         }
     }
 
@@ -901,6 +1331,3 @@ async fn test_window_focus_does_not_swap_spatial_order() {
         );
     }
 }
-
-
-

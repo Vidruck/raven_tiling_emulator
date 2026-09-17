@@ -100,10 +100,10 @@ impl LayoutStrategy for StrictDwindleStrategy {
                 container.y += h;
                 container.height = std::cmp::max(1, container.height - h);
             }
-            
+
             // Guardar la posición de la ventana actual recortando gaps
             layout_map.insert(win.window_id.clone(), apply_gaps(&curr, half_g));
-            
+
             // Alternar orientación para la siguiente ventana
             split_horizontal = !split_horizontal;
         }

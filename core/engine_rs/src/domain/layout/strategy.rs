@@ -11,8 +11,8 @@ use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
 use super::{
-    DivisorStrategy, DwindleBSPStrategy, InvertedStrictDwindleStrategy, MonocleStrategy,
-    StrictDwindleStrategy, TallStrategy,
+    DivisorStrategy, DwindleBSPStrategy, InvertedStrictDwindleStrategy, LuaLayoutStrategy,
+    MonocleStrategy, StrictDwindleStrategy, TallStrategy,
 };
 
 /// Rasgo común para todos los algoritmos de distribución de ventanas.
@@ -54,6 +54,30 @@ pub fn get_strategy(layout_type: &str) -> Box<dyn LayoutStrategy> {
         "strict_dwindle" => Box::new(StrictDwindleStrategy),
         "inverted_strict_dwindle" => Box::new(InvertedStrictDwindleStrategy),
         "divisor" => Box::new(DivisorStrategy),
-        _ => Box::new(DwindleBSPStrategy),
+        "raven" => Box::new(DwindleBSPStrategy),
+        _ => {
+            // [EXTENSIÓN LUA]: Si el nombre del layout no coincide con ninguno compilado nativamente,
+            // el motor asume que es un script de usuario y busca un archivo `.lua` homónimo en la configuración.
+            let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home/vidruck".to_string());
+            let lua_path = std::path::PathBuf::from(home_dir)
+                .join(".config/raven/layouts")
+                .join(format!("{}.lua", layout_type));
+
+            tracing::info!("Intentando cargar layout de usuario desde: {:?}", lua_path);
+
+            if let Ok(script) = std::fs::read_to_string(&lua_path) {
+                tracing::info!("Script {} cargado exitosamente", layout_type);
+                Box::new(LuaLayoutStrategy::new(layout_type.to_string(), script))
+            } else {
+                // Fallback de resiliencia: Si el archivo no existe o hay error de lectura,
+                // prevenimos pánicos cayendo suavemente al algoritmo estrella (Dwindle BSP).
+                tracing::warn!(
+                    "No se pudo cargar {}.lua en {:?}. Cayendo al layout BSP por defecto.",
+                    layout_type,
+                    lua_path
+                );
+                Box::new(DwindleBSPStrategy)
+            }
+        }
     }
 }

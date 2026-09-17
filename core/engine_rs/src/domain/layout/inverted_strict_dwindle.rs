@@ -77,7 +77,7 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                     let raw_w = (container.width as f32 * master_ratio) as i32;
                     let main_w = raw_w.clamp(std::cmp::min(win_min_w, max_allowed), max_allowed);
                     let rem_w = std::cmp::max(1, container.width - main_w);
-                    
+
                     curr.x = container.x + rem_w;
                     curr.width = main_w;
 
@@ -92,7 +92,7 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                     let raw_h = (container.height as f32 * master_ratio) as i32;
                     let main_h = raw_h.clamp(std::cmp::min(win_min_h, max_allowed), max_allowed);
                     let rem_h = std::cmp::max(1, container.height - main_h);
-                    
+
                     curr.y = container.y + rem_h;
                     curr.height = main_h;
 
@@ -106,7 +106,7 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                     let max_allowed = std::cmp::max(1, container.width - min_rem);
                     let raw_w = (container.width as f32 * master_ratio) as i32;
                     let main_w = raw_w.clamp(std::cmp::min(win_min_w, max_allowed), max_allowed);
-                    
+
                     curr.x = container.x;
                     curr.width = main_w;
 
@@ -121,7 +121,7 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                     let max_allowed = std::cmp::max(1, container.height - min_rem);
                     let raw_h = (container.height as f32 * master_ratio) as i32;
                     let main_h = raw_h.clamp(std::cmp::min(win_min_h, max_allowed), max_allowed);
-                    
+
                     curr.height = main_h;
 
                     // El contenedor remanente se desplaza hacia ABAJO
@@ -206,4 +206,3 @@ mod tests {
         assert_eq!(r4.height, 500);
     }
 }
-

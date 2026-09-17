@@ -13,8 +13,8 @@ use tokio::sync::mpsc;
 use tracing::info;
 
 use crate::application::controller::RavenController;
-use raven_backend_kwin::{parse_payload, KWinWindow, service::KWinBridgeMessage};
 use crate::domain::geometry::{Rect, Topology, WindowNode};
+use raven_backend_kwin::{parse_payload, service::KWinBridgeMessage, KWinWindow};
 use raven_core::backend::CompositorEvent;
 
 /// Mensajes que el demonio recibe en su bucle de eventos (compatibilidad KWin + eventos universales de compositor).
@@ -66,15 +66,36 @@ impl RavenControllerActor {
                             let engine = self.controller.get_engine_mut();
                             engine.current_windows.remove(&window_id);
                             engine.window_history.retain(|id| id != &window_id);
-                            engine.dynamic_floating_windows.retain(|id| id != &window_id);
+                            engine
+                                .dynamic_floating_windows
+                                .retain(|id| id != &window_id);
                             let _ = self.controller.commit_layout();
                         }
-                        CompositorEvent::WindowStateChanged { window_id, is_minimized, is_fullscreen, is_floating, geometry } => {
-                            if let Some(win) = self.controller.get_engine_mut().current_windows.get_mut(&window_id) {
-                                if let Some(m) = is_minimized { win.is_minimized = m; }
-                                if let Some(f) = is_fullscreen { win.is_fullscreen = f; }
-                                if let Some(fl) = is_floating { win.is_floating = fl; }
-                                if let Some(geom) = geometry { win.geometry = geom; }
+                        CompositorEvent::WindowStateChanged {
+                            window_id,
+                            is_minimized,
+                            is_fullscreen,
+                            is_floating,
+                            geometry,
+                        } => {
+                            if let Some(win) = self
+                                .controller
+                                .get_engine_mut()
+                                .current_windows
+                                .get_mut(&window_id)
+                            {
+                                if let Some(m) = is_minimized {
+                                    win.is_minimized = m;
+                                }
+                                if let Some(f) = is_fullscreen {
+                                    win.is_fullscreen = f;
+                                }
+                                if let Some(fl) = is_floating {
+                                    win.is_floating = fl;
+                                }
+                                if let Some(geom) = geometry {
+                                    win.geometry = geom;
+                                }
                             }
                             let _ = self.controller.commit_layout();
                         }
@@ -98,7 +119,10 @@ impl RavenControllerActor {
                                 }
                                 // Si no existía para default, asegurarla
                                 let default_ws = format!("{}||default", node.name);
-                                engine.current_workspaces.entry(default_ws).or_insert(node.rect);
+                                engine
+                                    .current_workspaces
+                                    .entry(default_ws)
+                                    .or_insert(node.rect);
                             }
                             self.current_topology = topology;
                             let _ = self.controller.commit_layout();
@@ -106,11 +130,14 @@ impl RavenControllerActor {
                     }
                 }
                 RavenMessage::KWinBridge(kwin_msg) => match kwin_msg {
-                    KWinBridgeMessage::SyncState { payload_json, reply } => {
+                    KWinBridgeMessage::SyncState {
+                        payload_json,
+                        reply,
+                    } => {
                         self.last_payload_json = payload_json.clone();
                         let (mut workspaces, mut windows, topology) = parse_payload(&payload_json)
                             .unwrap_or_else(|_| (HashMap::new(), Vec::new(), Topology::default()));
-                        
+
                         // Si KWin no envía geometrías de pantalla o vienen incompletas,
                         // las complementamos automáticamente con la topología autoritativa de Wayland
                         if !self.current_topology.output_nodes.is_empty() {
@@ -130,7 +157,12 @@ impl RavenControllerActor {
 
                         // Preservar la bandera de flotación dinámica si Rust ya mantiene la ventana en Quick Peek
                         for win in &mut windows {
-                            if self.controller.get_engine().dynamic_floating_windows.contains(&win.window_id) {
+                            if self
+                                .controller
+                                .get_engine()
+                                .dynamic_floating_windows
+                                .contains(&win.window_id)
+                            {
                                 win.is_floating = true;
                             }
                         }
@@ -141,12 +173,12 @@ impl RavenControllerActor {
                             self.current_topology.current_desktop = topology.current_desktop;
                         }
                         self.controller.active_window_id = self.active_window_id.clone();
-                        
+
                         let mut all_commands = Vec::new();
                         if let Ok(cmds) = self.controller.handle_state_change(workspaces, windows) {
                             all_commands.extend(cmds);
                         }
-                        
+
                         let _ = reply.send(all_commands);
                     }
                     KWinBridgeMessage::SyncWindowDelta { delta_json, reply } => {
@@ -155,12 +187,24 @@ impl RavenControllerActor {
                             let ws_id = if !win.ws.is_empty() {
                                 win.ws
                             } else {
-                                let out_name = if !win.output.is_empty() { win.output.as_str() } else { "default" };
-                                let desk_name = win.desktops.first().map(|d| d.as_str()).unwrap_or("default_desk");
+                                let out_name = if !win.output.is_empty() {
+                                    win.output.as_str()
+                                } else {
+                                    "default"
+                                };
+                                let desk_name = win
+                                    .desktops
+                                    .first()
+                                    .map(|d| d.as_str())
+                                    .unwrap_or("default_desk");
                                 format!("{}||{}", out_name, desk_name)
                             };
 
-                            let is_dynamic_float = self.controller.get_engine().dynamic_floating_windows.contains(&win.id);
+                            let is_dynamic_float = self
+                                .controller
+                                .get_engine()
+                                .dynamic_floating_windows
+                                .contains(&win.id);
                             let win_node = WindowNode::new(
                                 win.id,
                                 ws_id,
@@ -177,11 +221,11 @@ impl RavenControllerActor {
                                 win.fs,
                             )
                             .with_class_and_caption(win.cls, win.cap);
-                            
+
                             let is_tiled = !win_node.is_floating && !win_node.is_minimized;
                             let wid = win_node.window_id.clone();
                             self.controller.handle_delta_change(win_node);
-                            
+
                             if is_tiled {
                                 self.active_window_id = Some(wid.clone());
                                 self.controller.active_window_id = Some(wid.clone());
@@ -194,9 +238,16 @@ impl RavenControllerActor {
                         }
                         let _ = reply.send(commands);
                     }
-                    KWinBridgeMessage::DispatchShortcut { action, payload, payload_str, reply } => {
-                        let effective_active_id = payload_str.filter(|s| !s.trim().is_empty()).or_else(|| self.active_window_id.clone());
-                        
+                    KWinBridgeMessage::DispatchShortcut {
+                        action,
+                        payload,
+                        payload_str,
+                        reply,
+                    } => {
+                        let effective_active_id = payload_str
+                            .filter(|s| !s.trim().is_empty())
+                            .or_else(|| self.active_window_id.clone());
+
                         if let Some(ref id) = effective_active_id {
                             self.active_window_id = Some(id.clone());
                             self.controller.active_window_id = Some(id.clone());
@@ -211,7 +262,7 @@ impl RavenControllerActor {
                             &self.current_topology,
                         ) {
                             all_commands.extend(cmds);
-                            
+
                             if needs_recalc {
                                 if let Ok(recalc_cmds) = self.controller.commit_layout() {
                                     all_commands.extend(recalc_cmds);
@@ -235,8 +286,9 @@ impl RavenControllerActor {
                         }
                     }
                     KWinBridgeMessage::GetQuarantineClasses { reply } => {
-                        let res = serde_json::to_string(&self.controller.get_config().quarantine_classes)
-                            .unwrap_or_else(|_| String::from("[]"));
+                        let res =
+                            serde_json::to_string(&self.controller.get_config().quarantine_classes)
+                                .unwrap_or_else(|_| String::from("[]"));
                         let _ = reply.send(res);
                     }
                     KWinBridgeMessage::GetWindowRules { reply } => {
@@ -250,10 +302,23 @@ impl RavenControllerActor {
                             String::from("1 | Escritorio 1 | 1")
                         } else {
                             let total = topo.desktops.len();
-                            let current_idx = topo.desktops.iter().position(|d| d == &topo.current_desktop).unwrap_or(0);
-                            let prev_idx = if current_idx == 0 { total - 1 } else { current_idx - 1 };
+                            let current_idx = topo
+                                .desktops
+                                .iter()
+                                .position(|d| d == &topo.current_desktop)
+                                .unwrap_or(0);
+                            let prev_idx = if current_idx == 0 {
+                                total - 1
+                            } else {
+                                current_idx - 1
+                            };
                             let next_idx = (current_idx + 1) % total;
-                            format!("{} | Escritorio {} | {}", prev_idx + 1, current_idx + 1, next_idx + 1)
+                            format!(
+                                "{} | Escritorio {} | {}",
+                                prev_idx + 1,
+                                current_idx + 1,
+                                next_idx + 1
+                            )
                         };
                         let _ = reply.send(res);
                     }
@@ -269,23 +334,46 @@ impl RavenControllerActor {
                         let _ = reply.send(count);
                     }
                     KWinBridgeMessage::SetLayoutForCurrentWorkspace { layout_name, reply } => {
-                        let current_ws = self.active_window_id.as_ref().and_then(|wid| {
-                            self.controller.get_engine().current_windows.get(wid).map(|w| w.workspace_id.clone())
-                        }).or_else(|| {
-                            self.controller.get_engine().current_windows.values().next().map(|w| w.workspace_id.clone())
-                        }).or_else(|| {
-                            let out = self.current_topology.outputs.first().map(|s| s.as_str()).unwrap_or("default");
-                            let desk = if !self.current_topology.current_desktop.is_empty() {
-                                self.current_topology.current_desktop.as_str()
-                            } else {
-                                "default_desk"
-                            };
-                            Some(format!("{}||{}", out, desk))
-                        });
+                        let current_ws = self
+                            .active_window_id
+                            .as_ref()
+                            .and_then(|wid| {
+                                self.controller
+                                    .get_engine()
+                                    .current_windows
+                                    .get(wid)
+                                    .map(|w| w.workspace_id.clone())
+                            })
+                            .or_else(|| {
+                                self.controller
+                                    .get_engine()
+                                    .current_windows
+                                    .values()
+                                    .next()
+                                    .map(|w| w.workspace_id.clone())
+                            })
+                            .or_else(|| {
+                                let out = self
+                                    .current_topology
+                                    .outputs
+                                    .first()
+                                    .map(|s| s.as_str())
+                                    .unwrap_or("default");
+                                let desk = if !self.current_topology.current_desktop.is_empty() {
+                                    self.current_topology.current_desktop.as_str()
+                                } else {
+                                    "default_desk"
+                                };
+                                Some(format!("{}||{}", out, desk))
+                            });
 
                         self.controller.get_engine_mut().config.layout_type = layout_name.clone();
                         if let Some(ws_id) = current_ws {
-                            self.controller.get_engine_mut().config.workspace_layouts.insert(ws_id, layout_name.clone());
+                            self.controller
+                                .get_engine_mut()
+                                .config
+                                .workspace_layouts
+                                .insert(ws_id, layout_name.clone());
                         }
 
                         if let Err(e) = self.controller.get_engine().config.save() {

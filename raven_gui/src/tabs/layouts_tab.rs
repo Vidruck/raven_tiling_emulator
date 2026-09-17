@@ -12,6 +12,33 @@ use raven_core::config::RavenConfig;
 use crate::kde_theme::KdePalette;
 use crate::models::PRESETS;
 use crate::components::layout_preview::draw_layout_preview;
+use std::process::Command;
+use std::fs;
+use std::path::PathBuf;
+
+/// Escanea el directorio de configuración buscando layouts de usuario en formato `.lua`.
+fn get_custom_layouts() -> Vec<String> {
+    let mut layouts = Vec::new();
+    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home/vidruck".to_string());
+    let layouts_dir = PathBuf::from(home_dir).join(".config/raven/layouts");
+
+    if let Ok(entries) = fs::read_dir(layouts_dir) {
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                if file_type.is_file() {
+                    let path = entry.path();
+                    if path.extension().map_or(false, |ext| ext == "lua") {
+                        if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                            layouts.push(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    layouts.sort();
+    layouts
+}
 
 /// Renderiza la vista de selección de algoritmos y presets de composición.
 pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, palette: &KdePalette) {
@@ -48,6 +75,49 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, 
                     ui.label(egui::RichText::new("✔ Orden de posicionamiento en el algoritmo").color(accent).size(11.0).strong());
                 }
                 ui.add_space(8.0);
+            }
+
+            // [NUEVO] Sección de Layouts Personalizados (Lua)
+            ui.add_space(8.0);
+            ui.heading(egui::RichText::new("Locuras (Scripts Lua)").strong().size(13.5));
+            ui.add_space(6.0);
+
+            let custom_layouts = get_custom_layouts();
+            if custom_layouts.is_empty() {
+                ui.label(egui::RichText::new("No hay layouts personalizados.").weak().italics().size(11.0));
+            } else {
+                for layout_name in custom_layouts {
+                    let is_selected = config.layout_type == layout_name;
+                    ui.radio_value(&mut config.layout_type, layout_name.clone(), egui::RichText::new(&layout_name).strong());
+                    if is_selected {
+                        ui.label(egui::RichText::new("✔ Script Lua activo").color(accent).size(11.0).strong());
+                    }
+                    ui.add_space(4.0);
+                }
+            }
+
+            ui.add_space(6.0);
+            if ui.button("➕ Importar Script Lua...").on_hover_text("Selecciona un archivo .lua para usar como algoritmo de tiling").clicked() {
+                // Invocamos kdialog para seleccionar el archivo
+                let output = Command::new("kdialog")
+                    .arg("--getopenfilename")
+                    .arg(std::env::var("HOME").unwrap_or_else(|_| "~".to_string()))
+                    .arg("*.lua")
+                    .output();
+
+                if let Ok(out) = output {
+                    if out.status.success() {
+                        let selected_file = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                        if !selected_file.is_empty() {
+                            let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home/vidruck".to_string());
+                            let target_dir = PathBuf::from(home_dir).join(".config/raven/layouts");
+                            let _ = fs::create_dir_all(&target_dir);
+                            
+                            let target_path = target_dir.join(PathBuf::from(&selected_file).file_name().unwrap());
+                            let _ = fs::copy(&selected_file, target_path);
+                        }
+                    }
+                }
             }
 
             ui.add_space(10.0);

@@ -77,7 +77,7 @@ impl LayoutStrategy for TallStrategy {
             }
         } else {
             // 4. Caso B: Hay ventanas suficientes para crear la columna Master (izq) y la columna Stack (der)
-            
+
             // Límite defensivo: Ninguna ventana puede exigir un min_w mayor al 40% del contenedor útil
             let max_allowed_min_w = (container.width as f32 * 0.40) as i32;
             let mut master_w = (container.width as f32 * master_ratio) as i32;
@@ -120,9 +120,14 @@ impl LayoutStrategy for TallStrategy {
 
             // 5. Apilar ventanas de la columna Master a la izquierda
             let master_wins = &active_windows[..nmaster];
-            let master_mins: Vec<i32> = master_wins.iter().map(|w| std::cmp::max(w.min_h, 80)).collect();
-            let master_weights: Vec<Option<f32>> = master_wins.iter().map(|w| w.custom_h_ratio).collect();
-            let master_heights = distribute_weighted_sizes(container.height, &master_mins, &master_weights);
+            let master_mins: Vec<i32> = master_wins
+                .iter()
+                .map(|w| std::cmp::max(w.min_h, 80))
+                .collect();
+            let master_weights: Vec<Option<f32>> =
+                master_wins.iter().map(|w| w.custom_h_ratio).collect();
+            let master_heights =
+                distribute_weighted_sizes(container.height, &master_mins, &master_weights);
             let mut current_y = container.y;
             for (i, win) in master_wins.iter().enumerate() {
                 let rect = Rect {
@@ -137,9 +142,14 @@ impl LayoutStrategy for TallStrategy {
 
             // 6. Apilar ventanas de la columna Stack a la derecha
             let stack_wins = &active_windows[nmaster..];
-            let stack_mins: Vec<i32> = stack_wins.iter().map(|w| std::cmp::max(w.min_h, 80)).collect();
-            let stack_weights: Vec<Option<f32>> = stack_wins.iter().map(|w| w.custom_h_ratio).collect();
-            let stack_heights = distribute_weighted_sizes(container.height, &stack_mins, &stack_weights);
+            let stack_mins: Vec<i32> = stack_wins
+                .iter()
+                .map(|w| std::cmp::max(w.min_h, 80))
+                .collect();
+            let stack_weights: Vec<Option<f32>> =
+                stack_wins.iter().map(|w| w.custom_h_ratio).collect();
+            let stack_heights =
+                distribute_weighted_sizes(container.height, &stack_mins, &stack_weights);
             let mut current_y = container.y;
             for (i, win) in stack_wins.iter().enumerate() {
                 let rect = Rect {

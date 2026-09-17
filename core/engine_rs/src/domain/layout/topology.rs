@@ -64,10 +64,17 @@ pub fn calculate_global_topology(
 
     // 2. Procesar cada workspace con la estrategia elegida y superponer PiP / FullScreen
     for (ws_id, ws_windows) in windows_by_ws {
-        let screen_rect_opt = workspaces.get(&ws_id).copied().or_else(|| {
-            let output_prefix = ws_id.split("||").next()?;
-            workspaces.iter().find(|(k, _)| k.starts_with(output_prefix)).map(|(_, r)| *r)
-        }).or_else(|| workspaces.values().next().copied());
+        let screen_rect_opt = workspaces
+            .get(&ws_id)
+            .copied()
+            .or_else(|| {
+                let output_prefix = ws_id.split("||").next()?;
+                workspaces
+                    .iter()
+                    .find(|(k, _)| k.starts_with(output_prefix))
+                    .map(|(_, r)| *r)
+            })
+            .or_else(|| workspaces.values().next().copied());
 
         if let Some(screen_rect) = screen_rect_opt {
             // Filtrar ventanas no-fullscreen, no-pip y no-minimizadas para el mosaico de fondo activo
@@ -324,14 +331,8 @@ mod tests {
         let windows = vec![mock_window("win_1"), mock_window("win_2")];
         let strategy = DwindleBSPStrategy;
 
-        let (layout_no_focus, _) = strategy.calculate(
-            &windows,
-            Rect::new(0, 0, 1200, 1000),
-            2,
-            0.6,
-            0,
-            None,
-        );
+        let (layout_no_focus, _) =
+            strategy.calculate(&windows, Rect::new(0, 0, 1200, 1000), 2, 0.6, 0, None);
         let r1_nf = layout_no_focus.get("win_1").unwrap();
         let r2_nf = layout_no_focus.get("win_2").unwrap();
         assert_eq!(r1_nf.x, 480);
@@ -491,7 +492,9 @@ mod tests {
         assert!(layout_3.contains_key("image_viewer"));
 
         // 2. Activar modo flotante dinámico (Quick Peek) para image_viewer
-        engine.dynamic_floating_windows.insert("image_viewer".to_string());
+        engine
+            .dynamic_floating_windows
+            .insert("image_viewer".to_string());
 
         let (layout_dyn_float, _) = engine
             .calculate_from_payload(&workspaces, &windows, None)
@@ -528,16 +531,21 @@ mod tests {
         let mut workspaces = HashMap::new();
         workspaces.insert("ws_1".to_string(), Rect::new(0, 0, 1920, 1080));
 
-        let win_normal = mock_window("editor").with_class_and_caption("code".to_string(), "Editor".to_string());
-        let win_pip_by_title = mock_window("firefox_pip").with_class_and_caption("firefox".to_string(), "Picture-in-Picture".to_string());
-        let win_pip_by_rule = mock_window("vlc_video").with_class_and_caption("vlc".to_string(), "Movie.mp4".to_string());
+        let win_normal =
+            mock_window("editor").with_class_and_caption("code".to_string(), "Editor".to_string());
+        let win_pip_by_title = mock_window("firefox_pip")
+            .with_class_and_caption("firefox".to_string(), "Picture-in-Picture".to_string());
+        let win_pip_by_rule = mock_window("vlc_video")
+            .with_class_and_caption("vlc".to_string(), "Movie.mp4".to_string());
 
         let windows = vec![win_normal, win_pip_by_title, win_pip_by_rule];
 
         // 1. Rust clasifica automáticamente a firefox y vlc como PiP sin saturar el mosaico
-        let (layout, _) = engine.calculate_from_payload(&workspaces, &windows, None).unwrap();
+        let (layout, _) = engine
+            .calculate_from_payload(&workspaces, &windows, None)
+            .unwrap();
         assert_eq!(layout.len(), 3);
-        
+
         // Editor ocupa la pantalla de mosaico completa (1920x1080 menos gaps)
         let r_editor = layout.get("editor").unwrap();
         assert!(r_editor.width > 1500);
@@ -547,9 +555,13 @@ mod tests {
         assert!(r_firefox.width < 600); // 22% PiP scale
 
         // 2. Si el usuario fuerza a VLC con Quick Peek (Meta+Shift+F), Rust anula su modo PiP
-        engine.dynamic_floating_windows.insert("vlc_video".to_string());
-        let (layout_override, _) = engine.calculate_from_payload(&workspaces, &windows, None).unwrap();
-        
+        engine
+            .dynamic_floating_windows
+            .insert("vlc_video".to_string());
+        let (layout_override, _) = engine
+            .calculate_from_payload(&workspaces, &windows, None)
+            .unwrap();
+
         // vlc_video sale de la grilla de mosaico y de la lista de layouts forzados
         assert!(!layout_override.contains_key("vlc_video"));
         assert!(layout_override.contains_key("editor"));

@@ -8,14 +8,8 @@
 //! desacoplado [`raven_backend_kwin`].
 
 pub use raven_backend_kwin::{
-    parse_payload,
-    KWinDbusService as RavenDBusService,
-    KWinPayload,
-    KWinScreen,
-    KWinTopology,
-    KWinWindow,
-    TilingCommand,
-    service::KWinBridgeMessage,
+    parse_payload, service::KWinBridgeMessage, KWinDbusService as RavenDBusService, KWinPayload,
+    KWinScreen, KWinTopology, KWinWindow, TilingCommand,
 };
 
 #[cfg(test)]

@@ -109,19 +109,36 @@ impl LayoutStrategy for DwindleBSPStrategy {
             let max_allowed_min_w = (container.width as f32 * 0.35) as i32;
             let max_allowed_min_h = (container.height as f32 * 0.35) as i32;
 
-            let left_min_w = left_group.iter().map(|w| w.min_w.min(max_allowed_min_w)).max().unwrap_or(0);
-            let right_min_w = right_group.iter().map(|w| w.min_w.min(max_allowed_min_w)).max().unwrap_or(0);
-            let center_min_w = center_group.iter().map(|w| w.min_w.min(max_allowed_min_w)).max().unwrap_or(0);
+            let left_min_w = left_group
+                .iter()
+                .map(|w| w.min_w.min(max_allowed_min_w))
+                .max()
+                .unwrap_or(0);
+            let right_min_w = right_group
+                .iter()
+                .map(|w| w.min_w.min(max_allowed_min_w))
+                .max()
+                .unwrap_or(0);
+            let center_min_w = center_group
+                .iter()
+                .map(|w| w.min_w.min(max_allowed_min_w))
+                .max()
+                .unwrap_or(0);
 
-            let bottom_min_h = bottom_group.iter().map(|w| w.min_h.min(max_allowed_min_h)).max().unwrap_or(0);
+            let bottom_min_h = bottom_group
+                .iter()
+                .map(|w| w.min_h.min(max_allowed_min_h))
+                .max()
+                .unwrap_or(0);
 
             // 6. Calcular proporciones y alturas de paneles
             let central_ratio = master_ratio.clamp(0.35, 0.85);
-            let bottom_ratio = if left_group.is_empty() && right_group.is_empty() && !bottom_group.is_empty() {
-                1.0 - central_ratio
-            } else {
-                0.30f32
-            };
+            let bottom_ratio =
+                if left_group.is_empty() && right_group.is_empty() && !bottom_group.is_empty() {
+                    1.0 - central_ratio
+                } else {
+                    0.30f32
+                };
 
             let mut bottom_height = if !bottom_group.is_empty() {
                 let bh = ((container.height as f32 * bottom_ratio).round()) as i32;
@@ -160,15 +177,25 @@ impl LayoutStrategy for DwindleBSPStrategy {
             if center_width < center_min_w {
                 let needed_for_sidebars = container.width - center_min_w;
                 if needed_for_sidebars >= 0 {
-                    sidebar_width = needed_for_sidebars / (if !right_group.is_empty() { 2 } else { 1 });
-                    center_width = container.width - (if !right_group.is_empty() { 2 * sidebar_width } else { sidebar_width });
+                    sidebar_width =
+                        needed_for_sidebars / (if !right_group.is_empty() { 2 } else { 1 });
+                    center_width = container.width
+                        - (if !right_group.is_empty() {
+                            2 * sidebar_width
+                        } else {
+                            sidebar_width
+                        });
                 }
             }
 
             // 8. Posicionar ventanas del Sidebar Izquierdo (Left Group)
             if !left_group.is_empty() {
-                let mins: Vec<i32> = left_group.iter().map(|w| std::cmp::max(w.min_h, 80)).collect();
-                let weights: Vec<Option<f32>> = left_group.iter().map(|w| w.custom_h_ratio).collect();
+                let mins: Vec<i32> = left_group
+                    .iter()
+                    .map(|w| std::cmp::max(w.min_h, 80))
+                    .collect();
+                let weights: Vec<Option<f32>> =
+                    left_group.iter().map(|w| w.custom_h_ratio).collect();
                 let heights = distribute_weighted_sizes(container.height, &mins, &weights);
                 let mut current_y = container.y;
                 for (i, win) in left_group.iter().enumerate() {
@@ -185,8 +212,12 @@ impl LayoutStrategy for DwindleBSPStrategy {
 
             // 9. Posicionar ventanas del Sidebar Derecho (Right Group)
             if !right_group.is_empty() {
-                let mins: Vec<i32> = right_group.iter().map(|w| std::cmp::max(w.min_h, 80)).collect();
-                let weights: Vec<Option<f32>> = right_group.iter().map(|w| w.custom_h_ratio).collect();
+                let mins: Vec<i32> = right_group
+                    .iter()
+                    .map(|w| std::cmp::max(w.min_h, 80))
+                    .collect();
+                let weights: Vec<Option<f32>> =
+                    right_group.iter().map(|w| w.custom_h_ratio).collect();
                 let heights = distribute_weighted_sizes(container.height, &mins, &weights);
                 let mut current_y = container.y;
                 for (i, win) in right_group.iter().enumerate() {
@@ -204,8 +235,12 @@ impl LayoutStrategy for DwindleBSPStrategy {
             // 10. Posicionar ventanas del Área Central (Center Group)
             if !center_group.is_empty() {
                 let main_h = container.height - bottom_height;
-                let mins: Vec<i32> = center_group.iter().map(|w| std::cmp::max(w.min_h, 120)).collect();
-                let weights: Vec<Option<f32>> = center_group.iter().map(|w| w.custom_h_ratio).collect();
+                let mins: Vec<i32> = center_group
+                    .iter()
+                    .map(|w| std::cmp::max(w.min_h, 120))
+                    .collect();
+                let weights: Vec<Option<f32>> =
+                    center_group.iter().map(|w| w.custom_h_ratio).collect();
                 let heights = distribute_weighted_sizes(main_h, &mins, &weights);
                 let mut current_y = container.y;
                 for (i, win) in center_group.iter().enumerate() {
@@ -222,8 +257,12 @@ impl LayoutStrategy for DwindleBSPStrategy {
 
             // 11. Posicionar ventanas del Panel Inferior (Bottom Group)
             if !bottom_group.is_empty() {
-                let mins: Vec<i32> = bottom_group.iter().map(|w| std::cmp::max(w.min_w, 100)).collect();
-                let weights: Vec<Option<f32>> = bottom_group.iter().map(|w| w.custom_w_ratio).collect();
+                let mins: Vec<i32> = bottom_group
+                    .iter()
+                    .map(|w| std::cmp::max(w.min_w, 100))
+                    .collect();
+                let weights: Vec<Option<f32>> =
+                    bottom_group.iter().map(|w| w.custom_w_ratio).collect();
                 let widths = distribute_weighted_sizes(center_width, &mins, &weights);
                 let mut current_x = container.x + sidebar_width;
                 for (i, win) in bottom_group.iter().enumerate() {
