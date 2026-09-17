@@ -20,51 +20,15 @@ import org.kde.iconthemes as KIconThemes
 KCM.SimpleKCM {
     id: root
 
-    property alias cfg_timeFormat: timeFormatCombo.currentValue
-    property alias cfg_showSeconds: showSecondsCheck.checked
-    property alias cfg_launcherPosition: positionCombo.currentValue
     property alias cfg_plasmoidIcon: iconField.text
-    property alias cfg_gridColumns: gridColumnsSpin.value
+    property alias cfg_gridRows: gridRowsSpin.value
 
     Kirigami.FormLayout {
         anchors.fill: parent
 
         Item {
             Kirigami.FormData.isSection: true
-            Kirigami.FormData.label: i18n("Reloj y Hora")
-        }
-
-        ComboBox {
-            id: timeFormatCombo
-            Kirigami.FormData.label: i18n("Formato de hora:")
-            textRole: "text"
-            valueRole: "value"
-            model: [
-                { text: i18n("24 horas (ej. 14:30)"), value: "24h" },
-                { text: i18n("12 horas (ej. 02:30 PM)"), value: "12h" }
-            ]
-        }
-
-        CheckBox {
-            id: showSecondsCheck
-            Kirigami.FormData.label: i18n("Segundos:")
-            text: i18n("Mostrar segundos en el reloj")
-        }
-
-        Item {
-            Kirigami.FormData.isSection: true
-            Kirigami.FormData.label: i18n("Comportamiento y Posición")
-        }
-
-        ComboBox {
-            id: positionCombo
-            Kirigami.FormData.label: i18n("Posición del lanzador:")
-            textRole: "text"
-            valueRole: "value"
-            model: [
-                { text: i18n("Centro de la pantalla"), value: "center" },
-                { text: i18n("Acoplado al panel"), value: "panel" }
-            ]
+            Kirigami.FormData.label: i18n("Apariencia General")
         }
 
         RowLayout {
@@ -87,10 +51,10 @@ KCM.SimpleKCM {
         }
 
         SpinBox {
-            id: gridColumnsSpin
-            Kirigami.FormData.label: i18n("Columnas (Grilla Apps):")
-            from: 2
-            to: 8
+            id: gridRowsSpin
+            Kirigami.FormData.label: i18n("Filas Visibles (Grilla Apps):")
+            from: 3
+            to: 30
             stepSize: 1
         }
     }

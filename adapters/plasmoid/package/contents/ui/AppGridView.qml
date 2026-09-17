@@ -104,8 +104,7 @@ Item {
 
             Keys.onDownPressed: (event) => {
                 if (appRunner.count > 0) {
-                    var cols = (Plasmoid.configuration && Plasmoid.configuration.gridColumns > 0) ? Plasmoid.configuration.gridColumns : 3;
-                    root.selectedIndex = Math.min(root.selectedIndex + cols, appRunner.count - 1);
+                    root.selectedIndex = Math.min(root.selectedIndex + 3, appRunner.count - 1);
                     ensureVisible(root.selectedIndex);
                     event.accepted = true;
                 }
@@ -113,8 +112,7 @@ Item {
 
             Keys.onUpPressed: (event) => {
                 if (appRunner.count > 0) {
-                    var cols = (Plasmoid.configuration && Plasmoid.configuration.gridColumns > 0) ? Plasmoid.configuration.gridColumns : 3;
-                    root.selectedIndex = Math.max(root.selectedIndex - cols, 0);
+                    root.selectedIndex = Math.max(root.selectedIndex - 3, 0);
                     ensureVisible(root.selectedIndex);
                     event.accepted = true;
                 }
@@ -174,14 +172,14 @@ Item {
             Grid {
                 id: appGrid
                 width: scrollView.availableWidth
-                columns: (Plasmoid.configuration && Plasmoid.configuration.gridColumns > 0) ? Plasmoid.configuration.gridColumns : 3
+                columns: 3
                 spacing: 0
 
                 Repeater {
                     model: appRunner
                     delegate: Item {
                         id: appDelegate
-                        width: Math.floor(appGrid.width / ((Plasmoid.configuration && Plasmoid.configuration.gridColumns > 0) ? Plasmoid.configuration.gridColumns : 3))
+                        width: Math.floor(appGrid.width / 3)
                         height: 82
 
                         readonly property bool isCurrentSelected: (index === root.selectedIndex)
@@ -263,8 +261,7 @@ Item {
      * @param {number} idx Índice del elemento seleccionado.
      */
     function ensureVisible(idx) {
-        var cols = (Plasmoid.configuration && Plasmoid.configuration.gridColumns > 0) ? Plasmoid.configuration.gridColumns : 3;
-        var row = Math.floor(idx / cols);
+        var row = Math.floor(idx / 3);
         var itemY = row * 82;
         if (itemY < scrollView.contentItem.contentY) {
             scrollView.contentItem.contentY = itemY;

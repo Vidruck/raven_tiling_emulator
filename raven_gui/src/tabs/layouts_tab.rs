@@ -78,7 +78,7 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, 
 
             // [NUEVO] Sección de Layouts Personalizados (Lua)
             ui.add_space(8.0);
-            ui.heading(egui::RichText::new("Locuras (Scripts Lua)").strong().size(13.5));
+            ui.heading(egui::RichText::new("Scripts Lua").strong().size(13.5));
             ui.add_space(6.0);
 
             let custom_layouts = get_custom_layouts();

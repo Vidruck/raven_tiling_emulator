@@ -47,14 +47,21 @@ PlasmoidItem {
         backgroundHints: PlasmaCore.Dialog.StandardBackground
         hideOnWindowDeactivate: true
         visible: false
+        property int calculatedHeight: {
+            var rows = (Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 10
+            var desired = (rows * 82) + 120
+            var maxH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? (Plasmoid.screenGeometry.height - 100) : 1200
+            return Math.min(desired, maxH)
+        }
+
         width: 440
-        height: (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Math.min(Plasmoid.screenGeometry.height - 100, 900) : 900
+        height: calculatedHeight
 
         Component.onCompleted: {
             var screenW = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.width > 0) ? Plasmoid.screenGeometry.width : 1920
             var screenH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Plasmoid.screenGeometry.height : 1080
             x = (screenW - 440) / 2
-            y = (screenH - 880) / 2
+            y = (screenH - height) / 2
         }
 
         mainItem: Item {
@@ -63,12 +70,12 @@ PlasmoidItem {
             Layout.minimumWidth: 380
             Layout.maximumWidth: 1000
             Layout.preferredWidth: 440
-            Layout.minimumHeight: 700
-            Layout.maximumHeight: 1200
-            Layout.preferredHeight: 880
+            Layout.minimumHeight: 300
+            Layout.maximumHeight: 2000
+            Layout.preferredHeight: centerDialog.calculatedHeight
             
             implicitWidth: 440
-            implicitHeight: 880
+            implicitHeight: centerDialog.calculatedHeight
 
             MainWindowView {
                 anchors.fill: parent
@@ -83,9 +90,9 @@ PlasmoidItem {
 
     fullRepresentation: Item {
         Layout.minimumWidth: 380
-        Layout.minimumHeight: 700
+        Layout.minimumHeight: 300
         Layout.preferredWidth: 440
-        Layout.preferredHeight: 880
+        Layout.preferredHeight: ((Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 10) * 82 + 120
         MainWindowView {
             anchors.fill: parent
             appletExpanded: root.expanded

@@ -611,6 +611,9 @@ function syncState() {
   const desks = workspace.desktops || [];
   const currentDesk = workspace.currentDesktop;
 
+  const masterOutputs = [];
+  const masterDesktops = [];
+
   // Wayland provee la topología autoritativa de monitores directamente en Rust (raven_backend_wayland).
   // Únicamente si se requiere fallback inicial o calibración de paneles Plasma, podemos obtener el área útil.
   // Evitamos iterar pesadamente combinatorias innecesarias en cada syncState.
