@@ -36,16 +36,9 @@ function processNewWindow(w) {
 
   if (needsQuarantine) {
     w.__raven_quarantined = true;
-    const durationMs = (strClass === "") ? 120 : 80;
-
-    w.__raven_stab_timer = setKWinTimeout(() => {
-      if (w && !w.deleted) {
-        w.__raven_quarantined = false;
-        w.__raven_strict_birth = true;
-        w.__raven_stab_timer = null;
-        requestStateSync();
-      }
-    }, durationMs);
+    w.__raven_strict_birth = true; // Rust is now responsible for the timeout
+    w.__raven_stab_timer = null;
+    requestStateSync();
   } else {
     requestStateSync();
   }

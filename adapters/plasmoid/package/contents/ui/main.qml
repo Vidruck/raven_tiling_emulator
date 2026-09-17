@@ -19,7 +19,7 @@ import "./org/kde/plasma/ravenlauncher/plugin" as RavenPlugin
  */
 PlasmoidItem {
     id: root
-    Plasmoid.icon: (RavenPlugin.SystemStats && RavenPlugin.SystemStats.distroIcon) ? RavenPlugin.SystemStats.distroIcon : "start-here-kde"
+    Plasmoid.icon: (Plasmoid.configuration.plasmoidIcon && Plasmoid.configuration.plasmoidIcon.length > 0) ? Plasmoid.configuration.plasmoidIcon : ((RavenPlugin.SystemStats && RavenPlugin.SystemStats.distroIcon) ? RavenPlugin.SystemStats.distroIcon : "start-here-kde")
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground
     preferredRepresentation: compactRepresentation
 
@@ -34,7 +34,7 @@ PlasmoidItem {
             id: appletIcon
             anchors.fill: parent
             anchors.margins: Math.round(Kirigami.Units.smallSpacing / 2)
-            source: (RavenPlugin.SystemStats && RavenPlugin.SystemStats.distroIcon) ? RavenPlugin.SystemStats.distroIcon : "start-here-kde"
+            source: (Plasmoid.configuration.plasmoidIcon && Plasmoid.configuration.plasmoidIcon.length > 0) ? Plasmoid.configuration.plasmoidIcon : ((RavenPlugin.SystemStats && RavenPlugin.SystemStats.distroIcon) ? RavenPlugin.SystemStats.distroIcon : "start-here-kde")
             fallback: "kde"
             active: compactRoot.containsMouse
         }

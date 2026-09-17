@@ -11,6 +11,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.kcmutils as KCM
+import org.kde.iconthemes as KIconThemes
 
 /**
  * @class configAppearance
@@ -22,6 +23,8 @@ KCM.SimpleKCM {
     property alias cfg_timeFormat: timeFormatCombo.currentValue
     property alias cfg_showSeconds: showSecondsCheck.checked
     property alias cfg_launcherPosition: positionCombo.currentValue
+    property alias cfg_plasmoidIcon: iconField.text
+    property alias cfg_gridColumns: gridColumnsSpin.value
 
     Kirigami.FormLayout {
         anchors.fill: parent
@@ -62,6 +65,33 @@ KCM.SimpleKCM {
                 { text: i18n("Centro de la pantalla"), value: "center" },
                 { text: i18n("Acoplado al panel"), value: "panel" }
             ]
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18n("Icono del Plasmoide:")
+            TextField {
+                id: iconField
+                Layout.fillWidth: true
+                placeholderText: i18n("Ej. start-here-kde o ruta de imagen")
+            }
+            Button {
+                icon.name: iconField.text.length > 0 ? iconField.text : "document-open"
+                text: i18n("Seleccionar...")
+                onClicked: iconDialog.open()
+            }
+        }
+
+        KIconThemes.IconDialog {
+            id: iconDialog
+            onIconNameChanged: iconField.text = iconName
+        }
+
+        SpinBox {
+            id: gridColumnsSpin
+            Kirigami.FormData.label: i18n("Columnas (Grilla Apps):")
+            from: 2
+            to: 8
+            stepSize: 1
         }
     }
 }

@@ -56,6 +56,11 @@ pub enum RavenAction {
         /// Identificador de la ventana a restaurar.
         window_id: String,
     },
+    /// Señala a KWin que la ventana ha superado el periodo de cuarentena.
+    ReleaseQuarantine {
+        /// Identificador de la ventana.
+        window_id: String,
+    },
     /// Solicita retroalimentación (feedback) de sincronización de estado tras registrarse una ventana estricta.
     RequestFeedback {
         /// Identificador de la ventana.

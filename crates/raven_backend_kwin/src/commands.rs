@@ -119,6 +119,18 @@ impl From<RavenAction> for TilingCommand {
                 floating: None,
                 keep_above: None,
             },
+            RavenAction::ReleaseQuarantine { window_id } => TilingCommand {
+                action: "release_quarantine".to_string(),
+                window_id: Some(window_id),
+                x: None,
+                y: None,
+                width: None,
+                height: None,
+                target_ws: None,
+                direction: None,
+                floating: None,
+                keep_above: None,
+            },
             RavenAction::SaturationWarning { cmax, active } => TilingCommand {
                 action: "saturation_warning".to_string(),
                 window_id: None,

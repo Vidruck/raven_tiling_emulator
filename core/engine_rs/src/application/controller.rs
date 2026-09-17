@@ -341,12 +341,6 @@ impl RavenController {
                     width: rect.width,
                     height: rect.height,
                 });
-
-                if is_quarantined_or_strict {
-                    commands.push(RavenAction::RequestFeedback {
-                        window_id: wid.clone(),
-                    });
-                }
             }
         }
 
@@ -560,6 +554,19 @@ impl RavenController {
                     );
                 } else {
                     Self::send_osd_notification("Modo Mosaico", "Desactivado (Modo Flotante)");
+                    let mut offset = 18;
+                    for win in windows.iter() {
+                        if !win.is_minimized && !win.is_floating {
+                            commands.push(RavenAction::MoveWindow {
+                                window_id: win.window_id.clone(),
+                                x: win.geometry.x + offset,
+                                y: win.geometry.y + offset,
+                                width: win.geometry.width,
+                                height: win.geometry.height,
+                            });
+                            offset += 14;
+                        }
+                    }
                 }
                 needs_recalc = true;
             }

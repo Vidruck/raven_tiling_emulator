@@ -62,6 +62,8 @@ pub enum CompositorEvent {
     WindowFocused(Option<String>),
     /// Cambio o reorganización en la topología de monitores o escritorios.
     TopologyChanged(crate::geometry::Topology),
+    /// Liberar cuarentena para una ventana específica.
+    ReleaseQuarantine(String),
 }
 
 /// Contrato universal de abstracción para backends de compositores de ventanas.

@@ -12,7 +12,6 @@ use raven_core::config::RavenConfig;
 use crate::kde_theme::KdePalette;
 use crate::models::PRESETS;
 use crate::components::layout_preview::draw_layout_preview;
-use std::process::Command;
 use std::fs;
 use std::path::PathBuf;
 
@@ -98,24 +97,19 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, 
 
             ui.add_space(6.0);
             if ui.button("➕ Importar Script Lua...").on_hover_text("Selecciona un archivo .lua para usar como algoritmo de tiling").clicked() {
-                // Invocamos kdialog para seleccionar el archivo
-                let output = Command::new("kdialog")
-                    .arg("--getopenfilename")
-                    .arg(std::env::var("HOME").unwrap_or_else(|_| "~".to_string()))
-                    .arg("*.lua")
-                    .output();
-
-                if let Ok(out) = output {
-                    if out.status.success() {
-                        let selected_file = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                        if !selected_file.is_empty() {
-                            let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home/vidruck".to_string());
-                            let target_dir = PathBuf::from(home_dir).join(".config/raven/layouts");
-                            let _ = fs::create_dir_all(&target_dir);
-                            
-                            let target_path = target_dir.join(PathBuf::from(&selected_file).file_name().unwrap());
-                            let _ = fs::copy(&selected_file, target_path);
-                        }
+                // Invocamos un diálogo de archivos nativo usando rfd
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("Scripts Lua", &["lua"])
+                    .set_directory(std::env::var("HOME").unwrap_or_else(|_| "/".to_string()))
+                    .pick_file()
+                {
+                    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home/vidruck".to_string());
+                    let target_dir = PathBuf::from(home_dir).join(".config/raven/layouts");
+                    let _ = fs::create_dir_all(&target_dir);
+                    
+                    if let Some(file_name) = path.file_name() {
+                        let target_path = target_dir.join(file_name);
+                        let _ = fs::copy(&path, target_path);
                     }
                 }
             }

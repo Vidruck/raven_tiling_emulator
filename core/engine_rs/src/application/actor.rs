@@ -38,16 +38,18 @@ pub struct RavenControllerActor {
     last_payload_json: String,
     current_topology: Topology,
     rx: mpsc::Receiver<RavenMessage>,
+    tx: mpsc::Sender<RavenMessage>,
 }
 
 impl RavenControllerActor {
-    pub fn new(controller: RavenController, rx: mpsc::Receiver<RavenMessage>) -> Self {
+    pub fn new(controller: RavenController, rx: mpsc::Receiver<RavenMessage>, tx: mpsc::Sender<RavenMessage>) -> Self {
         Self {
             controller,
             active_window_id: None,
             last_payload_json: String::from("{}"),
             current_topology: Topology::default(),
             rx,
+            tx,
         }
     }
 
@@ -127,6 +129,38 @@ impl RavenControllerActor {
                             self.current_topology = topology;
                             let _ = self.controller.commit_layout();
                         }
+                        CompositorEvent::ReleaseQuarantine(window_id) => {
+                            if let Some(win) = self.controller.get_engine_mut().current_windows.get_mut(&window_id) {
+                                win.is_quarantined = false;
+                                win.strict_birth = false;
+                                info!("[ACTOR] Cuarentena liberada vía flag diferido para {}", window_id);
+                                let mut commands = Vec::new();
+                                commands.push(raven_core::action::RavenAction::ReleaseQuarantine {
+                                    window_id: window_id.clone(),
+                                });
+                                if let Ok(cmds) = self.controller.commit_layout() {
+                                    commands.extend(cmds);
+                                }
+                                if !commands.is_empty() {
+                                    // Hack temporal para forzar KWin a aplicar: en un futuro CompositorBackend debería tener apply_actions sin depender de DBus de vuelta (o que tx pase a backend)
+                                    // Para emitirlo back, podemos usar request_feedback manual (no necesario si KWinSyncState lo hace, pero KWinBridgeMessage::SyncState retorna commands en reply).
+                                    // Como esto es un CompositorEvent, nadie está esperando el Reply.
+                                    // Necesitamos llamar a backend.apply_actions(commands). 
+                                    // Pero el backend no está en el actor.
+                                    // Mejor: emitimos un command asíncrono con DBus nativo
+                                    let json_cmd = raven_backend_kwin::service::actions_to_kwin_json(commands);
+                                    tokio::spawn(async move {
+                                        let _ = tokio::process::Command::new("qdbus")
+                                            .arg("org.kde.raven.Daemon")
+                                            .arg("/Events")
+                                            .arg("org.kde.raven.Events.tilingCommandsPending")
+                                            .arg(json_cmd)
+                                            .output()
+                                            .await;
+                                    });
+                                }
+                            }
+                        }
                     }
                 }
                 RavenMessage::KWinBridge(kwin_msg) => match kwin_msg {
@@ -164,6 +198,17 @@ impl RavenControllerActor {
                                 .contains(&win.window_id)
                             {
                                 win.is_floating = true;
+                            }
+                            
+                            if win.is_quarantined || win.strict_birth {
+                                let target_id = win.window_id.clone();
+                                let tx_clone = self.tx.clone();
+                                tokio::spawn(async move {
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(480)).await;
+                                    let _ = tx_clone.send(RavenMessage::Compositor(
+                                        raven_core::backend::CompositorEvent::ReleaseQuarantine(target_id)
+                                    )).await;
+                                });
                             }
                         }
 
@@ -224,6 +269,18 @@ impl RavenControllerActor {
 
                             let is_tiled = !win_node.is_floating && !win_node.is_minimized;
                             let wid = win_node.window_id.clone();
+                            
+                            if win_node.is_quarantined || win_node.strict_birth {
+                                let target_id = win_node.window_id.clone();
+                                let tx_clone = self.tx.clone();
+                                tokio::spawn(async move {
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(480)).await;
+                                    let _ = tx_clone.send(RavenMessage::Compositor(
+                                        raven_core::backend::CompositorEvent::ReleaseQuarantine(target_id)
+                                    )).await;
+                                });
+                            }
+                            
                             self.controller.handle_delta_change(win_node);
 
                             if is_tiled {

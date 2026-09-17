@@ -528,16 +528,9 @@ function processNewWindow(w) {
 
   if (needsQuarantine) {
     w.__raven_quarantined = true;
-    const durationMs = (strClass === "") ? 120 : 80;
-
-    w.__raven_stab_timer = setKWinTimeout(() => {
-      if (w && !w.deleted) {
-        w.__raven_quarantined = false;
-        w.__raven_strict_birth = true;
-        w.__raven_stab_timer = null;
-        requestStateSync();
-      }
-    }, durationMs);
+    w.__raven_strict_birth = true; // Rust is now responsible for the timeout
+    w.__raven_stab_timer = null;
+    requestStateSync();
   } else {
     requestStateSync();
   }
@@ -624,11 +617,17 @@ function syncState() {
   try {
     for (let o = 0; o < outs.length; o++) {
       const output = outs[o];
-      const outName = output ? output.name : "default";
-      // Solo registramos el área útil básica por pantalla para respetar paneles de Plasma
-      const deskId = currentDesk ? currentDesk.id.toString() : "default_desk";
-      const wsId = outName + "||" + deskId;
-      screens[wsId] = getSafeScreenGeometry(output, currentDesk);
+      if (output && output.name) {
+        masterOutputs.push(output.name.toString());
+        const deskId = currentDesk ? currentDesk.id.toString() : "default_desk";
+        const wsId = output.name + "||" + deskId;
+        screens[wsId] = getSafeScreenGeometry(output, currentDesk);
+      }
+    }
+    for (let d = 0; d < desks.length; d++) {
+      if (desks[d] && desks[d].id) {
+        masterDesktops.push(desks[d].id.toString());
+      }
     }
   } catch (e) {
     Logger.error("syncState", "Error ligero obteniendo topología de pantallas", e);
@@ -637,7 +636,7 @@ function syncState() {
   for (let i = 0; i < windows.length; i++) {
     const w = windows[i];
     try {
-      if (!isManageable(w) || w.__raven_quarantined) {
+      if (!isManageable(w)) {
         continue;
       }
       const safeId = getSafeWindowId(w);
@@ -645,55 +644,9 @@ function syncState() {
         continue;
       }
 
-      const output = w.output || workspace.activeOutput;
-      const outName = output ? output.name : "default";
-
-      const deskIds = [];
-      if (w.desktops) {
-        for (let d = 0; d < w.desktops.length; d++) {
-          deskIds.push(w.desktops[d].id.toString());
-        }
-      }
-
-      const strCap = w.caption ? w.caption.toString() : "";
-      const strClass = w.resourceClass ? w.resourceClass.toString() : "";
-      const geom = getRectGeometry(w.frameGeometry);
-
-      winState.push({
-        id: safeId,
-        desktops: deskIds,
-        output: outName,
-        f: isFloating(w),
-        m: Boolean(w.minimized),
-        p: false,
-        x: geom.x,
-        y: geom.y,
-        w: geom.w,
-        h: geom.h,
-        min_w: w.minSize ? Math.round(w.minSize.width) : 0,
-        min_h: w.minSize ? Math.round(w.minSize.height) : 0,
-        sb: Boolean(w.__raven_strict_birth),
-        iq: Boolean(w.__raven_quarantined),
-        fs: Boolean(w.fullScreen),
-        cls: strClass,
-        cap: strCap,
-      });
+      winState.push(buildWindowState(w, safeId));
     } catch (e) {
       Logger.error("syncState", "Error extrayendo geometría/estado de ventana", e);
-    }
-  }
-
-  const masterOutputs = [];
-  for (let o = 0; o < outs.length; o++) {
-    if (outs[o] && outs[o].name) {
-      masterOutputs.push(outs[o].name.toString());
-    }
-  }
-
-  const masterDesktops = [];
-  for (let d = 0; d < desks.length; d++) {
-    if (desks[d] && desks[d].id) {
-      masterDesktops.push(desks[d].id.toString());
     }
   }
 
@@ -734,7 +687,7 @@ function syncState() {
  */
 function syncWindowDelta(w) {
   try {
-    if (!w || w.deleted || !isManageable(w) || w.__raven_quarantined) {
+    if (!w || w.deleted || !isManageable(w)) {
       return;
     }
 
@@ -743,33 +696,7 @@ function syncWindowDelta(w) {
       return;
     }
 
-    const geom = getRectGeometry(w.frameGeometry);
-    const deskIds = [];
-    if (w.desktops) {
-      for (let d = 0; d < w.desktops.length; d++) {
-        deskIds.push(w.desktops[d].id.toString());
-      }
-    }
-
-    const deltaPayload = {
-      id: safeId,
-      desktops: deskIds,
-      output: w.output ? w.output.name : "default",
-      f: isFloating(w),
-      m: Boolean(w.minimized),
-      p: false,
-      x: geom.x,
-      y: geom.y,
-      w: geom.w,
-      h: geom.h,
-      min_w: w.minSize ? Math.round(w.minSize.width) : 0,
-      min_h: w.minSize ? Math.round(w.minSize.height) : 0,
-      sb: Boolean(w.__raven_strict_birth),
-      iq: Boolean(w.__raven_quarantined),
-      fs: Boolean(w.fullScreen),
-      cls: w.resourceClass ? w.resourceClass.toString() : "",
-      cap: w.caption ? w.caption.toString() : "",
-    };
+    const deltaPayload = buildWindowState(w, safeId);
     callDBus(
       "org.kde.raven.Daemon",
       "/Events",
@@ -1024,6 +951,10 @@ function applyCommands(commandsJson) {
                 }, 480);
               })(w);
             }
+          } else if (cmd.action === "release_quarantine") {
+            w.__raven_quarantined = false;
+            w.__raven_strict_birth = false;
+            w.__raven_stab_timer = null;
           } else if (cmd.action === "minimize") {
             w.__raven_mutating = true;
             w.minimized = true;
@@ -1188,15 +1119,7 @@ function bindWindow(w) {
       if (!w || w.deleted) {
         return;
       }
-      if (w.__raven_quarantined && w.__raven_stab_timer) {
-        const t = w.__raven_stab_timer;
-        if (t.timer) {
-          t.timer.stop();
-          t.timer.start();
-        } else if (typeof t.stop === "function") {
-          t.stop();
-          t.start();
-        }
+      if (w.__raven_quarantined) {
         return;
       }
 
@@ -1233,6 +1156,42 @@ function bindWindow(w) {
   } catch (e) {
     Logger.error("bindWindow", "Error enlazando eventos de ventana", e);
   }
+}
+
+/**
+ * @brief Extrae y normaliza el estado espacial de una ventana.
+ * @param {KWin::Window} w Instancia de la ventana.
+ * @param {string} safeId Identificador seguro de la ventana.
+ * @return {Object} Diccionario plano con las propiedades estructuradas.
+ */
+function buildWindowState(w, safeId) {
+  const geom = getRectGeometry(w.frameGeometry);
+  const deskIds = [];
+  if (w.desktops) {
+    for (let d = 0; d < w.desktops.length; d++) {
+      deskIds.push(w.desktops[d].id.toString());
+    }
+  }
+  const output = w.output || workspace.activeOutput;
+  return {
+    id: safeId,
+    desktops: deskIds,
+    output: output ? output.name : "default",
+    f: isFloating(w),
+    m: Boolean(w.minimized),
+    p: false,
+    x: geom.x,
+    y: geom.y,
+    w: geom.w,
+    h: geom.h,
+    min_w: w.minSize ? Math.round(w.minSize.width) : 0,
+    min_h: w.minSize ? Math.round(w.minSize.height) : 0,
+    sb: Boolean(w.__raven_strict_birth),
+    iq: Boolean(w.__raven_quarantined),
+    fs: Boolean(w.fullScreen),
+    cls: w.resourceClass ? w.resourceClass.toString() : "",
+    cap: w.caption ? w.caption.toString() : "",
+  };
 }
 /**
  * @file shortcuts.js
@@ -1317,36 +1276,6 @@ function registerRavenShortcuts() {
               if (isEnabled) {
                 // Modo activado: Sincronización forzada completa ("patada del puente a Rust")
                 syncState();
-              } else {
-                // Modo desactivado: Desacomodo sutil (offset en cascada) para feedback visual claro
-                var winList = workspace.windowList ? workspace.windowList() : [];
-                var activeOut = workspace.activeOutput;
-                var offset = 18;
-                for (var i = 0; i < winList.length; i++) {
-                  var w = winList[i];
-                  if (w && !w.deleted && isManageable(w) && !w.minimized && !w.fullScreen && w.maximizeMode === 0) {
-                    if (!activeOut || !w.output || w.output.name === activeOut.name) {
-                      try {
-                        w.__raven_mutating = true;
-                        var geom = w.frameGeometry;
-                        w.frameGeometry = {
-                          x: geom.x + offset,
-                          y: geom.y + offset,
-                          width: geom.width,
-                          height: geom.height
-                        };
-                        offset += 14;
-                        (function (cw) {
-                          setKWinTimeout(function () {
-                            if (cw && !cw.deleted) {
-                              cw.__raven_mutating = false;
-                            }
-                          }, 150);
-                        })(w);
-                      } catch (errGeom) {}
-                    }
-                  }
-                }
               }
             }
           );

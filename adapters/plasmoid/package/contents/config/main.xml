@@ -36,5 +36,13 @@
     <entry name="greetingFontFamily" type="String">
       <default></default>
     </entry>
+    <entry name="plasmoidIcon" type="String">
+      <default></default>
+    </entry>
+    <entry name="gridColumns" type="Int">
+      <default>3</default>
+      <min>2</min>
+      <max>8</max>
+    </entry>
   </group>
 </kcfg>
