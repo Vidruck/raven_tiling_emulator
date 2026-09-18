@@ -150,7 +150,7 @@ impl RavenControllerActor {
                                     // Mejor: emitimos un command asíncrono con DBus nativo
                                     let json_cmd = raven_backend_kwin::service::actions_to_kwin_json(commands);
                                     tokio::spawn(async move {
-                                        let _ = tokio::process::Command::new("qdbus")
+                                        let _ = tokio::process::Command::new("qdbus6")
                                             .arg("org.kde.raven.Daemon")
                                             .arg("/Events")
                                             .arg("org.kde.raven.Events.tilingCommandsPending")
