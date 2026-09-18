@@ -26,7 +26,7 @@ fn get_custom_layouts() -> Vec<String> {
             if let Ok(file_type) = entry.file_type() {
                 if file_type.is_file() {
                     let path = entry.path();
-                    if path.extension().map_or(false, |ext| ext == "lua") {
+                    if path.extension().is_some_and(|ext| ext == "lua") {
                         if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
                             layouts.push(name.to_string());
                         }

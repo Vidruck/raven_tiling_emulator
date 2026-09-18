@@ -9,7 +9,6 @@
 //! de bucles infinitos de oscilación geométrica (*FlapTracker*).
 
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{info, warn};
 
 use crate::application::engine::TilingEngine;
@@ -18,24 +17,7 @@ use crate::domain::error::RavenError;
 use crate::domain::geometry::{Rect, WindowNode};
 use crate::domain::saturation::{calculate_screen_capacity, SaturationState};
 
-/// Rastreador de oscilación rápida (flapping) de ventana.
-///
-/// Evita que ventanas problemáticas entren en bucles infinitos de actualización
-/// debido a conflictos entre su tamaño mínimo y el algoritmo de mosaico (tiling).
-struct FlapTracker {
-    /// Marca de tiempo del último cambio detectado (last toggle time).
-    last_toggle_time: u64,
-    /// Conteo acumulado de eventos de oscilación detectados en cascada (toggle count).
-    toggle_count: u64,
-    /// Indica si la ventana está bajo penalización o en cuarentena (penalized).
-    is_penalized: bool,
-    /// Última geometría rectangular (rect) conocida para comparar cambios reales.
-    last_rect: Option<Rect>,
-    /// Último monitor/pantalla conocido para no tratar saltos inter-monitor como flap.
-    last_output: Option<String>,
-    /// Último estado de minimización conocido (minimized).
-    last_minimized: bool,
-}
+use crate::domain::flap_guard::FlapGuard;
 
 /// Orquestador principal de la lógica de Raven Hub v3.4 con soporte de pila compartida y mitigación de saturación.
 pub struct RavenController {
@@ -43,27 +25,43 @@ pub struct RavenController {
     engine: TilingEngine,
     /// Registro histórico del último diseño (layout) calculado.
     last_known_layout: HashMap<String, Rect>,
-    /// Registro de oscilaciones rápidas (flapping) por ventana.
-    flap_registry: HashMap<String, FlapTracker>,
+    /// Guardia de detección y mitigación de oscilaciones rápidas (flapping).
+    flap_guard: FlapGuard,
     /// Identificador de la ventana activa enfocada (focused window).
     pub active_window_id: Option<String>,
     /// Cantidad de ventanas activas en el último cambio de estado.
     last_active_window_count: usize,
+    /// Puerto secundario para persistencia del historial de ventanas.
+    history_storage: Box<dyn raven_core::ports::HistoryStorage>,
+    /// Puerto secundario para notificaciones OSD del sistema.
+    notifier: Box<dyn raven_core::ports::NotificationPort>,
 }
 
 impl RavenController {
-    /// Crea una nueva instancia de `RavenController`.
-    ///
-    /// # Parámetros
-    /// * `engine` - Instancia del motor de mosaico (tiling engine) a utilizar.
-    pub fn new(mut engine: TilingEngine) -> Self {
-        engine.window_history = Self::load_window_history();
+    /// Crea una nueva instancia de `RavenController` con los adaptadores por defecto.
+    pub fn new(engine: TilingEngine) -> Self {
+        Self::with_ports(
+            engine,
+            Box::new(crate::infrastructure::adapters::FileHistoryStorage::new()),
+            Box::new(crate::infrastructure::adapters::NotifySendNotifier),
+        )
+    }
+
+    /// Crea una nueva instancia de `RavenController` inyectando puertos secundarios personalizados.
+    pub fn with_ports(
+        mut engine: TilingEngine,
+        history_storage: Box<dyn raven_core::ports::HistoryStorage>,
+        notifier: Box<dyn raven_core::ports::NotificationPort>,
+    ) -> Self {
+        engine.window_history = history_storage.load_history();
         RavenController {
             engine,
             last_known_layout: HashMap::new(),
-            flap_registry: HashMap::new(),
+            flap_guard: FlapGuard::new(),
             active_window_id: None,
             last_active_window_count: 0,
+            history_storage,
+            notifier,
         }
     }
 
@@ -75,67 +73,16 @@ impl RavenController {
     /// Restablece todo el estado interno y registros temporales del controlador.
     pub fn reset_state(&mut self) {
         self.last_known_layout.clear();
-        self.flap_registry.clear();
+        self.flap_guard.clear();
         self.engine.current_workspaces.clear();
         self.engine.current_windows.clear();
         self.active_window_id = None;
         self.last_active_window_count = 0;
     }
 
-    fn load_window_history() -> std::collections::VecDeque<String> {
-        let home = std::env::var("HOME").unwrap_or_else(|_| String::from("~"));
-        let mut path = std::path::PathBuf::from(home);
-        path.push(".cache");
-        path.push("raven");
-        path.push("history.json");
-
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(history) = serde_json::from_str(&content) {
-                return history;
-            }
-        }
-        std::collections::VecDeque::new()
-    }
-
-    fn persist_window_history(history: std::collections::VecDeque<String>) {
-        tokio::spawn(async move {
-            let home = std::env::var("HOME").unwrap_or_else(|_| String::from("~"));
-            let mut path = std::path::PathBuf::from(home);
-            path.push(".cache");
-            path.push("raven");
-            let _ = tokio::fs::create_dir_all(&path).await;
-            path.push("history.json");
-
-            if let Ok(json) = serde_json::to_string(&history) {
-                let _ = tokio::fs::write(path, json).await;
-            }
-        });
-    }
-
-    /// Despacha una notificación OSD ultraligera y asíncrona mediante `notify-send`.
-    ///
-    /// Utiliza el hint `x-canonical-private-synchronous:raven-osd` para reemplazar
-    /// notificaciones previas en tiempo real sin saturar el centro de notificaciones del sistema.
-    ///
-    /// # Parámetros
-    /// * `title` - Título del encabezado OSD (ej. "Márgenes de Ventana", "Disposición de Ventanas").
-    /// * `body` - Mensaje descriptivo con el valor actual o delta aplicado.
-    fn send_osd_notification(title: &str, body: &str) {
-        let t = title.to_string();
-        let b = body.to_string();
-        tokio::spawn(async move {
-            let _ = tokio::process::Command::new("notify-send")
-                .arg("-a")
-                .arg("Raven Tiling")
-                .arg("-t")
-                .arg("1200")
-                .arg("-h")
-                .arg("string:x-canonical-private-synchronous:raven-osd")
-                .arg(&t)
-                .arg(&b)
-                .output()
-                .await;
-        });
+    /// Despacha una notificación OSD utilizando el puerto de notificación inyectado.
+    fn send_osd_notification(&self, title: &str, body: &str) {
+        self.notifier.notify_osd(title, body);
     }
 
     /// Determina si el motor de mosaico (tiling engine) está operativo.
@@ -152,12 +99,6 @@ impl RavenController {
     }
 
     /// Comprueba si una ventana está oscilando rápidamente (flapping) y aplica penalizaciones.
-    ///
-    /// # Parámetros
-    /// * `win` - Nodo de ventana (window node) a evaluar.
-    ///
-    /// # Retorno
-    /// Verdadero (true) si la ventana está penalizada u oscilando; falso (false) de lo contrario.
     fn is_window_flapping(&mut self, win: &WindowNode) -> bool {
         if win.strict_birth
             || self
@@ -167,84 +108,7 @@ impl RavenController {
         {
             return false; // Las apps en cuarentena o en Quick Peek tienen pase libre
         }
-
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-
-        let tracker = self
-            .flap_registry
-            .entry(win.window_id.clone())
-            .or_insert(FlapTracker {
-                last_toggle_time: now,
-                toggle_count: 0,
-                is_penalized: false,
-                last_rect: None,
-                last_output: Some(win.output.clone()),
-                last_minimized: win.is_minimized,
-            });
-
-        // Si la ventana cambió de monitor/pantalla, el salto de coordenadas es legítimo.
-        // Reiniciamos inmediatamente el tracker de flap para evitar falsos positivos.
-        if tracker.last_output.as_ref() != Some(&win.output) {
-            tracker.last_output = Some(win.output.clone());
-            tracker.last_rect = Some(win.geometry);
-            tracker.toggle_count = 0;
-            tracker.is_penalized = false;
-            return false;
-        }
-
-        if win.is_minimized != tracker.last_minimized {
-            tracker.last_minimized = win.is_minimized;
-            tracker.toggle_count = 0;
-            return false;
-        }
-
-        if tracker.is_penalized {
-            if now - tracker.last_toggle_time > 1500 {
-                tracker.is_penalized = false;
-                tracker.toggle_count = 0;
-                warn!(
-                    "[Controller] Ventana {} liberada de penalización.",
-                    win.window_id
-                );
-            } else {
-                return true;
-            }
-        }
-
-        let is_jumping = match tracker.last_rect {
-            Some(old_r) => {
-                let dx = (old_r.x - win.geometry.x).abs();
-                let dy = (old_r.y - win.geometry.y).abs();
-                let dw = (old_r.width - win.geometry.width).abs();
-                let dh = (old_r.height - win.geometry.height).abs();
-                dx > 10 || dy > 10 || dw > 10 || dh > 10
-            }
-            None => false,
-        };
-
-        tracker.last_rect = Some(win.geometry);
-
-        if is_jumping {
-            if now - tracker.last_toggle_time < 200 {
-                tracker.toggle_count += 1;
-                if tracker.toggle_count >= 8 {
-                    tracker.is_penalized = true;
-                    warn!(
-                        "[Controller] Ventana {} penalizada por oscilación (flap detectado).",
-                        win.window_id
-                    );
-                    return true;
-                }
-            } else {
-                tracker.toggle_count = 1;
-            }
-            tracker.last_toggle_time = now;
-        }
-
-        false
+        self.flap_guard.is_window_flapping(win)
     }
 
     /// Procesa una actualización completa de estado del compositor y calcula los nuevos comandos.
@@ -275,7 +139,7 @@ impl RavenController {
         }
 
         if history_changed {
-            Self::persist_window_history(self.engine.window_history.clone());
+            self.history_storage.save_history(self.engine.window_history.clone());
         }
 
         let mut healthy_windows = Vec::new();
@@ -509,7 +373,7 @@ impl RavenController {
                 });
 
                 if let Some(wid) = target_wid {
-                    self.flap_registry.remove(&wid);
+                    self.flap_guard.remove(&wid);
                     self.last_known_layout.remove(&wid);
                     if self.engine.dynamic_floating_windows.contains(&wid) {
                         // Caso A: La ventana ya está en Quick Peek -> Devolverla al layout de mosaico (Tiling)
@@ -526,7 +390,7 @@ impl RavenController {
                             floating: false,
                             keep_above: false,
                         });
-                        Self::send_osd_notification("Ventana", "Modo: Mosaico (Tiling)");
+                        self.send_osd_notification("Ventana", "Modo: Mosaico (Tiling)");
                     } else {
                         // Caso B: La ventana está en mosaico -> Convertirla en flotante temporal (Quick Peek)
                         self.engine.dynamic_floating_windows.insert(wid.clone());
@@ -539,7 +403,7 @@ impl RavenController {
                             floating: true,
                             keep_above: true,
                         });
-                        Self::send_osd_notification("Ventana", "Modo: Flotante (Quick Peek)");
+                        self.send_osd_notification("Ventana", "Modo: Flotante (Quick Peek)");
                     }
                     needs_recalc = true;
                 }
@@ -548,12 +412,12 @@ impl RavenController {
                 let enabled = self.engine.toggle_tiling();
                 self.last_known_layout.clear();
                 if enabled {
-                    Self::send_osd_notification(
+                    self.send_osd_notification(
                         "Modo Mosaico",
                         "Activado (Reorganizando ventanas)",
                     );
                 } else {
-                    Self::send_osd_notification("Modo Mosaico", "Desactivado (Modo Flotante)");
+                    self.send_osd_notification("Modo Mosaico", "Desactivado (Modo Flotante)");
                     let mut offset = 18;
                     for win in windows.iter() {
                         if !win.is_minimized && !win.is_floating {
@@ -633,7 +497,7 @@ impl RavenController {
                     "divisor" => "Divisor (Cuadrícula)",
                     _ => "Raven BSP (Foveal)",
                 };
-                Self::send_osd_notification(
+                self.send_osd_notification(
                     "Disposición de Ventanas",
                     &format!("Layout: {}", readable_name),
                 );
@@ -649,7 +513,7 @@ impl RavenController {
                 } else {
                     format!("{}", _payload)
                 };
-                Self::send_osd_notification(
+                self.send_osd_notification(
                     "Márgenes de Ventana",
                     &format!(
                         "Gaps {} px (Total: {} px)",
@@ -727,7 +591,7 @@ impl RavenController {
                         (!is_strict, pos)
                     });
 
-                    let effective_active_id = active_window_id.clone().or_else(|| {
+                    let effective_active_id = self.active_window_id.clone().or_else(|| {
                         self.engine
                             .window_history
                             .back()
@@ -823,7 +687,7 @@ impl RavenController {
                     _ => (0, 0),
                 };
 
-                let effective_active_id = active_window_id.clone().or_else(|| {
+                let effective_active_id = self.active_window_id.clone().or_else(|| {
                     self.engine.window_history.back().cloned().or_else(|| {
                         windows
                             .iter()
@@ -866,7 +730,7 @@ impl RavenController {
             | "migrate_active_to_desktop"
             | "migrate_active_to_prev_screen"
             | "migrate_active_to_prev_desktop" => {
-                let target_wid = active_window_id.clone().or_else(|| {
+                let target_wid = self.active_window_id.clone().or_else(|| {
                     self.engine.window_history.back().cloned().or_else(|| {
                         windows
                             .iter()
@@ -902,7 +766,7 @@ impl RavenController {
                                         window_id: wid.clone(),
                                         target_desktop: target_desk.clone(),
                                     });
-                                    self.flap_registry.remove(wid);
+                                    self.flap_guard.remove(wid);
                                     self.last_known_layout.remove(wid);
                                     if let Some(target_w) = self.engine.current_windows.get_mut(wid)
                                     {
@@ -911,7 +775,7 @@ impl RavenController {
                                             format!("{}||{}", target_w.output, target_desk);
                                     }
                                     needs_recalc = true;
-                                    Self::send_osd_notification(
+                                    self.send_osd_notification(
                                         "Espacio de Trabajo",
                                         &format!("Ventana enviada a escritorio {}", target_idx + 1),
                                     );
@@ -938,7 +802,7 @@ impl RavenController {
                                         window_id: wid.clone(),
                                         target_output: target_out.clone(),
                                     });
-                                    self.flap_registry.remove(wid);
+                                    self.flap_guard.remove(wid);
                                     self.last_known_layout.remove(wid);
                                     if let Some(target_w) = self.engine.current_windows.get_mut(wid)
                                     {
@@ -948,7 +812,7 @@ impl RavenController {
                                         target_w.workspace_id = format!("{}||{}", target_out, desk);
                                     }
                                     needs_recalc = true;
-                                    Self::send_osd_notification(
+                                    self.send_osd_notification(
                                         "Monitor",
                                         &format!("Ventana enviada a monitor {}", target_out),
                                     );

@@ -9,13 +9,16 @@
 //! sobre el estado mutable del motor de ventanas.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::info;
 
 use crate::application::controller::RavenController;
+use crate::application::quarantine::QuarantineManager;
 use crate::domain::geometry::{Rect, Topology, WindowNode};
 use raven_backend_kwin::{parse_payload, service::KWinBridgeMessage, KWinWindow};
-use raven_core::backend::CompositorEvent;
+use raven_core::backend::{CompositorBackend, CompositorEvent};
+use raven_core::ports::NotificationPort;
 
 /// Mensajes que el demonio recibe en su bucle de eventos (compatibilidad KWin + eventos universales de compositor).
 pub enum RavenMessage {
@@ -37,19 +40,30 @@ pub struct RavenControllerActor {
     active_window_id: Option<String>,
     last_payload_json: String,
     current_topology: Topology,
+    backend: Arc<dyn CompositorBackend>,
+    notifier: Arc<dyn NotificationPort>,
+    quarantine_manager: QuarantineManager,
     rx: mpsc::Receiver<RavenMessage>,
-    tx: mpsc::Sender<RavenMessage>,
 }
 
 impl RavenControllerActor {
-    pub fn new(controller: RavenController, rx: mpsc::Receiver<RavenMessage>, tx: mpsc::Sender<RavenMessage>) -> Self {
+    pub fn new(
+        controller: RavenController,
+        backend: Arc<dyn CompositorBackend>,
+        notifier: Arc<dyn NotificationPort>,
+        rx: mpsc::Receiver<RavenMessage>,
+        tx: mpsc::Sender<RavenMessage>,
+    ) -> Self {
+        let quarantine_manager = QuarantineManager::new(tx);
         Self {
             controller,
             active_window_id: None,
             last_payload_json: String::from("{}"),
             current_topology: Topology::default(),
+            backend,
+            notifier,
+            quarantine_manager,
             rx,
-            tx,
         }
     }
 
@@ -133,7 +147,7 @@ impl RavenControllerActor {
                             if let Some(win) = self.controller.get_engine_mut().current_windows.get_mut(&window_id) {
                                 win.is_quarantined = false;
                                 win.strict_birth = false;
-                                info!("[ACTOR] Cuarentena liberada vía flag diferido para {}", window_id);
+                                info!("[ACTOR] Cuarentena liberada vía QuarantineManager para {}", window_id);
                                 let mut commands = Vec::new();
                                 commands.push(raven_core::action::RavenAction::ReleaseQuarantine {
                                     window_id: window_id.clone(),
@@ -142,21 +156,11 @@ impl RavenControllerActor {
                                     commands.extend(cmds);
                                 }
                                 if !commands.is_empty() {
-                                    // Hack temporal para forzar KWin a aplicar: en un futuro CompositorBackend debería tener apply_actions sin depender de DBus de vuelta (o que tx pase a backend)
-                                    // Para emitirlo back, podemos usar request_feedback manual (no necesario si KWinSyncState lo hace, pero KWinBridgeMessage::SyncState retorna commands en reply).
-                                    // Como esto es un CompositorEvent, nadie está esperando el Reply.
-                                    // Necesitamos llamar a backend.apply_actions(commands). 
-                                    // Pero el backend no está en el actor.
-                                    // Mejor: emitimos un command asíncrono con DBus nativo
-                                    let json_cmd = raven_backend_kwin::service::actions_to_kwin_json(commands);
+                                    let backend = self.backend.clone();
                                     tokio::spawn(async move {
-                                        let _ = tokio::process::Command::new("qdbus6")
-                                            .arg("org.kde.raven.Daemon")
-                                            .arg("/Events")
-                                            .arg("org.kde.raven.Events.tilingCommandsPending")
-                                            .arg(json_cmd)
-                                            .output()
-                                            .await;
+                                        if let Err(e) = backend.apply_actions(commands).await {
+                                            tracing::error!("[ACTOR] Error al aplicar acciones de liberación de cuarentena: {}", e);
+                                        }
                                     });
                                 }
                             }
@@ -201,14 +205,9 @@ impl RavenControllerActor {
                             }
                             
                             if win.is_quarantined || win.strict_birth {
-                                let target_id = win.window_id.clone();
-                                let tx_clone = self.tx.clone();
-                                tokio::spawn(async move {
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(120)).await;
-                                    let _ = tx_clone.send(RavenMessage::Compositor(
-                                        raven_core::backend::CompositorEvent::ReleaseQuarantine(target_id)
-                                    )).await;
-                                });
+                                self.quarantine_manager
+                                    .schedule_release(win.window_id.clone(), &win.resource_class)
+                                    .await;
                             }
                         }
 
@@ -271,14 +270,9 @@ impl RavenControllerActor {
                             let wid = win_node.window_id.clone();
                             
                             if win_node.is_quarantined || win_node.strict_birth {
-                                let target_id = win_node.window_id.clone();
-                                let tx_clone = self.tx.clone();
-                                tokio::spawn(async move {
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(60)).await;
-                                    let _ = tx_clone.send(RavenMessage::Compositor(
-                                        raven_core::backend::CompositorEvent::ReleaseQuarantine(target_id)
-                                    )).await;
-                                });
+                                self.quarantine_manager
+                                    .schedule_release(win_node.window_id.clone(), &win_node.resource_class)
+                                    .await;
                             }
                             
                             self.controller.handle_delta_change(win_node);
@@ -445,19 +439,10 @@ impl RavenControllerActor {
                             "divisor" => "Divisor (Cuadrícula)",
                             _ => "Raven BSP (Foveal)",
                         };
-                        tokio::spawn(async move {
-                            let _ = tokio::process::Command::new("notify-send")
-                                .arg("-a")
-                                .arg("Raven Tiling")
-                                .arg("-t")
-                                .arg("1200")
-                                .arg("-h")
-                                .arg("string:x-canonical-private-synchronous:raven-osd")
-                                .arg("Disposición de Ventanas")
-                                .arg(format!("Layout: {}", readable_name))
-                                .output()
-                                .await;
-                        });
+                        self.notifier.notify_osd(
+                            "Disposición de Ventanas",
+                            &format!("Layout: {}", readable_name),
+                        );
 
                         let mut commands = Vec::new();
                         if let Ok(cmds) = self.controller.commit_layout() {

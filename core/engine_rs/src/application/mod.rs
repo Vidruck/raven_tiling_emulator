@@ -8,3 +8,5 @@ pub mod actor;
 pub mod controller;
 /// Módulo que implementa el motor de mosaico (tiling engine).
 pub mod engine;
+/// Módulo para la administración de cuarentena y estabilización de ventanas.
+pub mod quarantine;

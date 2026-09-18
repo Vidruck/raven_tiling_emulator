@@ -64,12 +64,30 @@ pub struct RavenConfig {
 pub fn default_quarantine() -> Vec<String> {
     vec![
         "firefox".into(),
-        "electron".into(),
         "zen-browser".into(),
-        "code".into(),
-        "spotify".into(),
+        "zen".into(),
         "floorp".into(),
+        "librewolf".into(),
         "chrome".into(),
+        "google-chrome".into(),
+        "chromium".into(),
+        "brave".into(),
+        "opera".into(),
+        "vivaldi".into(),
+        "thorium".into(),
+        "edge".into(),
+        "electron".into(),
+        "code".into(),
+        "vscodium".into(),
+        "cursor".into(),
+        "spotify".into(),
+        "discord".into(),
+        "slack".into(),
+        "steam".into(),
+        "telegram".into(),
+        "obsidian".into(),
+        "thunderbird".into(),
+        "postman".into(),
     ]
 }
 

@@ -34,8 +34,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let engine = TilingEngine::new(app_config);
     let controller = RavenController::new(engine);
 
+    let kwin_backend = std::sync::Arc::new(KWinBackend::new());
+
+    let notifier = std::sync::Arc::new(raven_engine::infrastructure::adapters::NotifySendNotifier);
+
     let (actor_tx, actor_rx) = tokio::sync::mpsc::channel(256);
-    let actor = raven_engine::application::actor::RavenControllerActor::new(controller, actor_rx, actor_tx.clone());
+    let actor = raven_engine::application::actor::RavenControllerActor::new(
+        controller,
+        kwin_backend.clone(),
+        notifier,
+        actor_rx,
+        actor_tx.clone(),
+    );
 
     // Iniciar el actor en un hilo en background
     tokio::spawn(actor.run());
@@ -65,7 +75,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Inicializar e intermediar el bridge actual de KWin mediante el crate modular raven_backend_kwin
-    let kwin_backend = KWinBackend::new();
     kwin_backend.start_bridge(actor_tx).await?;
 
     info!("✅ Raven está operando con éxito con KWinBackend (actuador) y WaylandBackend (topología nativa).");

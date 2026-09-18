@@ -289,7 +289,7 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for WaylandState {
                     if info.is_activated {
                         if let Some(ref tx) = state.event_tx {
                             let _ = tx.blocking_send(CompositorEvent::WindowFocused(Some(
-                                handle_id.clone(),
+                                handle_id,
                             )));
                         }
                     }
@@ -304,7 +304,7 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for WaylandState {
                     let ws_id = format!("{}||default", out_name);
 
                     let win_node = WindowNode::new(
-                        handle_id.clone(),
+                        handle_id,
                         ws_id,
                         out_name,
                         vec!["default".to_string()],

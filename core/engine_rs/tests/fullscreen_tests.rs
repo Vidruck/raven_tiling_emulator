@@ -67,7 +67,7 @@ async fn test_fullscreen_direct_transition_evicts_from_tiling_background() {
     let fs_actions = controller
         .handle_state_change(
             workspaces.clone(),
-            vec![nav_fs.clone(), term_window.clone()],
+            vec![nav_fs, term_window.clone()],
         )
         .expect("Sincronización en fullscreen exitosa");
 
@@ -137,9 +137,9 @@ async fn test_simultaneous_fullscreen_across_multiple_monitors() {
     let w3_2 = create_test_window("win-m3-2", "ws-mon3||DP-2", "DP-2", false);
 
     let all_windows = vec![
-        w1_1.clone(),
+        w1_1,
         w1_2.clone(),
-        w2_1.clone(),
+        w2_1,
         w2_2.clone(),
         w3_1.clone(),
         w3_2.clone(),
@@ -156,11 +156,11 @@ async fn test_simultaneous_fullscreen_across_multiple_monitors() {
 
     let fs_multimon_windows = vec![
         w1_1_fs,
-        w1_2.clone(),
+        w1_2,
         w2_1_fs,
-        w2_2.clone(),
-        w3_1.clone(),
-        w3_2.clone(),
+        w2_2,
+        w3_1,
+        w3_2,
     ];
 
     let fs_actions = controller
@@ -222,7 +222,7 @@ async fn test_maximized_window_does_not_fight_engine() {
     let max_actions = controller
         .handle_state_change(
             workspaces.clone(),
-            vec![win1_maximized.clone(), win2.clone()],
+            vec![win1_maximized, win2.clone()],
         )
         .expect("Sincronización con ventana maximizada exitosa");
 

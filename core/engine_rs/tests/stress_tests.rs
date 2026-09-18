@@ -1297,7 +1297,7 @@ async fn test_window_focus_does_not_swap_spatial_order() {
     // Simular que el usuario hace click o enfoca en win-2 (o win-4)
     controller.active_window_id = Some("win-2".to_string());
     let actions_after_focus = controller
-        .handle_state_change(workspaces.clone(), windows.clone())
+        .handle_state_change(workspaces.clone(), windows)
         .unwrap();
     let mut geoms_after_focus: HashMap<String, Rect> = HashMap::new();
     for act in &actions_after_focus {

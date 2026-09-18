@@ -8,6 +8,7 @@
 /** @type {string[]} Lista inmutable de clases base de navegadores Gecko y aplicaciones CSD que requieren estabilización. */
 var HARDCODED_QUARANTINE_BASE = [
   "firefox",
+  "zen-browser",
   "zen",
   "floorp",
   "waterfox",
@@ -15,11 +16,25 @@ var HARDCODED_QUARANTINE_BASE = [
   "tor-browser",
   "gecko",
   "chrome",
+  "google-chrome",
   "chromium",
   "brave",
+  "opera",
+  "vivaldi",
+  "thorium",
+  "edge",
   "electron",
   "code",
+  "vscodium",
+  "cursor",
   "spotify",
+  "discord",
+  "slack",
+  "steam",
+  "telegram",
+  "obsidian",
+  "thunderbird",
+  "postman",
   "intellij",
   "java"
 ];
