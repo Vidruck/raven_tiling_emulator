@@ -96,23 +96,111 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, 
             }
 
             ui.add_space(6.0);
-            if ui.button("➕ Importar Script Lua...").on_hover_text("Selecciona un archivo .lua para usar como algoritmo de tiling").clicked() {
-                // Invocamos un diálogo de archivos nativo usando rfd
-                if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Scripts Lua", &["lua"])
-                    .set_directory(std::env::var("HOME").unwrap_or_else(|_| "/".to_string()))
-                    .pick_file()
-                {
-                    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home/vidruck".to_string());
-                    let target_dir = PathBuf::from(home_dir).join(".config/raven/layouts");
-                    let _ = fs::create_dir_all(&target_dir);
-                    
-                    if let Some(file_name) = path.file_name() {
-                        let target_path = target_dir.join(file_name);
-                        let _ = fs::copy(&path, target_path);
+            ui.horizontal(|ui| {
+                if ui.button("➕ Importar Script Lua...").on_hover_text("Selecciona un archivo .lua para usar como algoritmo de tiling").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .add_filter("Scripts Lua", &["lua"])
+                        .set_directory(std::env::var("HOME").unwrap_or_else(|_| "/".to_string()))
+                        .pick_file()
+                    {
+                        if let Ok(content) = fs::read_to_string(&path) {
+                            // Validar que el script contenga una función de retorno o sintaxis básica
+                            let trimmed = content.trim();
+                            if !trimmed.contains("function") && !trimmed.starts_with("return") {
+                                // Advertencia: el archivo podría no ser un layout válido
+                                eprintln!("Advertencia: El script Lua no parece definir una función de layout.");
+                            }
+                            let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home/vidruck".to_string());
+                            let target_dir = PathBuf::from(home_dir).join(".config/raven/layouts");
+                            let _ = fs::create_dir_all(&target_dir);
+                            
+                            if let Some(file_name) = path.file_name() {
+                                let target_path = target_dir.join(file_name);
+                                let _ = fs::copy(&path, target_path);
+                            }
+                        }
                     }
                 }
+            });
+
+            ui.add_space(8.0);
+            // 📖 Manual interactivo y plantilla para desarrolladores
+            ui.collapsing("📖 Manual y Plantilla de Algoritmos Lua", |ui| {
+                ui.label(
+                    egui::RichText::new(
+                        "Raven ejecuta layouts Lua en un entorno seguro (sandbox sin acceso a red ni disco). \
+                        El script debe retornar una función pura que reciba (screen, windows, config) y devuelva una tabla asociativa con la geometría de cada ventana:"
+                    )
+                    .size(11.0)
+                    .weak()
+                );
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new("• screen: { x, y, w, h }\n• windows: lista de { id, min_w, min_h, class, is_active }\n• config: { gaps, master_ratio, nmaster, active_id }")
+                        .size(10.5)
+                        .monospace()
+                        .color(accent)
+                );
+                ui.add_space(6.0);
+
+                let template_code = r#"return function(screen, windows, config)
+    local layout = {}
+    local n = #windows
+    if n == 0 then return layout end
+
+    local gaps = config.gaps or 8
+    local master_ratio = config.master_ratio or 0.55
+    local master_w = math.floor((screen.w - gaps * 3) * master_ratio)
+    local stack_w = screen.w - master_w - gaps * 3
+
+    -- Ventana 1: Master
+    local first_id = type(windows[1]) == "table" and windows[1].id or windows[1]
+    layout[first_id] = {
+        x = screen.x + gaps,
+        y = screen.y + gaps,
+        w = (n == 1) and (screen.w - gaps * 2) or master_w,
+        h = screen.h - gaps * 2
+    }
+
+    -- Ventanas restantes en Stack lateral
+    if n > 1 then
+        local stack_count = n - 1
+        local slot_h = math.floor((screen.h - gaps * (stack_count + 1)) / stack_count)
+        for i = 2, n do
+            local win_id = type(windows[i]) == "table" and windows[i].id or windows[i]
+            local idx = i - 2
+            layout[win_id] = {
+                x = screen.x + master_w + gaps * 2,
+                y = screen.y + gaps + idx * (slot_h + gaps),
+                w = stack_w,
+                h = slot_h
             }
+        end
+    end
+
+    return layout
+end"#;
+
+                ui.label(egui::RichText::new("Plantilla de referencia:").strong().size(11.0));
+                ui.add_space(2.0);
+                egui::ScrollArea::vertical()
+                    .max_height(140.0)
+                    .show(ui, |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut template_code.to_string())
+                                .font(egui::TextStyle::Monospace)
+                                .desired_rows(10)
+                                .lock_focus(true)
+                                .interactive(false)
+                        );
+                    });
+
+                ui.add_space(4.0);
+                if ui.button("📋 Copiar Plantilla al Portapapeles").clicked() {
+                    ui.output_mut(|o| o.copied_text = template_code.to_string());
+                }
+                ui.add_space(4.0);
+            });
 
             ui.add_space(10.0);
             ui.group(|ui| {

@@ -82,4 +82,21 @@ pub enum RavenAction {
         /// Indica si debe mantenerse por encima (keepAbove).
         keep_above: bool,
     },
+    /// Rectifica la geometría de una ventana post-cuarentena cuando la ventana ignoró las
+    /// órdenes de posicionamiento iniciales (ej. navegadores con restauración de sesión CSD).
+    ///
+    /// A diferencia de `MoveWindow`, este comando se aplica forzosamente en el lado KWin
+    /// sin la guardia anti-redundancia de geometrías idénticas, garantizando la corrección.
+    RectifyWindow {
+        /// Identificador de la ventana a rectificar.
+        window_id: String,
+        /// Coordenada horizontal corregida.
+        x: i32,
+        /// Coordenada vertical corregida.
+        y: i32,
+        /// Ancho corregido en píxeles.
+        width: i32,
+        /// Alto corregido en píxeles.
+        height: i32,
+    },
 }

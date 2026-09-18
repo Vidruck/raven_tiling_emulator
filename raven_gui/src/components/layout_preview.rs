@@ -183,6 +183,46 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 painter.text(r.center(), egui::Align2::CENTER_CENTER, (i + 1).to_string(), egui::FontId::monospace(10.0), fg);
             }
         }
+        custom_lua if !["raven", "tall", "monocle", "strict_dwindle", "inverted_strict_dwindle", "divisor"].contains(&custom_lua) => {
+            // Visualización indicativa para layouts creados por la comunidad en Lua
+            let pad = 12.0;
+            let inner_rect = egui::Rect::from_min_size(
+                rect.min + egui::vec2(pad, pad),
+                egui::vec2(w - pad * 2.0, h - pad * 2.0),
+            );
+            painter.rect_filled(inner_rect, 8.0, palette.view_bg);
+            painter.rect_stroke(inner_rect, 8.0, egui::Stroke::new(1.5_f32, center_color));
+
+            // Cuadrícula decorativa
+            let half_w = (w - pad * 2.0 - gap_f) / 2.0;
+            let half_h = (h - pad * 2.0 - gap_f) / 2.0;
+            for row in 0..2 {
+                for col in 0..2 {
+                    let cell = egui::Rect::from_min_size(
+                        inner_rect.min + egui::vec2(col as f32 * (half_w + gap_f), row as f32 * (half_h + gap_f)),
+                        egui::vec2(half_w, half_h),
+                    );
+                    painter.rect_filled(cell, 4.0, side_color);
+                }
+            }
+
+            let badge_rect = egui::Rect::from_center_size(inner_rect.center(), egui::vec2(180.0, 48.0));
+            painter.rect_filled(badge_rect, 6.0, center_color);
+            painter.text(
+                badge_rect.center() - egui::vec2(0.0, 8.0),
+                egui::Align2::CENTER_CENTER,
+                format!("📜 {}", custom_lua),
+                egui::FontId::monospace(12.0),
+                center_fg,
+            );
+            painter.text(
+                badge_rect.center() + egui::vec2(0.0, 10.0),
+                egui::Align2::CENTER_CENTER,
+                "Algoritmo Lua Dinámico",
+                egui::FontId::proportional(10.0),
+                center_fg,
+            );
+        }
         _ => {
             // Previsualización completa de 7 ventanas (Raven / Dwindle BSP)
             let bottom_h = h * 0.30;

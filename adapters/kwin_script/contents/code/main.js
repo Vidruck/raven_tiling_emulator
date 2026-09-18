@@ -966,13 +966,57 @@ function applyCommands(commandsJson) {
                   if (cw && !cw.deleted) {
                     requestStateSync();
                   }
-                }, 480);
+                }, 100);
               })(w);
             }
           } else if (cmd.action === "release_quarantine") {
             w.__raven_quarantined = false;
             w.__raven_strict_birth = false;
             w.__raven_stab_timer = null;
+          } else if (cmd.action === "rectify_window") {
+            // --- Rectificación Forzada Post-Cuarentena ---
+            //
+            // Este comando es emitido por el Modelo de Rectificación de Rust cuando detecta
+            // que la ventana no asumió las medidas calculadas tras la liberación de cuarentena.
+            // A diferencia del comando "move", NO aplica la guardia anti-redundancia de geometría,
+            // ya que su objetivo exacto es corregir una geometría incorrecta incluso si KWin
+            // reporta que ya coincide (puede ser desactualización del estado reportado).
+            try {
+              if (w.interactiveMove || w.interactiveResize) {
+                break;
+              }
+              if (w.fullScreen) {
+                break;
+              }
+              // Desmaximizar en caso de que la ventana haya re-restaurado su sesión maximizada
+              if (w.maximizeMode !== 0) {
+                try {
+                  w.setMaximize(false, false);
+                } catch (errMaxR) {
+                  Logger.debug("applyCommands", "Error desmaximizando en rectificación: " + errMaxR);
+                }
+              }
+              const rectifyGeom = {
+                x: Math.round(cmd.x),
+                y: Math.round(cmd.y),
+                width: Math.round(cmd.width),
+                height: Math.round(cmd.height),
+              };
+              w.__raven_mutating = true;
+              w.frameGeometry = rectifyGeom;
+              Logger.info("applyCommands", "[RECTIFICACION] Geometría corregida para '" + getSafeWindowId(w) +
+                "': " + rectifyGeom.width + "x" + rectifyGeom.height +
+                "+" + rectifyGeom.x + "," + rectifyGeom.y);
+              (function (capturedWindow) {
+                setKWinTimeout(function () {
+                  if (capturedWindow && !capturedWindow.deleted) {
+                    capturedWindow.__raven_mutating = false;
+                  }
+                }, 100);
+              })(w);
+            } catch (eRectify) {
+              Logger.error("applyCommands", "Error en rectificación forzada de ventana", eRectify);
+            }
           } else if (cmd.action === "minimize") {
             w.__raven_mutating = true;
             w.minimized = true;

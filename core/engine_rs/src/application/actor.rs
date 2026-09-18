@@ -144,10 +144,22 @@ impl RavenControllerActor {
                             let _ = self.controller.commit_layout();
                         }
                         CompositorEvent::ReleaseQuarantine(window_id) => {
-                            if let Some(win) = self.controller.get_engine_mut().current_windows.get_mut(&window_id) {
-                                win.is_quarantined = false;
-                                win.strict_birth = false;
-                                info!("[ACTOR] Cuarentena liberada vía QuarantineManager para {}", window_id);
+                            // Extraemos resource_class y modificamos banderas en un bloque
+                            // de scope limitado para liberar el borrow mutable antes de llamar
+                            // a métodos que también requieren `&mut self.controller`.
+                            let resource_class_opt = {
+                                if let Some(win) = self.controller.get_engine_mut().current_windows.get_mut(&window_id) {
+                                    win.is_quarantined = false;
+                                    win.strict_birth = false;
+                                    Some(win.resource_class.clone())
+                                } else {
+                                    None
+                                }
+                            };
+
+                            if let Some(resource_class) = resource_class_opt {
+                                self.controller.clear_window_flapping(&window_id);
+                                info!("[ACTOR] Cuarentena liberada (Fase 1) para '{}'. Iniciando layout y agendando rectificación (Fase 2).", window_id);
                                 let mut commands = Vec::new();
                                 commands.push(raven_core::action::RavenAction::ReleaseQuarantine {
                                     window_id: window_id.clone(),
@@ -162,6 +174,83 @@ impl RavenControllerActor {
                                             tracing::error!("[ACTOR] Error al aplicar acciones de liberación de cuarentena: {}", e);
                                         }
                                     });
+                                }
+                                // --- Fase 2: Agendar verificación de rectificación ---
+                                // Tras entregar las órdenes de posicionamiento al compositor,
+                                // programamos una verificación diferida para confirmar que la
+                                // ventana asumió las medidas calculadas.
+                                self.quarantine_manager
+                                    .schedule_rectification(window_id.clone(), &resource_class)
+                                    .await;
+                            }
+                        }
+                        CompositorEvent::RectifyWindow(window_id) => {
+                            // --- Verificador de Rectificación Post-Cuarentena ---
+                            //
+                            // Comprueba si la geometría física de la ventana (reportada por KWin)
+                            // coincide con la geometría objetivo que Rust calculó y comandó.
+                            // Si la ventana ignoró o sobreescribió las órdenes (comportamiento
+                            // frecuente en navegadores CSD y apps Electron que restauran su
+                            // sesión anterior), se re-emiten las órdenes forzosamente.
+                            let target_rect = self.controller.get_target_rect_for_window(&window_id);
+                            if let Some(target) = target_rect {
+                                if let Some(win) = self.controller.get_engine().current_windows.get(&window_id) {
+                                    let dx = (win.geometry.x - target.x).abs();
+                                    let dy = (win.geometry.y - target.y).abs();
+                                    let dw = (win.geometry.width - target.width).abs();
+                                    let dh = (win.geometry.height - target.height).abs();
+
+                                    // Tolerancia de 2px para redondeos enteros de gaps en Wayland
+                                    if dx > 2 || dy > 2 || dw > 2 || dh > 2 {
+                                        tracing::warn!(
+                                            "[RECTIFICACION] Ventana '{}' no asumió las medidas calculadas. \
+                                             Geometría real: {}x{}+{},{} | Objetivo: {}x{}+{},{} | Delta: dx={} dy={} dw={} dh={}. \
+                                             Reenviando órdenes de acomodo.",
+                                            window_id,
+                                            win.geometry.width, win.geometry.height,
+                                            win.geometry.x, win.geometry.y,
+                                            target.width, target.height, target.x, target.y,
+                                            dx, dy, dw, dh
+                                        );
+
+                                        let rectify_cmds = vec![
+                                            raven_core::action::RavenAction::RectifyWindow {
+                                                window_id: window_id.clone(),
+                                                x: target.x,
+                                                y: target.y,
+                                                width: target.width,
+                                                height: target.height,
+                                            },
+                                        ];
+                                        let backend = self.backend.clone();
+                                        tokio::spawn(async move {
+                                            if let Err(e) = backend.apply_actions(rectify_cmds).await {
+                                                tracing::error!("[RECTIFICACION] Error al re-enviar órdenes de acomodo para '{}': {}", window_id, e);
+                                            }
+                                        });
+                                    } else {
+                                        info!(
+                                            "[RECTIFICACION] Ventana '{}' asumió correctamente las medidas calculadas (Δx={} Δy={} Δw={} Δh={}). OK.",
+                                            window_id, dx, dy, dw, dh
+                                        );
+                                    }
+                                } else {
+                                    info!("[RECTIFICACION] Ventana '{}' ya no existe en el estado actual. Verificación omitida.", window_id);
+                                }
+                            } else {
+                                // Si no hay geometría objetivo registrada puede significar que
+                                // el layout fue recalculado sin confirmar (ej. ventana flotante),
+                                // en ese caso forzamos un recálculo de layout defensivo.
+                                info!("[RECTIFICACION] No hay geometría objetivo registrada para '{}'. Recalculando layout.", window_id);
+                                if let Ok(cmds) = self.controller.commit_layout() {
+                                    if !cmds.is_empty() {
+                                        let backend = self.backend.clone();
+                                        tokio::spawn(async move {
+                                            if let Err(e) = backend.apply_actions(cmds).await {
+                                                tracing::error!("[RECTIFICACION] Error en recálculo defensivo para '{}': {}", window_id, e);
+                                            }
+                                        });
+                                    }
                                 }
                             }
                         }

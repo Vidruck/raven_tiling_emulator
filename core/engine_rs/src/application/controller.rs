@@ -101,14 +101,30 @@ impl RavenController {
     /// Comprueba si una ventana está oscilando rápidamente (flapping) y aplica penalizaciones.
     fn is_window_flapping(&mut self, win: &WindowNode) -> bool {
         if win.strict_birth
+            || win.is_quarantined
             || self
                 .engine
                 .dynamic_floating_windows
                 .contains(&win.window_id)
         {
-            return false; // Las apps en cuarentena o en Quick Peek tienen pase libre
+            return false; // Las apps en cuarentena, en nacimiento o en Quick Peek tienen pase libre
         }
         self.flap_guard.is_window_flapping(win)
+    }
+
+    /// Elimina el registro de oscilación para una ventana (ej. tras estabilización de nacimiento).
+    pub fn clear_window_flapping(&mut self, window_id: &str) {
+        self.flap_guard.remove(window_id);
+    }
+
+    /// Retorna la geometría objetivo calculada por el último layout para una ventana específica.
+    ///
+    /// Devuelve `None` si la ventana aún no tiene una geometría confirmada en caché
+    /// (ej. primera vez que se procesa o si no pasó la verificación de convergencia).
+    /// Se utiliza en el modelo de rectificación para comparar la geometría física reportada
+    /// por KWin con la geometría objetivo que Rust calculó y comandó previamente.
+    pub fn get_target_rect_for_window(&self, window_id: &str) -> Option<Rect> {
+        self.last_known_layout.get(window_id).copied()
     }
 
     /// Procesa una actualización completa de estado del compositor y calcula los nuevos comandos.

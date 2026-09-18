@@ -64,6 +64,11 @@ pub enum CompositorEvent {
     TopologyChanged(crate::geometry::Topology),
     /// Liberar cuarentena para una ventana específica.
     ReleaseQuarantine(String),
+    /// Verificar post-cuarentena si la ventana asumió las medidas calculadas; si no, rectificar.
+    ///
+    /// Disparado por el `QuarantineManager` tras el periodo de permisibilidad, para garantizar
+    /// que la geometría física de la ventana coincide con la geometría objetivo calculada por Rust.
+    RectifyWindow(String),
 }
 
 /// Contrato universal de abstracción para backends de compositores de ventanas.

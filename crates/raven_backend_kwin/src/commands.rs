@@ -183,6 +183,24 @@ impl From<RavenAction> for TilingCommand {
                 floating: None,
                 keep_above: None,
             },
+            RavenAction::RectifyWindow {
+                window_id,
+                x,
+                y,
+                width,
+                height,
+            } => TilingCommand {
+                action: "rectify_window".to_string(),
+                window_id: Some(window_id),
+                x: Some(x),
+                y: Some(y),
+                width: Some(width),
+                height: Some(height),
+                target_ws: None,
+                direction: None,
+                floating: None,
+                keep_above: None,
+            },
         }
     }
 }
