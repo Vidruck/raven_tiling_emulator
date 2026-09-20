@@ -69,9 +69,13 @@ pub struct KWinWindow {
     /// Indica si la ventana está en modo pantalla completa nativa.
     #[serde(default)]
     pub fs: bool,
-    /// Clase WM / Resource class reportada por KWin (ej. "firefox", "vlc").
+    /// Clase WM / Resource class reportada por KWin (segunda parte WM_CLASS, ej. "zen-browser").
     #[serde(default)]
     pub cls: String,
+    /// Nombre del ejecutable / Resource name (primera parte WM_CLASS, ej. "zen", "Navigator").
+    /// Proviene de `w.resourceName` en KWin; más estable para identificar el proceso real.
+    #[serde(default)]
+    pub cls_name: String,
     /// Título / Caption reportado por KWin.
     #[serde(default)]
     pub cap: String,
@@ -137,7 +141,7 @@ pub fn parse_payload(
                 win.iq,
                 win.fs,
             )
-            .with_class_and_caption(win.cls, win.cap),
+            .with_class_and_caption(win.cls, win.cls_name, win.cap),
         );
     }
 

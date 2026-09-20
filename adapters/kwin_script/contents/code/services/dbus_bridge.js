@@ -673,6 +673,7 @@ function buildWindowState(w, safeId) {
     iq: Boolean(w.__raven_quarantined),
     fs: Boolean(w.fullScreen),
     cls: w.resourceClass ? w.resourceClass.toString() : "",
+    cls_name: w.resourceName ? w.resourceName.toString() : "",
     cap: w.caption ? w.caption.toString() : "",
   };
 }

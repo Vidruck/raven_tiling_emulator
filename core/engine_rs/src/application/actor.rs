@@ -144,22 +144,23 @@ impl RavenControllerActor {
                             let _ = self.controller.commit_layout();
                         }
                         CompositorEvent::ReleaseQuarantine(window_id) => {
-                            // Extraemos resource_class y modificamos banderas en un bloque
-                            // de scope limitado para liberar el borrow mutable antes de llamar
+                            // Extraemos resource_class + resource_name y modificamos banderas en un
+                            // bloque de scope limitado para liberar el borrow mutable antes de llamar
                             // a métodos que también requieren `&mut self.controller`.
-                            let resource_class_opt = {
+                            let class_info_opt = {
                                 if let Some(win) = self.controller.get_engine_mut().current_windows.get_mut(&window_id) {
                                     win.is_quarantined = false;
                                     win.strict_birth = false;
-                                    Some(win.resource_class.clone())
+                                    Some((win.resource_class.clone(), win.resource_name.clone()))
                                 } else {
                                     None
                                 }
                             };
 
-                            if let Some(resource_class) = resource_class_opt {
+                            if let Some((resource_class, resource_name)) = class_info_opt {
                                 self.controller.clear_window_flapping(&window_id);
-                                info!("[ACTOR] Cuarentena liberada (Fase 1) para '{}'. Iniciando layout y agendando rectificación (Fase 2).", window_id);
+                                info!("[ACTOR] Cuarentena liberada (Fase 1) para '{}' [cls='{}' exe='{}']. Agendando rectificación (Fase 2).",
+                                    window_id, resource_class, resource_name);
                                 let mut commands = Vec::new();
                                 commands.push(raven_core::action::RavenAction::ReleaseQuarantine {
                                     window_id: window_id.clone(),
@@ -176,11 +177,8 @@ impl RavenControllerActor {
                                     });
                                 }
                                 // --- Fase 2: Agendar verificación de rectificación ---
-                                // Tras entregar las órdenes de posicionamiento al compositor,
-                                // programamos una verificación diferida para confirmar que la
-                                // ventana asumió las medidas calculadas.
                                 self.quarantine_manager
-                                    .schedule_rectification(window_id.clone(), &resource_class)
+                                    .schedule_rectification(window_id.clone(), &resource_class, &resource_name)
                                     .await;
                             }
                         }
@@ -295,7 +293,7 @@ impl RavenControllerActor {
                             
                             if win.is_quarantined || win.strict_birth {
                                 self.quarantine_manager
-                                    .schedule_release(win.window_id.clone(), &win.resource_class)
+                                    .schedule_release(win.window_id.clone(), &win.resource_class, &win.resource_name)
                                     .await;
                             }
                         }
@@ -353,14 +351,14 @@ impl RavenControllerActor {
                                 win.iq,
                                 win.fs,
                             )
-                            .with_class_and_caption(win.cls, win.cap);
+                            .with_class_and_caption(win.cls, win.cls_name, win.cap);
 
                             let is_tiled = !win_node.is_floating && !win_node.is_minimized;
                             let wid = win_node.window_id.clone();
                             
                             if win_node.is_quarantined || win_node.strict_birth {
                                 self.quarantine_manager
-                                    .schedule_release(win_node.window_id.clone(), &win_node.resource_class)
+                                    .schedule_release(win_node.window_id.clone(), &win_node.resource_class, &win_node.resource_name)
                                     .await;
                             }
                             

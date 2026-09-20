@@ -532,11 +532,11 @@ mod tests {
         workspaces.insert("ws_1".to_string(), Rect::new(0, 0, 1920, 1080));
 
         let win_normal =
-            mock_window("editor").with_class_and_caption("code".to_string(), "Editor".to_string());
+            mock_window("editor").with_class_and_caption("code".to_string(), String::new(), "Editor".to_string());
         let win_pip_by_title = mock_window("firefox_pip")
-            .with_class_and_caption("firefox".to_string(), "Picture-in-Picture".to_string());
+            .with_class_and_caption("firefox".to_string(), String::new(), "Picture-in-Picture".to_string());
         let win_pip_by_rule = mock_window("vlc_video")
-            .with_class_and_caption("vlc".to_string(), "Movie.mp4".to_string());
+            .with_class_and_caption("vlc".to_string(), String::new(), "Movie.mp4".to_string());
 
         let windows = vec![win_normal, win_pip_by_title, win_pip_by_rule];
 

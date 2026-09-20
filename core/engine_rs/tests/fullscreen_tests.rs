@@ -26,6 +26,7 @@ fn create_test_window(id: &str, workspace_id: &str, output: &str, is_floating: b
         is_quarantined: false,
         is_fullscreen: false,
         resource_class: String::new(),
+            resource_name: String::new(),
         caption: String::new(),
         custom_w_ratio: None,
         custom_h_ratio: None,

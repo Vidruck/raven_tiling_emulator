@@ -318,7 +318,7 @@ impl Dispatch<ZwlrForeignToplevelHandleV1, ()> for WaylandState {
                         false,
                         info.is_fullscreen,
                     )
-                    .with_class_and_caption(info.app_id.clone(), info.title.clone());
+                    .with_class_and_caption(info.app_id.clone(), String::new(), info.title.clone());
 
                     if let Some(ref tx) = state.event_tx {
                         let _ = tx.blocking_send(CompositorEvent::WindowDiscovered(win_node));

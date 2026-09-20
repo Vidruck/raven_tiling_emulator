@@ -164,7 +164,7 @@ impl CompositorBackend for KWinBackend {
                                 win.sb,
                                 win.iq,
                                 win.fs,
-                            ).with_class_and_caption(win.cls, win.cap);
+                            ).with_class_and_caption(win.cls, win.cls_name, win.cap);
 
                             let _ = event_tx.send(CompositorEvent::WindowDiscovered(win_node)).await;
                         }

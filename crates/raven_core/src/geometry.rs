@@ -68,9 +68,13 @@ pub struct WindowNode {
     /// Indica si la ventana se encuentra en modo pantalla completa nativo.
     #[serde(default, rename = "fs")]
     pub is_fullscreen: bool,
-    /// Clase WM / Resource class reportada por KWin (e.g. "firefox", "vlc").
+    /// Clase WM / Resource class reportada por KWin (segunda parte de WM_CLASS, ej. "zen-browser", "firefox").
     #[serde(default)]
     pub resource_class: String,
+    /// Nombre del ejecutable / Resource name (primera parte de WM_CLASS, ej. "zen", "Navigator").
+    /// Más estable que la clase para identificar el ejecutable real del proceso.
+    #[serde(default)]
+    pub resource_name: String,
     /// Título / Caption de la ventana reportado por KWin.
     #[serde(default)]
     pub caption: String,
@@ -115,15 +119,17 @@ impl WindowNode {
             is_quarantined,
             is_fullscreen,
             resource_class: String::new(),
+            resource_name: String::new(),
             caption: String::new(),
             custom_w_ratio: None,
             custom_h_ratio: None,
         }
     }
 
-    /// Añade información de clase y caption para arbitraje de reglas en Rust.
-    pub fn with_class_and_caption(mut self, resource_class: String, caption: String) -> Self {
+    /// Añade información de clase, nombre de ejecutable y caption para arbitraje de reglas en Rust.
+    pub fn with_class_and_caption(mut self, resource_class: String, resource_name: String, caption: String) -> Self {
         self.resource_class = resource_class;
+        self.resource_name = resource_name;
         self.caption = caption;
         self
     }
