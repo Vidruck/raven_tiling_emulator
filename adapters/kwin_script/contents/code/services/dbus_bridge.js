@@ -602,6 +602,17 @@ function bindWindow(w) {
       if (!w || w.deleted) {
         return;
       }
+
+      // --- Guardia Timer-0 KWin ---
+      // Si la ventana está en el periodo de estabilización pre-Rust (Timer-0),
+      // suprimir completamente el delta sync. Además contar la señal para detección
+      // de flood: si la app emite demasiadas señales, Timer-0 se reiniciará.
+      if (w.__raven_kwin_stabilizing) {
+        w.__raven_flood_count = (w.__raven_flood_count || 0) + 1;
+        return;
+      }
+
+      // --- Guardia Timer-1/2 Rust ---
       if (w.__raven_quarantined) {
         return;
       }
@@ -672,6 +683,7 @@ function buildWindowState(w, safeId) {
     sb: Boolean(w.__raven_strict_birth),
     iq: Boolean(w.__raven_quarantined),
     fs: Boolean(w.fullScreen),
+    sus: Boolean(w.__raven_suspicious),
     cls: w.resourceClass ? w.resourceClass.toString() : "",
     cls_name: w.resourceName ? w.resourceName.toString() : "",
     cap: w.caption ? w.caption.toString() : "",

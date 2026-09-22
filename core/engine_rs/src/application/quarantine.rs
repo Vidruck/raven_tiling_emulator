@@ -162,9 +162,9 @@ impl QuarantinePolicy {
     /// - **Heavy**: 75ms — apps Electron/JVM con inicialización costosa.
     pub fn duration(&self) -> Duration {
         match self {
-            QuarantinePolicy::Standard => Duration::from_millis(40),
-            QuarantinePolicy::Browser  => Duration::from_millis(55),
-            QuarantinePolicy::Heavy    => Duration::from_millis(75),
+            QuarantinePolicy::Standard => Duration::from_millis(90),
+            QuarantinePolicy::Browser  => Duration::from_millis(120),
+            QuarantinePolicy::Heavy    => Duration::from_millis(150),
         }
     }
 
@@ -177,9 +177,9 @@ impl QuarantinePolicy {
     /// - **Heavy**: 120ms — apps pesadas pueden tardar más en procesar el resize Wayland.
     pub fn rectification_delay(&self) -> Duration {
         match self {
-            QuarantinePolicy::Standard => Duration::from_millis(45),
-            QuarantinePolicy::Browser  => Duration::from_millis(90),
-            QuarantinePolicy::Heavy    => Duration::from_millis(120),
+            QuarantinePolicy::Standard => Duration::from_millis(60),
+            QuarantinePolicy::Browser  => Duration::from_millis(60),
+            QuarantinePolicy::Heavy    => Duration::from_millis(60),
         }
     }
 }

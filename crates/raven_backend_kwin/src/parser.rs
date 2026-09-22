@@ -69,6 +69,11 @@ pub struct KWinWindow {
     /// Indica si la ventana está en modo pantalla completa nativa.
     #[serde(default)]
     pub fs: bool,
+    /// Indica si la ventana fue marcada como sospechosa por KWin durante Timer-0
+    /// (flood de señales de geometría o sin clase WM definida).
+    /// Rust usará esta bandera para endurecer su modelo de sospecha activa.
+    #[serde(default)]
+    pub sus: bool,
     /// Clase WM / Resource class reportada por KWin (segunda parte WM_CLASS, ej. "zen-browser").
     #[serde(default)]
     pub cls: String,
@@ -141,7 +146,7 @@ pub fn parse_payload(
                 win.iq,
                 win.fs,
             )
-            .with_class_and_caption(win.cls, win.cls_name, win.cap),
+            .with_class_and_caption(win.cls, win.cls_name, win.sus, win.cap),
         );
     }
 

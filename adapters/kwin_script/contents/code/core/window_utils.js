@@ -303,3 +303,84 @@ function isSameDesktop(w1, w2) {
   }
   return false;
 }
+
+/**
+ * @brief Detecta la categoría de cuarentena de una ventana según su ejecutable y clase WM.
+ *
+ * Usa `resourceName` (primera parte WM_CLASS = ejecutable real) como fuente primaria,
+ * y `resourceClass` (segunda parte WM_CLASS = clase de la app) como fallback.
+ * Ambas estrategias son las mismas que usa la política Rust `QuarantinePolicy::from_class`.
+ *
+ * @param {KWin::Window} w Instancia de la ventana.
+ * @returns {string} Categoría: "browser" | "heavy" | "standard"
+ */
+function getKWinQuarantineCategory(w) {
+  try {
+    var cls  = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+    var name = w.resourceName  ? w.resourceName.toString().toLowerCase()  : "";
+
+    // Navegadores: Gecko (Firefox/Zen/Floorp), Chromium, WebKit
+    var browserExes = [
+      "zen", "zen-browser", "firefox", "firefox-esr", "navigator",
+      "librewolf", "floorp", "waterfox", "icecat",
+      "chrome", "google-chrome", "chromium", "chromium-browser",
+      "brave-browser", "brave", "vivaldi", "vivaldi-stable",
+      "opera", "msedge", "microsoft-edge", "epiphany",
+      "falkon", "midori", "qutebrowser", "min",
+    ];
+    for (var i = 0; i < browserExes.length; i++) {
+      var exe = browserExes[i];
+      if (name === exe || name.indexOf(exe) === 0 || cls === exe || cls.indexOf(exe) === 0) {
+        return "browser";
+      }
+    }
+    if (cls.indexOf("browser") !== -1) return "browser";
+
+    // Apps pesadas: Electron, JVM, Discord, Steam…
+    var heavyExes = [
+      "code", "code-oss", "vscodium", "cursor",
+      "discord", "discordcanary", "slack", "steam",
+      "spotify", "obsidian", "thunderbird", "postman",
+      "idea", "idea64", "clion", "clion64", "pycharm", "pycharm64",
+      "datagrip", "goland", "rider", "webstorm",
+      "java", "teams", "signal", "telegram-desktop",
+      "notion-app", "figma-linux", "gimp", "inkscape", "blender", "krita",
+    ];
+    for (var j = 0; j < heavyExes.length; j++) {
+      var hExe = heavyExes[j];
+      if (name === hExe || name.indexOf(hExe) === 0 || cls === hExe || cls.indexOf(hExe) === 0) {
+        return "heavy";
+      }
+    }
+    if (cls.indexOf("electron") !== -1 || name.indexOf("electron") !== -1) return "heavy";
+    if (cls.indexOf("java") !== -1 || name.indexOf("java") !== -1) return "heavy";
+
+    return "standard";
+  } catch (e) {
+    return "standard";
+  }
+}
+
+/**
+ * @brief Retorna la duración del Timer-0 de KWin (pre-Rust) en milisegundos.
+ *
+ * El Timer-0 es el primer escalón del modelo de 3 timers en cascada.
+ * Se ejecuta en KWin *antes* de notificar a Rust, dando tiempo al cliente
+ * Wayland para emitir su `xdg_surface.set_window_geometry` estable.
+ * Durante este tiempo, `frameGeometryChanged` y señales de delta están suprimidos.
+ *
+ * | Categoría | Timer-0 KWin |
+ * |-----------|-------------|
+ * | Standard  |   60 ms     |
+ * | Browser   |  100 ms     |
+ * | Heavy     |  140 ms     |
+ *
+ * @param {KWin::Window} w Instancia de la ventana.
+ * @returns {number} Tiempo en milisegundos.
+ */
+function getKWinQuarantineDelay(w) {
+  var category = getKWinQuarantineCategory(w);
+  if (category === "browser") return 100;
+  if (category === "heavy")   return 140;
+  return 60;
+}

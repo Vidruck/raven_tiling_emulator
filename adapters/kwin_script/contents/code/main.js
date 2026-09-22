@@ -505,20 +505,119 @@ function isSameDesktop(w1, w2) {
   }
   return false;
 }
+
+/**
+ * @brief Detecta la categoría de cuarentena de una ventana según su ejecutable y clase WM.
+ *
+ * Usa `resourceName` (primera parte WM_CLASS = ejecutable real) como fuente primaria,
+ * y `resourceClass` (segunda parte WM_CLASS = clase de la app) como fallback.
+ * Ambas estrategias son las mismas que usa la política Rust `QuarantinePolicy::from_class`.
+ *
+ * @param {KWin::Window} w Instancia de la ventana.
+ * @returns {string} Categoría: "browser" | "heavy" | "standard"
+ */
+function getKWinQuarantineCategory(w) {
+  try {
+    var cls  = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+    var name = w.resourceName  ? w.resourceName.toString().toLowerCase()  : "";
+
+    // Navegadores: Gecko (Firefox/Zen/Floorp), Chromium, WebKit
+    var browserExes = [
+      "zen", "zen-browser", "firefox", "firefox-esr", "navigator",
+      "librewolf", "floorp", "waterfox", "icecat",
+      "chrome", "google-chrome", "chromium", "chromium-browser",
+      "brave-browser", "brave", "vivaldi", "vivaldi-stable",
+      "opera", "msedge", "microsoft-edge", "epiphany",
+      "falkon", "midori", "qutebrowser", "min",
+    ];
+    for (var i = 0; i < browserExes.length; i++) {
+      var exe = browserExes[i];
+      if (name === exe || name.indexOf(exe) === 0 || cls === exe || cls.indexOf(exe) === 0) {
+        return "browser";
+      }
+    }
+    if (cls.indexOf("browser") !== -1) return "browser";
+
+    // Apps pesadas: Electron, JVM, Discord, Steam…
+    var heavyExes = [
+      "code", "code-oss", "vscodium", "cursor",
+      "discord", "discordcanary", "slack", "steam",
+      "spotify", "obsidian", "thunderbird", "postman",
+      "idea", "idea64", "clion", "clion64", "pycharm", "pycharm64",
+      "datagrip", "goland", "rider", "webstorm",
+      "java", "teams", "signal", "telegram-desktop",
+      "notion-app", "figma-linux", "gimp", "inkscape", "blender", "krita",
+    ];
+    for (var j = 0; j < heavyExes.length; j++) {
+      var hExe = heavyExes[j];
+      if (name === hExe || name.indexOf(hExe) === 0 || cls === hExe || cls.indexOf(hExe) === 0) {
+        return "heavy";
+      }
+    }
+    if (cls.indexOf("electron") !== -1 || name.indexOf("electron") !== -1) return "heavy";
+    if (cls.indexOf("java") !== -1 || name.indexOf("java") !== -1) return "heavy";
+
+    return "standard";
+  } catch (e) {
+    return "standard";
+  }
+}
+
+/**
+ * @brief Retorna la duración del Timer-0 de KWin (pre-Rust) en milisegundos.
+ *
+ * El Timer-0 es el primer escalón del modelo de 3 timers en cascada.
+ * Se ejecuta en KWin *antes* de notificar a Rust, dando tiempo al cliente
+ * Wayland para emitir su `xdg_surface.set_window_geometry` estable.
+ * Durante este tiempo, `frameGeometryChanged` y señales de delta están suprimidos.
+ *
+ * | Categoría | Timer-0 KWin |
+ * |-----------|-------------|
+ * | Standard  |   60 ms     |
+ * | Browser   |  100 ms     |
+ * | Heavy     |  140 ms     |
+ *
+ * @param {KWin::Window} w Instancia de la ventana.
+ * @returns {number} Tiempo en milisegundos.
+ */
+function getKWinQuarantineDelay(w) {
+  var category = getKWinQuarantineCategory(w);
+  if (category === "browser") return 100;
+  if (category === "heavy")   return 140;
+  return 60;
+}
 /**
  * @file quarantine.js
- * @brief Lógica de estabilización temporal (cuarentena CSD) para ventanas de arranque asíncrono en Wayland.
+ * @brief Estabilización temporal (cuarentena CSD) para ventanas de arranque asíncrono en Wayland.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @version 4.0 — Modelo de 3 Timers en cascada
+ *
+ * ## Modelo de 3 Timers en Cascada
+ *
+ * **Timer-0 (KWin, este archivo)**: 60–140ms según categoría.
+ *   - `__raven_kwin_stabilizing = true` → `frameGeometryChanged` suprimido.
+ *   - Flood de señales → reinicia timer y marca `__raven_suspicious`.
+ *   - Al expirar → limpia bandera, llama `requestStateSync()`.
+ *
+ * **Timer-1 (Rust Fase 1)**: 40–75ms.
+ *   - Rust recibe ventana con `iq=true` → `schedule_release`.
+ *   - Al expirar: libera cuarentena, `commit_layout`, manda `MoveWindow`.
+ *
+ * **Timer-2 (Rust Fase 2 — Sospecha Activa)**: 45–120ms.
+ *   - Rust re-calcula layout y re-envía todos los comandos como `RectifyWindow`.
+ *   - NO confía en geometría del bridge; fuente de verdad = árboles internos de Rust.
  */
+
+/** @type {number} Señales de geometría en Timer-0 antes de considerar flood. */
+var QUARANTINE_FLOOD_THRESHOLD = 4;
+
+/** @type {number} Máximo de reinicios de Timer-0 por flood antes de proceder. */
+var QUARANTINE_MAX_RESTARTS = 2;
 
 /**
  * @brief Evalúa y procesa la incorporación de una nueva ventana al sistema de mosaico.
  *
- * Determina si la ventana requiere un periodo de cuarentena temporal para estabilizar
- * sus dimensiones iniciales antes de ser empaquetada por el motor de cálculo:
- * - Ventanas sin `resourceClass` definido en su primer ciclo de vida (120 ms).
- * - Aplicaciones basadas en Gecko, Electron, JVM o CSD conocidas (80 ms).
+ * Implementa el Timer-0 del modelo de 3 timers en cascada.
  *
  * @param {KWin::Window} w Instancia de la ventana naciente.
  */
@@ -527,12 +626,16 @@ function processNewWindow(w) {
     return;
   }
 
-  const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
-  let needsQuarantine = (strClass === "");
+  var strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+  var strName  = w.resourceName  ? w.resourceName.toString().toLowerCase()  : "";
+
+  // Necesita cuarentena si: sin clase/nombre (siempre sospechosa) o en la lista activa.
+  var needsQuarantine = (strClass === "" || strName === "");
 
   if (!needsQuarantine && _quarantine_classes) {
-    for (let i = 0; i < _quarantine_classes.length; i++) {
-      if (strClass.indexOf(_quarantine_classes[i]) !== -1) {
+    for (var i = 0; i < _quarantine_classes.length; i++) {
+      if (strClass.indexOf(_quarantine_classes[i]) !== -1 ||
+          strName.indexOf(_quarantine_classes[i]) !== -1) {
         needsQuarantine = true;
         break;
       }
@@ -542,13 +645,76 @@ function processNewWindow(w) {
   bindWindow(w);
 
   if (needsQuarantine) {
-    w.__raven_quarantined = true;
-    w.__raven_strict_birth = true; // Rust is now responsible for the timeout
-    w.__raven_stab_timer = null;
-    requestStateSync();
+    w.__raven_quarantined      = true;   // Rust Timer-1: suprimir sync hasta liberación
+    w.__raven_strict_birth     = true;   // Rust Timer-1: indicador de nacimiento estricto
+    w.__raven_kwin_stabilizing = true;   // KWin Timer-0: suprimir frameGeometryChanged
+    w.__raven_stab_timer       = null;
+    w.__raven_flood_count      = 0;      // Contador de señales durante Timer-0
+    w.__raven_timer0_restarts  = 0;      // Reinicios de Timer-0 por flood
+
+    // Ventanas sin clase/nombre son doblemente sospechosas para Rust
+    if (strClass === "" || strName === "") {
+      w.__raven_suspicious = true;
+    }
+
+    _scheduleKWinTimer0(w);
   } else {
     requestStateSync();
   }
+}
+
+/**
+ * @brief Agenda el Timer-0 de KWin para una ventana en cuarentena.
+ *
+ * Al expirar: limpia `__raven_kwin_stabilizing` y llama `requestStateSync()`,
+ * lo que dispara los Timers 1 y 2 de Rust en cascada.
+ * Si hubo flood de señales durante el timer, se reinicia (máx. QUARANTINE_MAX_RESTARTS veces)
+ * y la ventana queda marcada como `__raven_suspicious` para sospecha activa en Rust.
+ *
+ * @param {KWin::Window} w Instancia de la ventana.
+ */
+function _scheduleKWinTimer0(w) {
+  if (!w || w.deleted) return;
+
+  var delay = getKWinQuarantineDelay(w);
+
+  setKWinTimeout(function () {
+    if (!w || w.deleted) return;
+
+    var floodCount = w.__raven_flood_count || 0;
+    var restarts   = w.__raven_timer0_restarts || 0;
+
+    if (floodCount >= QUARANTINE_FLOOD_THRESHOLD && restarts < QUARANTINE_MAX_RESTARTS) {
+      // Flood: reiniciar Timer-0 y elevar sospecha
+      w.__raven_flood_count     = 0;
+      w.__raven_timer0_restarts = restarts + 1;
+      w.__raven_suspicious      = true;
+
+      Logger.warn(
+        "quarantine",
+        "[TIMER-0] Flood (" + floodCount + " señales) para '" +
+        (w.resourceClass || "?") + "'/''" + (w.resourceName || "?") +
+        "'. Reiniciando (restart #" + (restarts + 1) + ") → SOSPECHOSA."
+      );
+
+      _scheduleKWinTimer0(w);
+      return;
+    }
+
+    // Timer-0 completado: liberar estabilización KWin y notificar a Rust
+    w.__raven_kwin_stabilizing = false;
+    w.__raven_flood_count      = 0;
+
+    Logger.info(
+      "quarantine",
+      "[TIMER-0] OK → notificando Rust para '" +
+      (w.resourceClass || "?") + "'/''" + (w.resourceName || "?") +
+      "'" + (w.__raven_suspicious ? " [SOSPECHOSA]" : "")
+    );
+
+    requestStateSync();
+
+  }, delay);
 }
 /**
  * @file focus.js
@@ -1181,6 +1347,17 @@ function bindWindow(w) {
       if (!w || w.deleted) {
         return;
       }
+
+      // --- Guardia Timer-0 KWin ---
+      // Si la ventana está en el periodo de estabilización pre-Rust (Timer-0),
+      // suprimir completamente el delta sync. Además contar la señal para detección
+      // de flood: si la app emite demasiadas señales, Timer-0 se reiniciará.
+      if (w.__raven_kwin_stabilizing) {
+        w.__raven_flood_count = (w.__raven_flood_count || 0) + 1;
+        return;
+      }
+
+      // --- Guardia Timer-1/2 Rust ---
       if (w.__raven_quarantined) {
         return;
       }
@@ -1251,6 +1428,7 @@ function buildWindowState(w, safeId) {
     sb: Boolean(w.__raven_strict_birth),
     iq: Boolean(w.__raven_quarantined),
     fs: Boolean(w.fullScreen),
+    sus: Boolean(w.__raven_suspicious),
     cls: w.resourceClass ? w.resourceClass.toString() : "",
     cls_name: w.resourceName ? w.resourceName.toString() : "",
     cap: w.caption ? w.caption.toString() : "",

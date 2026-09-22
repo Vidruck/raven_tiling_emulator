@@ -352,6 +352,70 @@ impl RavenController {
         self.handle_state_change(workspaces, windows)
     }
 
+    /// Modelo de **Sospecha Activa** — Rectificación Forzada (Fase 2 del Timer de Cuarentena).
+    ///
+    /// Re-calcula el layout completo desde los árboles internos de Rust y transforma todos los
+    /// comandos `MoveWindow` en `RectifyWindow`. La diferencia clave con `commit_layout()` es que:
+    ///
+    /// - **No confía en la geometría reportada por el bridge KWin** (`win.geometry`).
+    ///   La fuente de verdad son los árboles calculados internamente por Rust.
+    /// - **Re-envía el layout incondicionalmente** para todas las ventanas tileadas.
+    ///   No compara contra la geometría actual del compositor.
+    /// - Los comandos `RectifyWindow` **bypass** la guardia anti-redundancia de KWin.
+    ///
+    /// Esto resuelve el caso donde un navegador (Zen, Firefox) o app CSD restaura su sesión
+    /// anterior **después** de que Rust ya envió la posición correcta.
+    ///
+    /// # Parámetros
+    /// * `target_window_id` – Si `Some`, solo rectifica esa ventana. Si `None`, rectifica todas
+    ///   las ventanas tileadas del workspace activo.
+    ///
+    /// # Retorno
+    /// Vector de comandos `RectifyWindow` a aplicar inmediatamente.
+    pub fn commit_layout_as_rectify(
+        &mut self,
+        target_window_id: Option<&str>,
+    ) -> Result<Vec<RavenAction>, RavenError> {
+        // Re-calcular el layout desde los árboles internos (fuente de verdad Rust)
+        let workspaces = self.engine.current_workspaces.clone();
+        let windows: Vec<WindowNode> = self.engine.current_windows.values().cloned().collect();
+
+        // Invocar handle_state_change que calcula el layout y actualiza last_known_layout
+        let layout_cmds = self.handle_state_change(workspaces, windows)?;
+
+        // Transformar MoveWindow → RectifyWindow, filtrando por target si se especifica
+        let rectify_cmds: Vec<RavenAction> = layout_cmds
+            .into_iter()
+            .filter_map(|cmd| match cmd {
+                RavenAction::MoveWindow { ref window_id, x, y, width, height } => {
+                    // Si target_window_id es Some, filtrar solo esa ventana
+                    if let Some(target) = target_window_id {
+                        if window_id.as_str() != target {
+                            return None;
+                        }
+                    }
+                    Some(RavenAction::RectifyWindow {
+                        window_id: window_id.clone(),
+                        x,
+                        y,
+                        width,
+                        height,
+                    })
+                }
+                // Otros comandos (SetFloating, Focus, etc.) se preservan tal cual
+                other => {
+                    if target_window_id.is_none() {
+                        Some(other)
+                    } else {
+                        None
+                    }
+                }
+            })
+            .collect();
+
+        Ok(rectify_cmds)
+    }
+
     /// Maneja las solicitudes de atajos de teclado (shortcuts) invocados desde la UI o el compositor.
     ///
     /// Permite alterar el estado operativo del motor, los gaps, cambiar el foco o migrar ventanas.

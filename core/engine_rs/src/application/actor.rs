@@ -183,71 +183,71 @@ impl RavenControllerActor {
                             }
                         }
                         CompositorEvent::RectifyWindow(window_id) => {
-                            // --- Verificador de Rectificación Post-Cuarentena ---
+                            // --- Modelo de Sospecha Activa — Rectificación Forzada (Fase 2) ---
                             //
-                            // Comprueba si la geometría física de la ventana (reportada por KWin)
-                            // coincide con la geometría objetivo que Rust calculó y comandó.
-                            // Si la ventana ignoró o sobreescribió las órdenes (comportamiento
-                            // frecuente en navegadores CSD y apps Electron que restauran su
-                            // sesión anterior), se re-emiten las órdenes forzosamente.
-                            let target_rect = self.controller.get_target_rect_for_window(&window_id);
-                            if let Some(target) = target_rect {
-                                if let Some(win) = self.controller.get_engine().current_windows.get(&window_id) {
-                                    let dx = (win.geometry.x - target.x).abs();
-                                    let dy = (win.geometry.y - target.y).abs();
-                                    let dw = (win.geometry.width - target.width).abs();
-                                    let dh = (win.geometry.height - target.height).abs();
+                            // Rust NO confía en la geometría reportada por el bridge KWin.
+                            // La fuente de verdad son los árboles internos de Rust (last_known_layout
+                            // y current_windows). Se determinan dos niveles de sospecha:
+                            //
+                            // [ALTA SOSPECHA] Ventana marcada por KWin como sospechosa (is_suspicious=true):
+                            //   flood de señales durante Timer-0 o sin clase WM.
+                            //   → Rectificación incondicional: re-calcular layout completo y
+                            //     re-enviar TODOS los comandos de ese workspace como RectifyWindow.
+                            //
+                            // [SOSPECHA NORMAL] Ventana con target registrado en last_known_layout:
+                            //   → Re-enviar directamente el target calculado sin comparar con
+                            //     win.geometry del bridge (fuente no confiable post-CSD).
 
-                                    // Tolerancia de 2px para redondeos enteros de gaps en Wayland
-                                    if dx > 2 || dy > 2 || dw > 2 || dh > 2 {
-                                        tracing::warn!(
-                                            "[RECTIFICACION] Ventana '{}' no asumió las medidas calculadas. \
-                                             Geometría real: {}x{}+{},{} | Objetivo: {}x{}+{},{} | Delta: dx={} dy={} dw={} dh={}. \
-                                             Reenviando órdenes de acomodo.",
-                                            window_id,
-                                            win.geometry.width, win.geometry.height,
-                                            win.geometry.x, win.geometry.y,
-                                            target.width, target.height, target.x, target.y,
-                                            dx, dy, dw, dh
-                                        );
+                            let is_suspicious = self
+                                .controller
+                                .get_engine()
+                                .current_windows
+                                .get(&window_id)
+                                .map(|w| w.is_suspicious || w.resource_class.is_empty())
+                                .unwrap_or(false);
 
-                                        let rectify_cmds = vec![
-                                            raven_core::action::RavenAction::RectifyWindow {
-                                                window_id: window_id.clone(),
-                                                x: target.x,
-                                                y: target.y,
-                                                width: target.width,
-                                                height: target.height,
-                                            },
-                                        ];
+                            let window_exists = self
+                                .controller
+                                .get_engine()
+                                .current_windows
+                                .contains_key(&window_id);
+
+                            if !window_exists {
+                                info!("[SOSPECHA-ACTIVA] Ventana '{}' ya no existe. Rectificación omitida.", window_id);
+                            } else if is_suspicious {
+                                // ALTA SOSPECHA: re-calcular layout completo como RectifyWindow
+                                tracing::warn!(
+                                    "[SOSPECHA-ACTIVA] Ventana SOSPECHOSA '{}' → rectificación incondicional de workspace completo.",
+                                    window_id
+                                );
+                                if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(None) {
+                                    if !rectify_cmds.is_empty() {
                                         let backend = self.backend.clone();
                                         tokio::spawn(async move {
                                             if let Err(e) = backend.apply_actions(rectify_cmds).await {
-                                                tracing::error!("[RECTIFICACION] Error al re-enviar órdenes de acomodo para '{}': {}", window_id, e);
+                                                tracing::error!("[SOSPECHA-ACTIVA] Error en rectificación de workspace: {}", e);
+                                            }
+                                        });
+                                    }
+                                }
+                            } else {
+                                // SOSPECHA NORMAL: re-enviar target desde last_known_layout
+                                // sin comparar contra win.geometry del bridge.
+                                if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
+                                    if !rectify_cmds.is_empty() {
+                                        let wid_log = window_id.clone();
+                                        info!(
+                                            "[SOSPECHA-ACTIVA] Re-enviando geometría calculada para '{}' (sospecha normal, {} cmds).",
+                                            wid_log, rectify_cmds.len()
+                                        );
+                                        let backend = self.backend.clone();
+                                        tokio::spawn(async move {
+                                            if let Err(e) = backend.apply_actions(rectify_cmds).await {
+                                                tracing::error!("[SOSPECHA-ACTIVA] Error re-enviando para '{}': {}", wid_log, e);
                                             }
                                         });
                                     } else {
-                                        info!(
-                                            "[RECTIFICACION] Ventana '{}' asumió correctamente las medidas calculadas (Δx={} Δy={} Δw={} Δh={}). OK.",
-                                            window_id, dx, dy, dw, dh
-                                        );
-                                    }
-                                } else {
-                                    info!("[RECTIFICACION] Ventana '{}' ya no existe en el estado actual. Verificación omitida.", window_id);
-                                }
-                            } else {
-                                // Si no hay geometría objetivo registrada puede significar que
-                                // el layout fue recalculado sin confirmar (ej. ventana flotante),
-                                // en ese caso forzamos un recálculo de layout defensivo.
-                                info!("[RECTIFICACION] No hay geometría objetivo registrada para '{}'. Recalculando layout.", window_id);
-                                if let Ok(cmds) = self.controller.commit_layout() {
-                                    if !cmds.is_empty() {
-                                        let backend = self.backend.clone();
-                                        tokio::spawn(async move {
-                                            if let Err(e) = backend.apply_actions(cmds).await {
-                                                tracing::error!("[RECTIFICACION] Error en recálculo defensivo para '{}': {}", window_id, e);
-                                            }
-                                        });
+                                        info!("[SOSPECHA-ACTIVA] Ventana '{}' no necesita rectificación (no en layout activo).", window_id);
                                     }
                                 }
                             }
@@ -351,7 +351,7 @@ impl RavenControllerActor {
                                 win.iq,
                                 win.fs,
                             )
-                            .with_class_and_caption(win.cls, win.cls_name, win.cap);
+                            .with_class_and_caption(win.cls, win.cls_name, win.sus, win.cap);
 
                             let is_tiled = !win_node.is_floating && !win_node.is_minimized;
                             let wid = win_node.window_id.clone();

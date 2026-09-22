@@ -68,6 +68,12 @@ pub struct WindowNode {
     /// Indica si la ventana se encuentra en modo pantalla completa nativo.
     #[serde(default, rename = "fs")]
     pub is_fullscreen: bool,
+    /// Bandera de sospecha activa: la ventana fue marcada por KWin por flood de señales
+    /// o ausencia de clase WM. Rust endurece su modelo de rectificación para esta ventana.
+    /// Con `is_suspicious = true`, la Fase 2 (RectifyWindow) re-envía el layout
+    /// incondicionalmente sin comparar contra la geometría reportada por el bridge.
+    #[serde(default, rename = "sus")]
+    pub is_suspicious: bool,
     /// Clase WM / Resource class reportada por KWin (segunda parte de WM_CLASS, ej. "zen-browser", "firefox").
     #[serde(default)]
     pub resource_class: String,
@@ -118,6 +124,7 @@ impl WindowNode {
             strict_birth,
             is_quarantined,
             is_fullscreen,
+            is_suspicious: false,
             resource_class: String::new(),
             resource_name: String::new(),
             caption: String::new(),
@@ -126,10 +133,21 @@ impl WindowNode {
         }
     }
 
-    /// Añade información de clase, nombre de ejecutable y caption para arbitraje de reglas en Rust.
-    pub fn with_class_and_caption(mut self, resource_class: String, resource_name: String, caption: String) -> Self {
+    /// Añade información de clase, nombre de ejecutable, sospecha y caption para arbitraje de reglas en Rust.
+    ///
+    /// El parámetro `is_suspicious` es `true` cuando KWin marcó la ventana durante el Timer-0
+    /// por flood de señales de geometría o por ausencia de clase WM. Rust endurece su modelo
+    /// de rectificación (Fase 2) para estas ventanas, re-enviando el layout incondicionalmente.
+    pub fn with_class_and_caption(
+        mut self,
+        resource_class: String,
+        resource_name: String,
+        is_suspicious: bool,
+        caption: String,
+    ) -> Self {
         self.resource_class = resource_class;
         self.resource_name = resource_name;
+        self.is_suspicious = is_suspicious;
         self.caption = caption;
         self
     }
