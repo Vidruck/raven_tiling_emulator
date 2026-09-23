@@ -1,0 +1,23 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "alejandro@vidruck.com",
+                "Name": "Alejandro González Hernández (Vidruck)"
+            }
+        ],
+        "Category": "Appearance",
+        "Description": "Animaciones ultra-fluidas por hardware de movimiento, reorganización y apertura de ventanas para Raven Tiling Emulator",
+        "Description[es]": "Animaciones ultra-fluidas por hardware de movimiento, reorganización y apertura de ventanas para Raven Tiling Emulator",
+        "ExclusiveGroup": "",
+        "Icon": "org.kde.raven.tiling",
+        "Id": "kwin4_effect_raven",
+        "License": "GPL-3.0+",
+        "Name": "Raven Window Animation Effect",
+        "Name[es]": "Efecto de Animación de Ventanas Raven",
+        "ServiceTypes": [
+            "KWin/Effect"
+        ],
+        "Version": "3.4.0"
+    }
+}

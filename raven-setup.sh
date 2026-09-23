@@ -257,6 +257,39 @@ EOF
     fi
     log_success "Módulos QML de Raven Hub sincronizados"
 
+    # Compilación y Despliegue del Efecto C++ Nativo de KWin (adapters/kwin_effect)
+    if [ -d "$SOURCE_DIR/adapters/kwin_effect" ]; then
+        log_info "Configurando y compilando Efecto Nativo de KWin (adapters/kwin_effect)..."
+        cmake -B "$SOURCE_DIR/adapters/kwin_effect/build" -S "$SOURCE_DIR/adapters/kwin_effect" -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 || true
+        if cmake --build "$SOURCE_DIR/adapters/kwin_effect/build" -j"$num_cores" >/dev/null 2>&1; then
+            # El path de salida de kcoreaddons_add_plugin es kwin/effects/plugins/ dentro del build dir
+            local EFFECT_SO="$SOURCE_DIR/adapters/kwin_effect/build/kwin/effects/plugins/kwin4_effect_raven.so"
+            local SYS_PLUGIN_DIR="/usr/lib64/qt6/plugins/kwin/effects/plugins"
+            local SYS_PLUGIN_DIR_ALT="/usr/lib/qt6/plugins/kwin/effects/plugins"
+
+            # KWin en Arch Linux NO busca en ~/.local; instalamos en path del sistema con sudo
+            if [ -f "$EFFECT_SO" ]; then
+                if sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR/" 2>/dev/null; then
+                    log_success "Plugin instalado en $SYS_PLUGIN_DIR"
+                elif sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/" 2>/dev/null; then
+                    log_success "Plugin instalado en $SYS_PLUGIN_DIR_ALT"
+                else
+                    log_warn "No se pudo instalar en path del sistema (¿permisos?). Intentando ~/.local..."
+                    mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
+                    cp -f "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
+                    cp -f "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
+                fi
+            fi
+            # Habilitar efecto en KWin configuration
+            kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
+            qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+            log_success "Efecto Nativo de KWin (kwin4_effect_raven) compilado y activado"
+        else
+            log_warn "No se pudo compilar el Efecto Nativo de KWin C++ (fallback grácil a animaciones estándar)"
+        fi
+    fi
+
+
     log_info "Instalando script de KWin '$KWIN_SCRIPT_ID'..."
     kpackagetool6 --type=KWin/Script -i "$SOURCE_DIR/adapters/kwin_script/" >/dev/null 2>&1 || \
     kpackagetool6 --type=KWin/Script -u "$SOURCE_DIR/adapters/kwin_script/" >/dev/null 2>&1
@@ -380,6 +413,31 @@ do_inject_shortcuts() {
     log_success "Atajos globales inyectados e integrados limpiamente en KDE Plasma 6"
 }
 
+# --- Lógica de Compilación y Despliegue del Efecto Nativo KWin ---
+do_build_kwin_effect() {
+    print_header
+    echo -e "${PRIMARY}${BOLD}🎬 Compilando Efecto Nativo de Animación de KWin (adapters/kwin_effect)...${RESET}\n"
+    if [ -d "$SOURCE_DIR/adapters/kwin_effect" ]; then
+        local num_cores=$(nproc 2>/dev/null || echo 2)
+        log_info "Configurando CMake para kwin4_effect_raven..."
+        cmake -B "$SOURCE_DIR/adapters/kwin_effect/build" -S "$SOURCE_DIR/adapters/kwin_effect" -DCMAKE_BUILD_TYPE=Release
+        log_info "Compilando módulo C++..."
+        cmake --build "$SOURCE_DIR/adapters/kwin_effect/build" -j"$num_cores"
+        log_info "Instalando módulo en el directorio de plugins de KWin..."
+        cmake --install "$SOURCE_DIR/adapters/kwin_effect/build" --prefix "$HOME/.local" >/dev/null 2>&1 || true
+        mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
+        cp -f "$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
+        cp -f "$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
+        
+        # Habilitar efecto en KWin configuration
+        kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
+        qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+        log_success "Efecto Nativo de KWin (kwin4_effect_raven) instalado y activado en KWin 6"
+    else
+        log_error "No se encontró el directorio $SOURCE_DIR/adapters/kwin_effect"
+    fi
+}
+
 # --- Lógica de Reconstrucción del Bundle KWin ---
 do_rebuild_kwin() {
     print_header
@@ -410,6 +468,10 @@ do_quick_rebuild() {
     
     do_rebuild_kwin
     
+    if [ -d "$SOURCE_DIR/adapters/kwin_effect" ]; then
+        cmake --build "$SOURCE_DIR/adapters/kwin_effect/build" -j"$(nproc 2>/dev/null || echo 2)" >/dev/null 2>&1 || true
+    fi
+    
     systemctl --user restart raven.service 2>/dev/null || true
     log_success "Servicio raven.service reiniciado"
 }
@@ -433,20 +495,25 @@ do_uninstall() {
         log_success "Servicio Systemd y D-Bus eliminados"
     fi
 
-    log_step "2" "5" "Removiendo Adaptadores KDE (KWin Script, Plasmoide & Módulos QML)"
+    log_step "2" "5" "Removiendo Adaptadores KDE (KWin Script, Efecto, Plasmoide & Módulos QML)"
     kpackagetool6 --type=KWin/Script --remove "$KWIN_SCRIPT_ID" >/dev/null 2>&1 || true
     kpackagetool6 --type=Plasma/Applet --remove "$PLASMOID_ID" >/dev/null 2>&1 || true
     rm -rf "$HOME/.local/share/kwin/scripts/$KWIN_SCRIPT_ID"
     rm -rf "$HOME/.local/share/plasma/plasmoids/$PLASMOID_ID"
+    rm -f "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so"
+    rm -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so"
+    kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled false 2>/dev/null || true
+    qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
     rm -rf "$HOME/.local/lib/qt6/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
     rm -rf "$HOME/.local/lib64/qt6/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
     rm -rf "$HOME/.local/share/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
-    log_success "Adaptadores y módulos QML de Plasma 6 removidos"
+    log_success "Adaptadores, efecto C++ y módulos QML de Plasma 6 removidos"
 
     log_step "3" "5" "Limpiando Accesos Directos, Enlaces e Iconos"
     rm -f "$HOME/.local/share/applications/raven.desktop"
     rm -f "$HOME/.local/share/icons/hicolor/scalable/apps/${ICON_NAME}.svg"
     rm -f "$HOME/.local/bin/raven_engine"
+    rm -f "$HOME/.local/bin/raven_gui"
     rm -f "$HOME/.local/bin/raven_gui"
     update-desktop-database "$HOME/.local/share/applications/" 2>/dev/null || true
     kbuildsycoca6 --noincremental > /dev/null 2>&1 || true
@@ -468,6 +535,7 @@ do_uninstall() {
     else
         rm -rf "$SOURCE_DIR/target"
     fi
+    rm -rf "$SOURCE_DIR/adapters/kwin_effect/build" "$SOURCE_DIR/adapters/plasmoid/build" 2>/dev/null || true
     log_success "Artefactos de compilación limpios"
 
     echo ""
@@ -501,6 +569,13 @@ do_status() {
         echo -e " ${SUCCESS}●${RESET} ${BOLD}Adaptador KWin Script:${RESET}            ${SUCCESS}Instalado${RESET}"
     else
         echo -e " ${WARNING}●${RESET} ${BOLD}Adaptador KWin Script:${RESET}            ${WARNING}No instalado${RESET}"
+    fi
+
+    # KWin Effect
+    if [ -f "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" ] || [ -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" ]; then
+        echo -e " ${SUCCESS}●${RESET} ${BOLD}Efecto Nativo KWin C++:${RESET}          ${SUCCESS}Instalado (kwin4_effect_raven.so)${RESET}"
+    else
+        echo -e " ${WARNING}●${RESET} ${BOLD}Efecto Nativo KWin C++:${RESET}          ${WARNING}No instalado${RESET}"
     fi
 
     # Plasmoid
@@ -538,6 +613,10 @@ case "$1" in
         do_rebuild_kwin
         exit 0
         ;;
+    --effect|-e)
+        do_build_kwin_effect
+        exit 0
+        ;;
     --shortcuts|-k)
         do_inject_shortcuts
         exit 0
@@ -552,23 +631,25 @@ esac
 show_menu() {
     print_header
     draw_box "SELECCIONA UNA OPCIÓN" \
-        "${ACCENT}${BOLD}[1]${RESET} 🚀 Instalación Completa ${MUTED}(Compilar + Desplegar + Inyectar Atajos + Iniciar)${RESET}" \
+        "${ACCENT}${BOLD}[1]${RESET} 🚀 Instalación Completa ${MUTED}(Rust + KWin Script + Efecto C++ + Plasmoide + Atajos)${RESET}" \
         "${ACCENT}${BOLD}[2]${RESET} ⌨️ Inyectar Atajos de Teclado en Plasma ${MUTED}(Sincronizar kglobalshortcutsrc)${RESET}" \
         "${ACCENT}${BOLD}[3]${RESET} 🔄 Recompilación Rápida ${MUTED}(Rebuild Cargo + Bundle KWin + Restart)${RESET}" \
         "${ACCENT}${BOLD}[4]${RESET} 🎨 Reconstruir Bundle KWin ${MUTED}(build_kwin_bundle.sh + Update)${RESET}" \
-        "${ACCENT}${BOLD}[5]${RESET} 📊 Ver Estado del Sistema ${MUTED}(Systemd / KWin / Plasmoid / Files)${RESET}" \
-        "${ACCENT}${BOLD}[6]${RESET} 🗑️ Desinstalar Raven ${MUTED}(Remover adaptadores, servicios y binarios)${RESET}" \
-        "${ACCENT}${BOLD}[7]${RESET} ❌ Salir"
+        "${ACCENT}${BOLD}[5]${RESET} 🎬 Compilar e Instalar Efecto Nativo KWin ${MUTED}(adapters/kwin_effect C++ Plugin)${RESET}" \
+        "${ACCENT}${BOLD}[6]${RESET} 📊 Ver Estado del Sistema ${MUTED}(Systemd / KWin / Efecto / Plasmoid / Files)${RESET}" \
+        "${ACCENT}${BOLD}[7]${RESET} 🗑️ Desinstalar Raven ${MUTED}(Remover adaptadores, servicios y binarios)${RESET}" \
+        "${ACCENT}${BOLD}[8]${RESET} ❌ Salir"
     echo ""
-    read -p " Ingrese opción [1-7]: " opt
+    read -p " Ingrese opción [1-8]: " opt
     case "$opt" in
         1) do_install ;;
         2) do_inject_shortcuts ;;
         3) do_quick_rebuild ;;
         4) do_rebuild_kwin ;;
-        5) do_status ;;
-        6) do_uninstall ;;
-        7) echo -e "\n${PRIMARY}¡Hasta luego! 🐦${RESET}\n"; exit 0 ;;
+        5) do_build_kwin_effect ;;
+        6) do_status ;;
+        7) do_uninstall ;;
+        8) echo -e "\n${PRIMARY}¡Hasta luego! 🐦${RESET}\n"; exit 0 ;;
         *) echo -e "\n${ERROR}Opción inválida.${RESET}"; sleep 1; show_menu ;;
     esac
 }

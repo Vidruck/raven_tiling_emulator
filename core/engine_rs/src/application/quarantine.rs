@@ -156,30 +156,30 @@ impl QuarantinePolicy {
 
     /// Retorna la duración de cuarentena (Fase 1) según la política.
     ///
-    /// Tiempos calibrados para ser lo más cortos posibles manteniendo estabilidad:
-    /// - **Standard**: 40ms — apps GTK/Qt simples, tiempo mínimo para el primer frame.
-    /// - **Browser**: 55ms — navegadores necesitan tiempo para negociación de superficie Wayland.
-    /// - **Heavy**: 75ms — apps Electron/JVM con inicialización costosa.
+    /// Tiempos calibrados para evitar solapamiento entre la estabilización de KWin y el layout de Rust:
+    /// - **Standard**: 80ms — apps GTK/Qt simples.
+    /// - **Browser**: 150ms — navegadores (Firefox, Zen, Chrome) para completar inicialización y restauración.
+    /// - **Heavy**: 200ms — apps Electron/JVM pesadas.
     pub fn duration(&self) -> Duration {
         match self {
-            QuarantinePolicy::Standard => Duration::from_millis(90),
-            QuarantinePolicy::Browser  => Duration::from_millis(120),
-            QuarantinePolicy::Heavy    => Duration::from_millis(150),
+            QuarantinePolicy::Standard => Duration::from_millis(80),
+            QuarantinePolicy::Browser  => Duration::from_millis(150),
+            QuarantinePolicy::Heavy    => Duration::from_millis(200),
         }
     }
 
     /// Retorna el retraso adicional para la verificación de rectificación post-cuarentena (Fase 2).
     ///
-    /// Este intervalo ocurre *después* de que el timer de cuarentena expira, para dar tiempo
-    /// al compositor y a la app de procesar la orden de posicionamiento antes de verificar.
-    /// - **Standard**: 45ms — suficiente para un round-trip DBus.
-    /// - **Browser**: 90ms — los navegadores restauran sesión y sobreescriben geometría con retardo.
-    /// - **Heavy**: 120ms — apps pesadas pueden tardar más en procesar el resize Wayland.
+    /// Este intervalo ocurre *después* de que el timer de cuarentena expira y se aplican los comandos de layout,
+    /// para dar margen suficiente al compositor y al cliente de procesar el frame antes de auditar y forzar la geometría:
+    /// - **Standard**: 100ms — margen holgado para round-trip y render inicial.
+    /// - **Browser**: 220ms — tiempo para que Firefox/Zen termine de restaurar sesión y dimensiones finales.
+    /// - **Heavy**: 250ms — apps Electron con renderizado asíncrono pesado.
     pub fn rectification_delay(&self) -> Duration {
         match self {
-            QuarantinePolicy::Standard => Duration::from_millis(60),
-            QuarantinePolicy::Browser  => Duration::from_millis(60),
-            QuarantinePolicy::Heavy    => Duration::from_millis(60),
+            QuarantinePolicy::Standard => Duration::from_millis(100),
+            QuarantinePolicy::Browser  => Duration::from_millis(220),
+            QuarantinePolicy::Heavy    => Duration::from_millis(250),
         }
     }
 }

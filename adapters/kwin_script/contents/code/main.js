@@ -582,9 +582,9 @@ function getKWinQuarantineCategory(w) {
  */
 function getKWinQuarantineDelay(w) {
   var category = getKWinQuarantineCategory(w);
-  if (category === "browser") return 100;
-  if (category === "heavy")   return 140;
-  return 60;
+  if (category === "browser") return 180;
+  if (category === "heavy")   return 220;
+  return 100;
 }
 /**
  * @file quarantine.js

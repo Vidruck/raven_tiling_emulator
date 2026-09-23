@@ -9,10 +9,12 @@
 //! Cumple el contrato universal [`CompositorBackend`](raven_core::backend::CompositorBackend).
 
 pub mod commands;
+pub mod effect;
 pub mod parser;
 pub mod service;
 
 pub use commands::TilingCommand;
+pub use effect::{RavenEffectClient, WindowAnimation};
 pub use parser::{parse_payload, KWinPayload, KWinScreen, KWinTopology, KWinWindow};
 pub use service::{actions_to_kwin_json, KWinBridgeMessage, KWinDbusService};
 
@@ -34,6 +36,8 @@ pub struct KWinBackend {
     name: &'static str,
     /// Conexión activa al bus D-Bus de sesión de KWin (mantiene vivo el registro D-Bus).
     connection: Arc<tokio::sync::RwLock<Option<Arc<Connection>>>>,
+    /// Cliente D-Bus para el efecto gráfico nativo de KWin (kwin4_effect_raven).
+    effect_client: RavenEffectClient,
 }
 
 impl Default for KWinBackend {
@@ -48,7 +52,13 @@ impl KWinBackend {
         Self {
             name: "kwin",
             connection: Arc::new(tokio::sync::RwLock::new(None)),
+            effect_client: RavenEffectClient::new(),
         }
+    }
+
+    /// Retorna una referencia al cliente del efecto nativo de KWin.
+    pub fn effect_client(&self) -> &RavenEffectClient {
+        &self.effect_client
     }
 
     /// Inicia el servicio D-Bus de KWin (`org.kde.raven.Daemon`) e intermedia los mensajes hacia el canal receptor de Raven.
@@ -90,8 +100,9 @@ impl KWinBackend {
         let arc_conn = Arc::new(conn);
         {
             let mut guard = self.connection.write().await;
-            *guard = Some(arc_conn);
+            *guard = Some(arc_conn.clone());
         }
+        self.effect_client.set_connection(arc_conn).await;
         info!("[KWIN-BACKEND] Servicio org.kde.raven.Daemon registrado exitosamente como intermediario.");
 
         Ok(())
@@ -224,6 +235,24 @@ impl CompositorBackend for KWinBackend {
     ) -> Result<(), BackendError> {
         if actions.is_empty() {
             return Ok(());
+        }
+
+        // Si hay acciones de nacimiento o movimiento, notificar concurrentemente al efecto KWin C++
+        let mut birth_triggered = false;
+        for action in &actions {
+            if let RavenAction::ReleaseQuarantine { window_id } = action {
+                // 400ms de animación de nacimiento para apreciar el efecto gelatina
+                self.effect_client.animate_birth(window_id, 400).await;
+                birth_triggered = true;
+            }
+        }
+
+        // Si mandamos un evento de nacimiento, damos un respiro minúsculo (15ms)
+        // para asegurar que el D-Bus del efecto procese la animación antes
+        // de que KWin aplique agresivamente el layout del puente JS.
+        // Esto evita el 'flicker' donde el motor le gana al efecto.
+        if birth_triggered {
+            tokio::time::sleep(tokio::time::Duration::from_millis(15)).await;
         }
 
         let conn_opt = self.connection.read().await.clone();
