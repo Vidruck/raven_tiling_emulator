@@ -241,18 +241,18 @@ impl CompositorBackend for KWinBackend {
         let mut birth_triggered = false;
         for action in &actions {
             if let RavenAction::ReleaseQuarantine { window_id } = action {
-                // 400ms de animación de nacimiento para apreciar el efecto gelatina
-                self.effect_client.animate_birth(window_id, 400).await;
+                // 250ms de animación de nacimiento, rápida y profesional
+                self.effect_client.animate_birth(window_id, 250).await;
                 birth_triggered = true;
             }
         }
 
-        // Si mandamos un evento de nacimiento, damos un respiro minúsculo (15ms)
+        // Si mandamos un evento de nacimiento, damos un respiro minúsculo (40ms)
         // para asegurar que el D-Bus del efecto procese la animación antes
         // de que KWin aplique agresivamente el layout del puente JS.
         // Esto evita el 'flicker' donde el motor le gana al efecto.
         if birth_triggered {
-            tokio::time::sleep(tokio::time::Duration::from_millis(15)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(40)).await;
         }
 
         let conn_opt = self.connection.read().await.clone();

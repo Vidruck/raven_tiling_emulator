@@ -86,8 +86,8 @@ QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
     } else if (easingName == QLatin1String("Linear")) {
         return QEasingCurve(QEasingCurve::Linear);
     }
-    // Efecto "gelatina" por defecto
-    return QEasingCurve(QEasingCurve::OutElastic);
+    // Efecto ágil y profesional por defecto (rebote sutil)
+    return QEasingCurve(QEasingCurve::OutBack);
 }
 
 void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &startRect, const QRectF &targetRect,
@@ -101,7 +101,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
     cancelWindowAnimation(windowId);
 
     if (durationMs <= 0) {
-        durationMs = 400; // 400ms para apreciar el efecto gelatina
+        durationMs = 250; // 250ms para un movimiento súper rápido pero fluido
     }
 
     QEasingCurve curve = parseEasing(easingName);
@@ -139,8 +139,8 @@ void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
         QJsonObject obj = val.toObject();
 
         QString winId = obj.value(QStringLiteral("id")).toString();
-        int durationMs = obj.value(QStringLiteral("duration_ms")).toInt(400);
-        QString easing = obj.value(QStringLiteral("easing")).toString(QStringLiteral("EaseOutElastic"));
+        int durationMs = obj.value(QStringLiteral("duration_ms")).toInt(250);
+        QString easing = obj.value(QStringLiteral("easing")).toString(QStringLiteral("EaseOutBack"));
 
         QJsonArray fromArr = obj.value(QStringLiteral("from")).toArray();
         QJsonArray toArr = obj.value(QStringLiteral("to")).toArray();
@@ -163,7 +163,7 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
     cancelWindowAnimation(windowId);
 
     if (durationMs <= 0) {
-        durationMs = 400; // Efecto más apreciable
+        durationMs = 250; // Efecto rápido y profesional
     }
 
     QEasingCurve curve(QEasingCurve::OutBack); // Curva gelatina/resorte
@@ -172,7 +172,7 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
     uint metaCenter = 0;
     setMetaData(SourceAnchor, Anchor::Horizontal | Anchor::Vertical, metaCenter);
 
-    // Animación de escala (Zoom-in desde 0.6 a 1.0 para que sea súper evidente)
+    // Animación de escala (Zoom-in desde 0.75 a 1.0 para que sea ágil y elegante)
     quint64 scaleAnim = animate(w,
                                 KWin::AnimationEffect::Scale,
                                 metaCenter,
@@ -180,7 +180,7 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
                                 KWin::FPx2(1.0, 1.0),
                                 curve,
                                 0,
-                                KWin::FPx2(0.6, 0.6));
+                                KWin::FPx2(0.75, 0.75));
 
     // Animación de opacidad (Fade-in desde 0.0 a 1.0)
     uint metaOpacity = 0;
