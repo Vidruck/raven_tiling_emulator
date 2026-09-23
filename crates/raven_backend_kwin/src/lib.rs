@@ -238,22 +238,16 @@ impl CompositorBackend for KWinBackend {
         }
 
         // Si hay acciones de nacimiento o movimiento, notificar concurrentemente al efecto KWin C++
-        let mut birth_triggered = false;
         for action in &actions {
             if let RavenAction::ReleaseQuarantine { window_id } = action {
                 // 250ms de animación de nacimiento, rápida y profesional
                 self.effect_client.animate_birth(window_id, 250).await;
-                birth_triggered = true;
             }
         }
 
-        // Si mandamos un evento de nacimiento, damos un respiro minúsculo (40ms)
-        // para asegurar que el D-Bus del efecto procese la animación antes
-        // de que KWin aplique agresivamente el layout del puente JS.
-        // Esto evita el 'flicker' donde el motor le gana al efecto.
-        if birth_triggered {
-            tokio::time::sleep(tokio::time::Duration::from_millis(40)).await;
-        }
+        // Las órdenes D-Bus (C++ effect) y KWin Script se disparan concurrentemente.
+        // Al quitar el delay arbitrario, permitimos que KWin encole ambos cambios
+        // (animación + geometría) en el mismo frame del compositor, evitando saltos (flicker).
 
         let conn_opt = self.connection.read().await.clone();
         if let Some(conn) = conn_opt {

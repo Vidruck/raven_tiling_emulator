@@ -101,7 +101,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
     cancelWindowAnimation(windowId);
 
     if (durationMs <= 0) {
-        durationMs = 250; // 250ms para un movimiento súper rápido pero fluido
+        durationMs = 60; // 250ms para un movimiento súper rápido pero fluido
     }
 
     QEasingCurve curve = parseEasing(easingName);
@@ -166,13 +166,13 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
         durationMs = 250; // Efecto rápido y profesional
     }
 
-    QEasingCurve curve(QEasingCurve::OutBack); // Curva gelatina/resorte
+    QEasingCurve curve(QEasingCurve::OutElastic); // Curva gelatina (rápida)
     QEasingCurve opacityCurve(QEasingCurve::OutCubic); // Fade suave
 
     uint metaCenter = 0;
     setMetaData(SourceAnchor, Anchor::Horizontal | Anchor::Vertical, metaCenter);
 
-    // Animación de escala (Zoom-in desde 0.75 a 1.0 para que sea ágil y elegante)
+    // Animación de escala (Zoom-in desde 0.85 a 1.0 para que sea ágil y tipo gelatina)
     quint64 scaleAnim = animate(w,
                                 KWin::AnimationEffect::Scale,
                                 metaCenter,
@@ -180,7 +180,7 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
                                 KWin::FPx2(1.0, 1.0),
                                 curve,
                                 0,
-                                KWin::FPx2(0.75, 0.75));
+                                KWin::FPx2(0.85, 0.85));
 
     // Animación de opacidad (Fade-in desde 0.0 a 1.0)
     uint metaOpacity = 0;

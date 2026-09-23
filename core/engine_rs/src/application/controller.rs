@@ -197,7 +197,12 @@ impl RavenController {
         for (wid, rect) in &new_layout {
             let mut win_rect_differs = false;
             if let Some(win_node) = windows.iter().find(|w| &w.window_id == wid) {
-                if win_node.geometry != *rect {
+                let dx = (win_node.geometry.x - rect.x).abs();
+                let dy = (win_node.geometry.y - rect.y).abs();
+                let dw = (win_node.geometry.width - rect.width).abs();
+                let dh = (win_node.geometry.height - rect.height).abs();
+                
+                if dx > 3 || dy > 3 || dw > 3 || dh > 3 {
                     win_rect_differs = true;
                 }
             }
