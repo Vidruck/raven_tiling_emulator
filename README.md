@@ -16,11 +16,25 @@
 
 **Raven Tiling Emulator** es un gestor de ventanas dinámico en mosaico (Tiling Window Manager) de alto rendimiento diseñado específicamente para **KDE Plasma 6 (Wayland)**. 
 
-Con el lanzamiento de la **Versión 3.4**, Raven consolida su suite completa que fusiona el motor de composición en Rust con un **Lanzador de Aplicaciones y Centro de Mando Integrado (Raven Hub v3.4)** en el panel de Plasma: reloj digital monospaced y fecha localizada en tiempo real, control de sesión, monitorización de hardware en vivo, reproductor multimedia con ecualizador animado armónico, mediador predictivo de capacidad entre algoritmos ($C_{max}$), navegación espacial instantánea en sub-islas, buscador de aplicaciones y sidebar de selección rápida para los 6 algoritmos de distribución.
+Con el lanzamiento de la **Versión 4.1**, Raven consolida su suite completa que fusiona el motor de composición en Rust con un **Lanzador de Aplicaciones y Centro de Mando Integrado (Raven Hub v4.1)** en el panel de Plasma: reloj digital monospaced y fecha localizada en tiempo real, control de sesión, monitorización de hardware en vivo, reproductor multimedia con ecualizador animado armónico, mediador predictivo de capacidad entre algoritmos ($C_{max}$), navegación espacial instantánea en sub-islas, buscador de aplicaciones y sidebar de selección rápida para los 6 algoritmos de distribución.
 
 ---
 
-## ⚡ Novedades Principales de la Versión 3.4
+## ⚡ Novedades Principales de la Versión 4.1
+
+### 🎇 Efectos Visuales Nativos (C++) y Sincronización Híbrida
+- **Animaciones Nativas de Alto Rendimiento (`kwin_effect`)**: Se implementó un plugin nativo en C++ para KWin (`org.kde.kwin.RavenEffect`) que se comunica directamente con el motor Rust vía D-Bus. Esto desplaza la carga de animación del hilo de JavaScript al compositor nativo, permitiendo efectos fluidos a altos FPS.
+- **Transición "Gelatina" Optimizada**: Nueva animación de apertura utilizando curvas elásticas (`OutElastic`) de 250ms con escalado dinámico. Proporciona un feedback visual súper rápido, profesional y táctil sin ser "perezoso" ni interrumpir el flujo de trabajo.
+- **Tolerancia Geométrica Anti-Flicker (Flapping Loop)**: Incorporación de una tolerancia matemática de 3 píxeles en el motor de Rust que filtra el ruido del escalado fraccionario de Wayland y los cambios continuos de título en navegadores web (como Zen Browser), erradicando por completo el "brincoteo" o re-renderizado en bucle continuo.
+
+### 🛡️ Cuarentena y Rectificación Activa
+- **Doble Fase de Suspicacia Activa**: El motor ya no confía ciegamente en el estado geométrico inicial reportado por aplicaciones complejas. Se implementó un sistema de rectificación forzada (fase 2) mediado por temporizadores de `tokio` que elude las barreras anti-redundancia de KWin para corregir la ventana incondicionalmente.
+- **Sincronización Concurrente de Layout**: Eliminación de retardos artificiales IPC. El diseño espacial y la orden D-Bus de animación se despachan concurrentemente, permitiendo a KWin procesar la geometría y la animación en un único frame de Wayland, evitando saltos visuales en aplicaciones ultra-rápidas (como terminales).
+
+### 📜 Máquina Lua Experimental (Full Stack)
+- **Scripting Dinámico y Configuración**: Se integró una máquina virtual de **Lua** operativa a nivel de backend y frontend (fase experimental). Esto abrirá las puertas a la creación de atajos dinámicos, scripting de reglas de ventanas avanzadas y el desarrollo de arquitecturas de mosaico personalizadas sin necesidad de compilar el núcleo en Rust.
+
+---
 
 ### 🌉 Arquitectura "Thin Bridge" y Backend Wayland Nativo
 - **Integración Nativa a Wayland (`raven_backend_wayland`)**: El motor de Rust ahora se conecta directamente al socket `$WAYLAND_DISPLAY` para consumir el protocolo `wl_output`. Las resoluciones, coordenadas físicas y escalas de los monitores se leen en tiempo real con latencia sub-milisegundo, sin depender de D-Bus ni de scripts lentos.
@@ -29,24 +43,7 @@ Con el lanzamiento de la **Versión 3.4**, Raven consolida su suite completa que
 
 ---
 
-## ⚡ Novedades Principales de la Versión 3.3
 
-### 🛸 1. Raven Plasmoid & Hub Fusionado (v3.3)
-- **Plasmoide Híbrido con Arquitectura de Islas Modulares**: Unifica el menú de aplicaciones y el centro de control de mosaico en una ventana flotante fluida con estética de vidrio esmerilado (*frosted glass*).
-- **Adaptabilidad Cromática Dinámica (KDE Plasma Theme Engine)**: Extrae en tiempo real la paleta de colores del usuario (`~/.config/kdeglobals`), ajustando automáticamente contraste, luminancia ITU-R BT.601, bordes sutiles y transparencias en temas claros y oscuros (Nord, Ayu, Breeze, Catppuccin, etc.).
-- **Detección Automática de Icono del Sistema**: Detecta la distribución Linux activa (`/etc/os-release`) y adopta dinámicamente el logotipo oficial de la distro o el icono nativo de KDE Plasma en el panel.
-- **Isla de Comando y Control en Sub-Islas**:
-  - **Monitores**: Detección reactiva de pantallas y migración instantánea de ventanas con controles direccionales.
-  - **Carrusel de Escritorios Virtuales**: Navegación continua con indicador dinámico (`Desk N`) y migración rápida de ventanas activas al escritorio anterior o siguiente.
-  - **Márgenes y Quick Peek**: Ajuste fino de espaciado (`Gaps ±2`) y conmutación de ventana flotante temporal unificada.
-  - **Intercambio y GUI**: Botones rápidos de *Swap* de ventanas y acceso al Centro de Control gráfico.
-- **Sidebar Vertical de 6 Algoritmos y Control de Sesión**:
-  - Selección directa de cualquiera de los 6 modos de mosaico con sincronización D-Bus Push instantánea en pantalla.
-  - Acciones de energía y sesión aisladas en la parte inferior (Bloqueo, Cierre de Sesión, Reinicio y Apagado).
-- **Reproductor Multimedia Inteligente con Ecualizador Gráfico**:
-  - Visualizador de espectro dinámico animado de 31 bandas ISO, barra de progreso interactiva con salto de posición (`SetPosition`), carátula integrada con recorte redondeado y sincronización continua MPRIS2 (Spotify, VLC, YouTube, navegadores web).
-- **Buscador de Apps de Alta Velocidad**:
-  - Filtrado en tiempo real de aplicaciones del sistema con navegación completa por teclado (flechas y tecla **Enter** para lanzamiento inmediato).
 
 ---
 
@@ -65,9 +62,9 @@ El motor geométrico se organiza en submódulos especializados dentro de `domain
 
 ---
 
-## 🚀 Arquitectura Hexagonal y Transición Hacia la Versión 4.0
+## 🚀 Arquitectura Hexagonal y Preparación Wayland Nativa
 
-Raven Tiling se encuentra en una transición arquitectónica mayor hacia una **arquitectura hexagonal (puertos y adaptadores)** orientada a compositores múltiples, sentando las bases del salto generacional a la **v4.0.0**.
+Raven Tiling ha completado gran parte de su transición arquitectónica mayor hacia una **arquitectura hexagonal (puertos y adaptadores)** orientada a compositores múltiples, sentando las bases del salto generacional definitivo a los protocolos Wayland.
 
 ```text
 ┌───────────────────────────────────────────────────────────────────┐
@@ -82,10 +79,10 @@ Raven Tiling se encuentra en una transición arquitectónica mayor hacia una **a
          ▼                                             ▼
 ┌───────────────────────────────┐             ┌─────────────────────────────┐
 │    raven_backend_kwin         │             │    raven_backend_wayland    │
-│  (Adaptador KDE Plasma 6)     │             │  (v4.0.0 - Protocolos WLR)  │
-│  • zbus D-Bus sesión          │             │  • zwlr_foreign_toplevel_v1 │
-│  • Single-Trip IPC Bridge     │             │  • ext-workspace-v1         │
-│  • Emisión reactiva de señales│             │  • Ingestión sub-milisegundo│
+│  (Adaptador KDE Plasma 6)     │             │  (v5.0.0 - Protocolos WLR)  │
+│  • KWin Script (Sensor)       │             │  • zwlr_foreign_toplevel_v1 │
+│  • kwin_effect C++ (Animador) │             │  • ext-workspace-v1         │
+│  • zbus D-Bus sesión (Bridge) │             │  • Ingestión sub-milisegundo│
 └───────────────────────────────┘             └─────────────────────────────┘
 ```
 
@@ -101,9 +98,9 @@ Raven Tiling se encuentra en una transición arquitectónica mayor hacia una **a
 
 ---
 
-## 🔮 Hoja de Ruta hacia la Versión 4.0 (Wayland Native Protocols)
+## 🔮 Hoja de Ruta hacia la Versión 5.0 (Wayland Native Protocols)
 
-Para la futura versión **v4.0.0**, Raven expandirá la integración inicial de Wayland (introducida en la v3.4 con `wl_output`) para llevar la ingestión total y control de ventanas al **nivel nativo del protocolo Wayland**, superando definitivamente la dependencia de scripts intermediarios:
+Para la futura versión **v5.0.0**, Raven expandirá la integración inicial de Wayland para llevar la ingestión total y control de ventanas al **nivel nativo del protocolo Wayland**, superando definitivamente la dependencia de scripts intermediarios:
 
 1. **Ingestión de Ventanas mediante Protocolos Wayland**:
    - Soporte nativo de `zwlr_foreign_toplevel_manager_v1` y `ext-foreign-toplevel-list-v1`: Descubrimiento, foco, minimización y cierre de superficies gestionado directamente desde Rust en espacio de usuario.
@@ -111,8 +108,8 @@ Para la futura versión **v4.0.0**, Raven expandirá la integración inicial de 
    - **Latencia Sub-milisegundo**: Tiempos de reacción de sincronización inferiores a 1 ms al interactuar directamente con el socket del servidor Wayland.
 2. **Soporte de Compositores Múltiples**:
    - Gracias al trait `CompositorBackend`, la misma lógica matemática del motor de Raven podrá operar no solo en **KDE Plasma 6**, sino expandirse hacia compositores Wayland como **Hyprland**, **Sway** y entornos basados en **wlroots**.
-3. **Generador Dinámico de Layouts (Dynamic Layout Sandbox)**:
-   - Motor incrustado de scripting ligero (DSL o Rhai / WebAssembly) para diseñar y cargar en caliente (*hot-reloading*) nuevas matemáticas de mosaico personalizadas desde el Centro de Control sin reiniciar el demonio.
+3. **Generador Dinámico de Layouts (Lua Scripting Sandbox)**:
+   - Aprovechando la máquina virtual **Lua** (introducida de forma experimental en v4.1), se permitirá diseñar, inyectar y cargar en caliente (*hot-reloading*) nuevas matemáticas de mosaico personalizadas desde el Centro de Control o mediante scripts de usuario sin reiniciar el demonio.
 
 ---
 
@@ -145,7 +142,8 @@ El proyecto prioriza la eficiencia extrema y el uso mínimo de recursos del sist
 | **v1.6** | Híbrida (Python + Rust FFI) | ~25.9 MB | ~18 MB | Medio |
 | **v2.6** | Rust Nativo Asíncrono | ~4.3 MB | 1.4 MB | Continuo |
 | **v3.0** | Rust Nativo (Single-Trip IPC & 5 Layouts) | ~4.9 MB | 1.9 MB | Ultra-bajo (-90%) |
-| **v3.3** | **Rust Nativo + C++/QML Hub (6 Layouts & D-Bus Push)** | **~5.4 MB** | **1.9 MB** | **Tiempo Real Reactivo** |
+| **v3.3** | Rust Nativo + C++/QML Hub (6 Layouts & D-Bus Push) | ~5.4 MB | 1.9 MB | Tiempo Real Reactivo |
+| **v4.1** | **Rust Nativo + Efecto C++ Nativo (Zero-Delay IPC)** | **~6.0 MB** | **2.0 MB** | **Cero Latencia Visual** |
 
 ### 💾 Desglose de Almacenamiento e Instalación Local
 
@@ -153,7 +151,7 @@ El proyecto prioriza la eficiencia extrema y el uso mínimo de recursos del sist
 | :--- | :--- | :--- | :--- |
 | **`raven_engine`** | Daemon Nativo en Rust | **1.9 MB** | Motor de 6 layouts, topología PiP, D-Bus IPC (zbus 4). |
 | **`raven_gui`** | Centro de Control (egui/eframe) | **4.3 MB** | Renderizado GPU nativo OpenGL, previsualizador fractal y lector de paletas KDE. |
-| **Adaptadores & Plasmoides** | KWin Script & Plugin C++/QML | **< 200 KB** | Puente sensor-actuador y plugin compilado para Plasma 6. |
+| **Adaptadores & Plasmoides** | KWin Script, Plugin QML y Efecto C++ | **< 300 KB** | Puente sensor-actuador, panel hub y animaciones nativas. |
 | **Total Instalación** | Entorno Local (`~/.local/share/raven/`) | **~6.9 MB** | **Huella ultra-compacta en almacenamiento.** |
 
 ---
@@ -165,6 +163,12 @@ El proyecto está organizado en un **Cargo Workspace** que integra el motor en R
 ```text
 .
 ├── adapters/
+│   ├── kwin_effect/                          # Efecto de Animación Nativo en C++
+│   │   ├── src/
+│   │   │   ├── dbus/                         # Adaptador de sesión D-Bus
+│   │   │   ├── raveneffect.{h,cpp}           # Motor de curvas de aceleración y KWin::AnimationEffect
+│   │   │   └── raveneffect_factory.{h,cpp}   # Plugin Factory para KWin
+│   │   └── CMakeLists.txt
 │   ├── kwin_script/                          # Script de KWin para Plasma 6
 │   │   ├── contents/code/
 │   │   │   ├── core/                         # Reglas de ventanas, cuarentena CSD y foco
