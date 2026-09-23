@@ -4,9 +4,11 @@
 #include <effect/effect.h>
 #include <QObject>
 
-// Esta clase factory es el punto de entrada del plugin para KWin.
-// Declara Q_PLUGIN_METADATA en un HEADER para que AUTOMOC lo procese
-// y genere la sección .note.qt.metadata necesaria para el descubrimiento del efecto.
+/**
+ * @brief Fábrica para instanciar el efecto de Raven en KWin.
+ * 
+ * Interfaz requerida por KWin para descubrir y cargar efectos de terceros.
+ */
 class RavenEffectFactory : public KWin::EffectPluginFactory
 {
     Q_OBJECT
@@ -14,9 +16,20 @@ class RavenEffectFactory : public KWin::EffectPluginFactory
     Q_INTERFACES(KPluginFactory)
 
 public:
+    /**
+     * @brief Constructor por defecto.
+     */
     RavenEffectFactory() = default;
+
+    /**
+     * @brief Destructor.
+     */
     ~RavenEffectFactory() override = default;
 
+    /**
+     * @brief Verifica si el efecto está soportado por el compositor actual.
+     * @return true si es compatible.
+     */
     bool isSupported() const override
     {
         return RavenEffect::supported();

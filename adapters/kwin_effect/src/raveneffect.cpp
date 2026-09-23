@@ -1,3 +1,12 @@
+/*
+ * raveneffect.cpp
+ *
+ * Autor: Alejandro González Hernández (Vidruck)
+ * Licencia: GPL-3.0
+ * 
+ * Descripción: Implementación del efecto nativo de KWin para Raven Tiling Emulator.
+ */
+
 #include "raveneffect.h"
 #include "dbus/raven_effect_adaptor.h"
 #include <effect/effecthandler.h>

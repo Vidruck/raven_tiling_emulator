@@ -1,3 +1,12 @@
+/*
+ * raven_effect_adaptor.cpp
+ *
+ * Autor: Alejandro González Hernández (Vidruck)
+ * Licencia: GPL-3.0
+ * 
+ * Descripción: Implementación del adaptador D-Bus para el efecto nativo de KWin.
+ */
+
 #include "raven_effect_adaptor.h"
 #include "raveneffect.h"
 #include <QRectF>

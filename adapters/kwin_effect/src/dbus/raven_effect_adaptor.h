@@ -1,3 +1,14 @@
+/*
+ * raven_effect_adaptor.h
+ *
+ * Autor: Alejandro González Hernández (Vidruck)
+ * Licencia: GPL-3.0
+ * 
+ * Descripción: Declaración del adaptador D-Bus para el efecto de KWin.
+ * Expone métodos en el bus de sesión para que el motor en Rust se comunique
+ * con el efecto en C++.
+ */
+
 #pragma once
 
 #include <QObject>
@@ -6,6 +17,13 @@
 
 class RavenEffect;
 
+/**
+ * @brief Adaptador D-Bus para la clase RavenEffect.
+ * 
+ * Esta clase expone una interfaz D-Bus en "org.kde.kwin.RavenEffect" para
+ * permitir al motor backend (Rust) invocar directamente métodos de animación
+ * en el plugin C++ de KWin.
+ */
 class RavenEffectAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
