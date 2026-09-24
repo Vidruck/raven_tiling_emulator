@@ -16,11 +16,24 @@
 
 **Raven Tiling Emulator** es un gestor de ventanas dinámico en mosaico (Tiling Window Manager) de alto rendimiento diseñado específicamente para **KDE Plasma 6 (Wayland)**. 
 
-Con el lanzamiento de la **Versión 4.1**, Raven consolida su suite completa que fusiona el motor de composición en Rust con un **Lanzador de Aplicaciones y Centro de Mando Integrado (Raven Hub v4.1)** en el panel de Plasma: reloj digital monospaced y fecha localizada en tiempo real, control de sesión, monitorización de hardware en vivo, reproductor multimedia con ecualizador animado armónico, mediador predictivo de capacidad entre algoritmos ($C_{max}$), navegación espacial instantánea en sub-islas, buscador de aplicaciones y sidebar de selección rápida para los 6 algoritmos de distribución.
+Con el lanzamiento de la **Versión 4.2**, Raven consolida su suite completa que fusiona el motor de composición en Rust con un **Lanzador de Aplicaciones y Centro de Mando Integrado** en el panel de Plasma: reloj digital monospaced y fecha localizada en tiempo real, control de sesión, monitorización de hardware en vivo, reproductor multimedia con ecualizador animado armónico, mediador predictivo de capacidad entre algoritmos ($C_{max}$), navegación espacial instantánea en sub-islas, buscador de aplicaciones y sidebar de selección rápida para los 6 algoritmos de distribución.
 
 ---
 
-## ⚡ Novedades Principales de la Versión 4.1
+## ⚡ Novedades Principales de la Versión 4.2
+
+### 🦀 Jerarquización del Crate `raven_backend_kwin` y Robustecimiento
+- **Reemplazo Arquitectónico**: Consolidación y jerarquización del crate `raven_backend_kwin`, asumiendo ahora responsabilidades críticas que antes delegaba al script de JavaScript. Esto robustece enormemente la infraestructura de Rust al centralizar la fuente de verdad.
+- **Cuarentena Dinámica en Rust**: La lógica heurística de cuarentena, el filtro de eventos en bucle (flapping loop) y los retardos estabilizadores para navegadores basados en Gecko se han trasladado por completo al backend de Rust.
+- **Auditoría Estricta de Geometría**: Se implementó un nuevo estado `CommandAppliedState` vía D-Bus, lo que permite al motor de Rust comparar la geometría real reportada contra la geometría matemática esperada, forzando rectificaciones proactivas si la divergencia es superior a 2 píxeles.
+
+### 🧹 Reducción del Puente KWin y Efectos Nativos
+- **Adelgazamiento Extremo del Puente (JS)**: Refactorización profunda que limpia el código heredado y consolida el despacho de comandos. El bundle monolítico `main.js` redujo su tamaño en más de un 35% (de 1505 a apenas 967 líneas), convirtiéndose en un pasaje de comunicación ultraligero.
+- **Efectos de Movimiento y Cero Crashes**: Se estabilizó de raíz la conectividad con la señal `windowAdded` nativa en el efecto C++. Esto elimina por completo las rupturas de sesión (crashes de Plasma) que ocurrían al recompilar o recargar el efecto, y asegura un rastreo fluido desde la apertura inicial de cada ventana.
+
+---
+
+## ⚡ Novedades de la Versión 4.1
 
 ### 🎇 Efectos Visuales Nativos (C++) y Sincronización Híbrida
 - **Animaciones Nativas de Alto Rendimiento (`kwin_effect`)**: Se implementó un plugin nativo en C++ para KWin (`org.kde.kwin.RavenEffect`) que se comunica directamente con el motor Rust vía D-Bus. Esto desplaza la carga de animación del hilo de JavaScript al compositor nativo, permitiendo efectos fluidos a altos FPS.
