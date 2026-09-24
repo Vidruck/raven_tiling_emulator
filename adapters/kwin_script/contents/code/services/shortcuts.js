@@ -41,6 +41,21 @@ function registerRavenShortcuts() {
     dispatchToRaven("toggleFloating", aw ? getSafeWindowId(aw) || "" : "");
   });
 
+  registerShortcut("RavenToggleMaximize", "Raven: Alternar Maximizar Ventana", "Meta+F", function () {
+    const aw = workspace.activeWindow;
+    dispatchToRaven("toggleMaximize", aw ? getSafeWindowId(aw) || "" : "");
+  });
+
+  registerShortcut("RavenMinimizeActive", "Raven: Minimizar Ventana", "Meta+X", function () {
+    const aw = workspace.activeWindow;
+    dispatchToRaven("minimizeActive", aw ? getSafeWindowId(aw) || "" : "");
+  });
+
+  registerShortcut("RavenCloseActive", "Raven: Cerrar Ventana", "Meta+Q", function () {
+    const aw = workspace.activeWindow;
+    dispatchToRaven("closeActive", aw ? getSafeWindowId(aw) || "" : "");
+  });
+
   // Navegación y foco
   registerShortcut("RavenFocusNext", "Raven: Siguiente Ventana", "Meta+J", function () { dispatchToRaven("focusNext"); });
   registerShortcut("RavenFocusPrev", "Raven: Ventana Anterior", "Meta+K", function () { dispatchToRaven("focusPrev"); });

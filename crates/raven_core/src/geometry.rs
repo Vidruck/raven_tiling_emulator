@@ -68,6 +68,9 @@ pub struct WindowNode {
     /// Indica si la ventana se encuentra en modo pantalla completa nativo.
     #[serde(default, rename = "fs")]
     pub is_fullscreen: bool,
+    /// Indica si la ventana se encuentra maximizada.
+    #[serde(default, rename = "max")]
+    pub is_maximized: bool,
     /// Bandera de sospecha activa: la ventana fue marcada por KWin por flood de señales
     /// o ausencia de clase WM. Rust endurece su modelo de rectificación para esta ventana.
     /// Con `is_suspicious = true`, la Fase 2 (RectifyWindow) re-envía el layout
@@ -124,6 +127,7 @@ impl WindowNode {
             strict_birth,
             is_quarantined,
             is_fullscreen,
+            is_maximized: false,
             is_suspicious: false,
             resource_class: String::new(),
             resource_name: String::new(),
@@ -131,6 +135,12 @@ impl WindowNode {
             custom_w_ratio: None,
             custom_h_ratio: None,
         }
+    }
+
+    /// Asigna el estado maximizado a la ventana.
+    pub fn with_maximized(mut self, is_maximized: bool) -> Self {
+        self.is_maximized = is_maximized;
+        self
     }
 
     /// Añade información de clase, nombre de ejecutable, sospecha y caption para arbitraje de reglas en Rust.

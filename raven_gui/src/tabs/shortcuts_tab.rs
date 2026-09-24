@@ -33,6 +33,9 @@ pub fn show(ui: &mut egui::Ui, accent: egui::Color32) {
         ("Mosaico y Flotación", vec![
             ("Meta + Space", "Alternar Mosaico Global (Activar / Desactivar)"),
             ("Meta + Shift + F", "Alternar Ventana Flotante Dinámica (Quick Peek)"),
+            ("Meta + F", "Alternar Maximizar Ventana (Maximizar / Desmaximizar)"),
+            ("Meta + X", "Minimizar ventana activa"),
+            ("Meta + Q", "Cerrar ventana activa"),
             ("Meta + Shift + L", "Ciclar algoritmo de Layout"),
         ]),
         ("Navegación y Foco", vec![

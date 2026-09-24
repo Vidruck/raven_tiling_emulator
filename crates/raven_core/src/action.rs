@@ -99,4 +99,18 @@ pub enum RavenAction {
         /// Alto corregido en píxeles.
         height: i32,
     },
+    /// Modifica el estado maximizado de una ventana.
+    SetMaximize {
+        /// Identificador de la ventana.
+        window_id: String,
+        /// Indica si debe maximizarse (true) o desmaximizarse (false).
+        maximized: bool,
+    },
+    /// Cierra una ventana en el compositor.
+    CloseWindow {
+        /// Identificador de la ventana a cerrar.
+        window_id: String,
+    },
+    /// Solicita forzar una sincronización global de estado desde el compositor.
+    RequestSync,
 }

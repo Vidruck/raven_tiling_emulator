@@ -29,6 +29,8 @@ pub struct TilingEngine {
     pub spatial_order: Vec<String>,
     /// Pila dinámica de identificadores de ventanas en modo flotante temporal (Quick Peek).
     pub dynamic_floating_windows: HashSet<String>,
+    /// Conjunto de identificadores de ventanas en modo maximizado.
+    pub maximized_windows: HashSet<String>,
     /// Mapa de las áreas de trabajo (workspaces) activas y sus geometrías útiles.
     pub current_workspaces: HashMap<String, Rect>,
     /// Mapa de todas las ventanas (windows) actualmente rastreadas por el motor.
@@ -51,6 +53,7 @@ impl TilingEngine {
             window_history: VecDeque::new(),
             spatial_order: Vec::new(),
             dynamic_floating_windows: HashSet::new(),
+            maximized_windows: HashSet::new(),
             current_workspaces: HashMap::new(),
             current_windows: HashMap::new(),
             last_history_update: None,
@@ -125,7 +128,20 @@ impl TilingEngine {
                 let class_lower = cloned.resource_class.to_lowercase();
                 let caption_lower = cloned.caption.to_lowercase();
 
-                // 1. PRIORIDAD MÁXIMA: Pila Flotante Dinámica (Quick Peek)
+                // 0. PRIORIDAD ABSOLUTA: Ventanas Maximizadas
+                if self.maximized_windows.contains(&cloned.window_id) || cloned.is_maximized {
+                    cloned.is_maximized = true;
+                    cloned.is_floating = true;
+                    cloned.is_pip = false;
+                    tracing::debug!(
+                        "[RUST ENGINE] Ventana {} ({}) fijada en estado Maximizado",
+                        cloned.window_id,
+                        cloned.resource_class
+                    );
+                    return cloned;
+                }
+
+                // 1. Pila Flotante Dinámica (Quick Peek)
                 if self.dynamic_floating_windows.contains(&cloned.window_id) {
                     cloned.is_floating = true;
                     cloned.is_pip = false;

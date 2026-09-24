@@ -85,6 +85,9 @@ impl RavenControllerActor {
                             engine
                                 .dynamic_floating_windows
                                 .retain(|id| id != &window_id);
+                            engine
+                                .maximized_windows
+                                .retain(|id| id != &window_id);
                             let _ = self.controller.commit_layout();
                         }
                         CompositorEvent::WindowStateChanged {
@@ -288,8 +291,22 @@ impl RavenControllerActor {
                             }
                         }
 
-                        // Preservar la bandera de flotación dinámica si Rust ya mantiene la ventana en Quick Peek
+                        // Preservar la bandera de flotación dinámica y maximización si Rust o KWin las gestionan
                         for win in &mut windows {
+                            if win.is_maximized {
+                                self.controller.get_engine_mut().maximized_windows.insert(win.window_id.clone());
+                            }
+
+                            if self
+                                .controller
+                                .get_engine()
+                                .maximized_windows
+                                .contains(&win.window_id)
+                            {
+                                win.is_maximized = true;
+                                win.is_floating = true;
+                            }
+
                             if self
                                 .controller
                                 .get_engine()
@@ -355,6 +372,13 @@ impl RavenControllerActor {
                                 format!("{}||{}", out_name, desk_name)
                             };
 
+                            let is_max = win.max || self.controller.get_engine().maximized_windows.contains(&win.id);
+                            if win.max {
+                                self.controller.get_engine_mut().maximized_windows.insert(win.id.clone());
+                            } else if !win.max && !win.f {
+                                self.controller.get_engine_mut().maximized_windows.remove(&win.id);
+                            }
+
                             let is_dynamic_float = self
                                 .controller
                                 .get_engine()
@@ -365,7 +389,7 @@ impl RavenControllerActor {
                                 ws_id,
                                 win.output,
                                 win.desktops,
-                                win.f || is_dynamic_float,
+                                win.f || is_dynamic_float || is_max,
                                 win.m,
                                 win.p,
                                 Rect::new(win.x, win.y, win.w, win.h),
@@ -375,6 +399,7 @@ impl RavenControllerActor {
                                 win.iq,
                                 win.fs,
                             )
+                            .with_maximized(is_max)
                             .with_class_and_caption(win.cls, win.cls_name, win.sus, win.cap);
 
                             let already_released = self

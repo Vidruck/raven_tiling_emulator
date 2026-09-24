@@ -533,13 +533,27 @@ function applyCommands(commandsJson) {
           w.keepAbove = Boolean(cmd.keep_above);
           break;
 
+        case "set_maximize":
+          w.__raven_mutating = true;
+          try {
+            const shouldMax = Boolean(cmd.maximized !== undefined ? cmd.maximized : cmd.floating);
+            w.setMaximize(shouldMax, shouldMax);
+          } catch (eMax) {}
+          (function (cw) {
+            setKWinTimeout(function () {
+              if (cw && !cw.deleted) {
+                cw.__raven_mutating = false;
+                requestStateSync();
+              }
+            }, 60);
+          })(w);
+          break;
+
         case "move":
         case "rectify_window":
           if (w.minimized || w.interactiveMove || w.interactiveResize || w.fullScreen) break;
+          if (w.maximized || (w.maximizeMode !== undefined && w.maximizeMode !== 0)) break;
           if (w.transientChildren && w.transientChildren.length > 0) break;
-          if (w.maximizeMode !== 0) {
-            try { w.setMaximize(false, false); } catch (eMax) {}
-          }
 
           const targetGeom = {
             x: Math.round(cmd.x),
@@ -613,6 +627,14 @@ function applyCommands(commandsJson) {
               }
             }, 60);
           })(w);
+          break;
+
+        case "close":
+          try {
+            if (typeof w.closeWindow === "function") {
+              w.closeWindow();
+            }
+          } catch (eClose) {}
           break;
 
         case "migrate_to_output":
@@ -750,6 +772,7 @@ function buildWindowState(w, safeId) {
     sb: false,
     iq: false,
     fs: Boolean(w.fullScreen),
+    max: Boolean(w.maximized || (w.maximizeMode !== undefined && w.maximizeMode !== 0)),
     sus: false,
     cls: w.resourceClass ? w.resourceClass.toString() : "",
     cls_name: w.resourceName ? w.resourceName.toString() : "",
@@ -797,6 +820,21 @@ function registerRavenShortcuts() {
   registerShortcut("RavenToggleFloating", "Raven: Alternar Ventana Flotante Dinámica", "Meta+Shift+F", function () {
     const aw = workspace.activeWindow;
     dispatchToRaven("toggleFloating", aw ? getSafeWindowId(aw) || "" : "");
+  });
+
+  registerShortcut("RavenToggleMaximize", "Raven: Alternar Maximizar Ventana", "Meta+F", function () {
+    const aw = workspace.activeWindow;
+    dispatchToRaven("toggleMaximize", aw ? getSafeWindowId(aw) || "" : "");
+  });
+
+  registerShortcut("RavenMinimizeActive", "Raven: Minimizar Ventana", "Meta+X", function () {
+    const aw = workspace.activeWindow;
+    dispatchToRaven("minimizeActive", aw ? getSafeWindowId(aw) || "" : "");
+  });
+
+  registerShortcut("RavenCloseActive", "Raven: Cerrar Ventana", "Meta+Q", function () {
+    const aw = workspace.activeWindow;
+    dispatchToRaven("closeActive", aw ? getSafeWindowId(aw) || "" : "");
   });
 
   // Navegación y foco

@@ -36,6 +36,7 @@ async fn test_saturation_flood() {
                 strict_birth: false,
                 is_quarantined: false,
                 is_fullscreen: false,
+                is_maximized: false,
                 resource_class: String::new(),
                 resource_name: String::new(),
                 is_suspicious: false,
@@ -95,6 +96,7 @@ async fn test_rebellious_window_eviction() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            is_maximized: false,
             resource_class: String::new(),
                 resource_name: String::new(),
                 is_suspicious: false,
@@ -210,6 +212,7 @@ async fn test_rebellious_window_flood() {
             strict_birth: true,
             is_quarantined: true,
             is_fullscreen: false,
+            is_maximized: false,
             resource_class: String::new(),
                 resource_name: String::new(),
                 is_suspicious: false,
@@ -249,6 +252,7 @@ async fn test_rebellious_window_flood() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            is_maximized: false,
             resource_class: String::new(),
                 resource_name: String::new(),
                 is_suspicious: false,
@@ -275,6 +279,7 @@ async fn test_rebellious_window_flood() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            is_maximized: false,
             resource_class: String::new(),
                 resource_name: String::new(),
                 is_suspicious: false,
@@ -354,6 +359,7 @@ async fn test_all_windows_dynamically_floated_and_restored() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            is_maximized: false,
             resource_class: String::new(),
                 resource_name: String::new(),
                 is_suspicious: false,
@@ -385,7 +391,7 @@ async fn test_all_windows_dynamically_floated_and_restored() {
             .expect("handle_shortcut no debe fallar con toggle_floating");
 
         assert!(needs_recalc);
-        assert_eq!(shortcut_cmds.len(), 1);
+        assert_eq!(shortcut_cmds.len(), 2);
 
         match &shortcut_cmds[0] {
             raven_core::action::RavenAction::SetFloating {
@@ -398,6 +404,13 @@ async fn test_all_windows_dynamically_floated_and_restored() {
                 assert!(*keep_above);
             }
             _ => panic!("Comando inesperado retornado por toggle_floating"),
+        }
+
+        match &shortcut_cmds[1] {
+            raven_core::action::RavenAction::MoveWindow { window_id, .. } => {
+                assert_eq!(window_id, &win_id);
+            }
+            _ => panic!("Comando de reescalamiento flotante esperado"),
         }
 
         // Simular que el actor / pipeline ejecuta commit_layout tras needs_recalc
@@ -534,6 +547,7 @@ async fn test_saturation_cyclic_stack_stress_60_windows() {
                 strict_birth: false,
                 is_quarantined: false,
                 is_fullscreen: false,
+                is_maximized: false,
                 resource_class: "stress-test-class".to_string(),
                 resource_name: String::new(),
                 is_suspicious: false,
@@ -721,6 +735,7 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            is_maximized: false,
             resource_class: "terminal".to_string(),
             resource_name: String::new(),
                 is_suspicious: false,
@@ -747,6 +762,7 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            is_maximized: false,
             resource_class: "editor".to_string(),
             resource_name: String::new(),
                 is_suspicious: false,
@@ -773,6 +789,7 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            is_maximized: false,
             resource_class: "browser".to_string(),
             resource_name: String::new(),
                 is_suspicious: false,
@@ -1227,6 +1244,43 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
         .unwrap();
     assert!(recalc);
     assert!(controller.is_tiling_enabled());
+
+    // --- I. Atajos de Minimizar y Cerrar Ventana ---
+    // Meta+X (minimizeActive)
+    let (recalc, cmds) = controller
+        .handle_shortcut(
+            "minimize_active".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .unwrap();
+    assert!(recalc);
+    assert_eq!(cmds.len(), 1);
+    match &cmds[0] {
+        raven_core::action::RavenAction::MinimizeWindow { window_id } => {
+            assert_eq!(window_id, "win-1");
+        }
+        _ => panic!("Esperado MinimizeWindow"),
+    }
+
+    // Meta+Q (closeActive)
+    let (recalc, cmds) = controller
+        .handle_shortcut(
+            "close_active".to_string(),
+            0,
+            Some("win-2".to_string()),
+            &topology,
+        )
+        .unwrap();
+    assert!(recalc);
+    assert_eq!(cmds.len(), 1);
+    match &cmds[0] {
+        raven_core::action::RavenAction::CloseWindow { window_id } => {
+            assert_eq!(window_id, "win-2");
+        }
+        _ => panic!("Esperado CloseWindow"),
+    }
 }
 
 #[tokio::test]
@@ -1274,6 +1328,7 @@ async fn test_window_focus_does_not_swap_spatial_order() {
         strict_birth: false,
         is_quarantined: false,
         is_fullscreen: false,
+        is_maximized: false,
         resource_class: "app".to_string(),
         resource_name: String::new(),
                 is_suspicious: false,

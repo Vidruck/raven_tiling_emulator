@@ -444,6 +444,94 @@ impl RavenController {
         let mut commands = Vec::new();
 
         match action.as_str() {
+            // Alternar estado maximizado
+            "toggle_maximize" => {
+                let target_wid = self.active_window_id.clone().or_else(|| {
+                    self.engine.window_history.back().cloned().or_else(|| {
+                        windows
+                            .iter()
+                            .find(|w| !w.is_minimized)
+                            .map(|w| w.window_id.clone())
+                    })
+                });
+
+                if let Some(wid) = target_wid {
+                    self.flap_guard.remove(&wid);
+                    self.last_known_layout.remove(&wid);
+                    if self.engine.maximized_windows.contains(&wid) {
+                        self.engine.maximized_windows.remove(&wid);
+                        if let Some(win) = self.engine.current_windows.get_mut(&wid) {
+                            win.is_maximized = false;
+                            win.is_floating = false;
+                        }
+                        info!(
+                            "[CONTROLLER] Ventana {} desmaximizada -> devuelta a mosaico",
+                            wid
+                        );
+                        commands.push(RavenAction::SetMaximize {
+                            window_id: wid,
+                            maximized: false,
+                        });
+                        self.send_osd_notification("Ventana", "Modo: Mosaico (Tiling)");
+                    } else {
+                        self.engine.maximized_windows.insert(wid.clone());
+                        if let Some(win) = self.engine.current_windows.get_mut(&wid) {
+                            win.is_maximized = true;
+                            win.is_floating = true;
+                        }
+                        info!(
+                            "[CONTROLLER] Ventana {} añadida a estado Maximizado",
+                            wid
+                        );
+                        commands.push(RavenAction::SetMaximize {
+                            window_id: wid,
+                            maximized: true,
+                        });
+                        self.send_osd_notification("Ventana", "Modo: Maximizado");
+                    }
+                    needs_recalc = true;
+                }
+            }
+            "minimize_active" | "minimize_window" => {
+                let target_wid = self.active_window_id.clone().or_else(|| {
+                    self.engine.window_history.back().cloned().or_else(|| {
+                        windows
+                            .iter()
+                            .find(|w| !w.is_minimized)
+                            .map(|w| w.window_id.clone())
+                    })
+                });
+
+                if let Some(wid) = target_wid {
+                    self.flap_guard.remove(&wid);
+                    self.last_known_layout.remove(&wid);
+                    commands.push(RavenAction::MinimizeWindow {
+                        window_id: wid.clone(),
+                    });
+                    self.send_osd_notification("Ventana", "Minimizar");
+                    needs_recalc = true;
+                }
+            }
+            "close_active" | "close_window" => {
+                let target_wid = self.active_window_id.clone().or_else(|| {
+                    self.engine.window_history.back().cloned().or_else(|| {
+                        windows
+                            .iter()
+                            .find(|w| !w.is_minimized)
+                            .map(|w| w.window_id.clone())
+                    })
+                });
+
+                if let Some(wid) = target_wid {
+                    self.flap_guard.remove(&wid);
+                    self.last_known_layout.remove(&wid);
+                    commands.push(RavenAction::CloseWindow {
+                        window_id: wid.clone(),
+                    });
+                    self.send_osd_notification("Ventana", "Cerrar");
+                    needs_recalc = true;
+                }
+            }
             // Alternar estado flotante dinámico (Quick Peek)
             "toggle_floating" => {
                 // Se prioriza la ventana activa explícita provista por KWin o el foco rastreado;
@@ -479,14 +567,46 @@ impl RavenController {
                     } else {
                         // Caso B: La ventana está en mosaico -> Convertirla en flotante temporal (Quick Peek)
                         self.engine.dynamic_floating_windows.insert(wid.clone());
+                        let ws_id = self
+                            .engine
+                            .current_windows
+                            .get(&wid)
+                            .map(|w| w.workspace_id.clone())
+                            .unwrap_or_else(|| "default||default_desk".to_string());
+                        let ws_rect = self
+                            .engine
+                            .current_workspaces
+                            .get(&ws_id)
+                            .copied()
+                            .unwrap_or_else(|| Rect::new(0, 0, 1920, 1080));
+                        let float_w = ((ws_rect.width as f32 * 0.60).round() as i32)
+                            .max(640)
+                            .min(ws_rect.width - 40);
+                        let float_h = ((ws_rect.height as f32 * 0.60).round() as i32)
+                            .max(480)
+                            .min(ws_rect.height - 40);
+                        let float_x = ws_rect.x + (ws_rect.width - float_w) / 2;
+                        let float_y = ws_rect.y + (ws_rect.height - float_h) / 2;
+
                         if let Some(win) = self.engine.current_windows.get_mut(&wid) {
                             win.is_floating = true;
+                            win.geometry = Rect::new(float_x, float_y, float_w, float_h);
                         }
-                        info!("[CONTROLLER] Ventana {} añadida a la pila flotante dinámica (Quick Peek)", wid);
+                        info!(
+                            "[CONTROLLER] Ventana {} añadida a la pila flotante dinámica (Quick Peek, {}x{})",
+                            wid, float_w, float_h
+                        );
                         commands.push(RavenAction::SetFloating {
-                            window_id: wid,
+                            window_id: wid.clone(),
                             floating: true,
                             keep_above: true,
+                        });
+                        commands.push(RavenAction::MoveWindow {
+                            window_id: wid,
+                            x: float_x,
+                            y: float_y,
+                            width: float_w,
+                            height: float_h,
                         });
                         self.send_osd_notification("Ventana", "Modo: Flotante (Quick Peek)");
                     }
@@ -503,17 +623,34 @@ impl RavenController {
                     );
                 } else {
                     self.send_osd_notification("Modo Mosaico", "Desactivado (Modo Flotante)");
-                    let mut offset = 18;
+                    let mut offset = 0;
                     for win in windows.iter() {
                         if !win.is_minimized && !win.is_floating {
+                            let ws_rect = self
+                                .engine
+                                .current_workspaces
+                                .get(&win.workspace_id)
+                                .copied()
+                                .unwrap_or_else(|| Rect::new(0, 0, 1920, 1080));
+                            let float_w = ((ws_rect.width as f32 * 0.60).round() as i32)
+                                .max(640)
+                                .min(ws_rect.width - 40);
+                            let float_h = ((ws_rect.height as f32 * 0.60).round() as i32)
+                                .max(480)
+                                .min(ws_rect.height - 40);
+                            let base_x = ws_rect.x + (ws_rect.width - float_w) / 2;
+                            let base_y = ws_rect.y + (ws_rect.height - float_h) / 2;
+                            let float_x = base_x + offset;
+                            let float_y = base_y + offset;
+
                             commands.push(RavenAction::MoveWindow {
                                 window_id: win.window_id.clone(),
-                                x: win.geometry.x + offset,
-                                y: win.geometry.y + offset,
-                                width: win.geometry.width,
-                                height: win.geometry.height,
+                                x: float_x,
+                                y: float_y,
+                                width: float_w,
+                                height: float_h,
                             });
-                            offset += 14;
+                            offset = (offset + 24) % 120;
                         }
                     }
                 }
@@ -659,6 +796,16 @@ impl RavenController {
                 }
             }
             "swap_next" | "swap_prev" => {
+                self.send_osd_notification(
+                    "Organización de Mosaico",
+                    if action == "swap_next" {
+                        "Intercambiar Ventana (Siguiente)"
+                    } else {
+                        "Intercambiar Ventana (Anterior)"
+                    },
+                );
+                commands.push(RavenAction::RequestSync);
+
                 let mut active_windows: Vec<_> = windows
                     .into_iter()
                     .filter(|w| !w.is_floating && !w.is_minimized && !w.is_pip)

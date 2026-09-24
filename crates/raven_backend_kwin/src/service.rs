@@ -194,6 +194,39 @@ impl KWinDbusService {
         self.dispatch_shortcut_with_str(&signal_ctxt, "toggle_floating", 0, wid).await
     }
 
+    /// Alterna el estado maximizado para la ventana activa o la especificada.
+    #[zbus(name = "toggleMaximize")]
+    async fn toggle_maximize(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>, window_id: String) -> String {
+        let wid = if window_id.trim().is_empty() {
+            None
+        } else {
+            Some(window_id)
+        };
+        self.dispatch_shortcut_with_str(&signal_ctxt, "toggle_maximize", 0, wid).await
+    }
+
+    /// Minimiza la ventana activa o la especificada.
+    #[zbus(name = "minimizeActive")]
+    async fn minimize_active(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>, window_id: String) -> String {
+        let wid = if window_id.trim().is_empty() {
+            None
+        } else {
+            Some(window_id)
+        };
+        self.dispatch_shortcut_with_str(&signal_ctxt, "minimize_active", 0, wid).await
+    }
+
+    /// Cierra la ventana activa o la especificada.
+    #[zbus(name = "closeActive")]
+    async fn close_active(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>, window_id: String) -> String {
+        let wid = if window_id.trim().is_empty() {
+            None
+        } else {
+            Some(window_id)
+        };
+        self.dispatch_shortcut_with_str(&signal_ctxt, "close_active", 0, wid).await
+    }
+
     /// Alterna el estado operativo de activación del motor de mosaico.
     #[zbus(name = "toggleTiling")]
     async fn toggle_tiling(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {

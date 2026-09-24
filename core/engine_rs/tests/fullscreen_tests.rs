@@ -25,9 +25,10 @@ fn create_test_window(id: &str, workspace_id: &str, output: &str, is_floating: b
         strict_birth: false,
         is_quarantined: false,
         is_fullscreen: false,
+        is_maximized: false,
         resource_class: String::new(),
-            resource_name: String::new(),
-            is_suspicious: false,
+        resource_name: String::new(),
+        is_suspicious: false,
         caption: String::new(),
         custom_w_ratio: None,
         custom_h_ratio: None,
@@ -248,4 +249,85 @@ async fn test_maximized_window_does_not_fight_engine() {
         raven_core::action::RavenAction::MoveWindow { window_id, .. } => window_id == "win-1",
         _ => false,
     }));
+}
+
+#[tokio::test]
+async fn test_toggle_maximize_shortcut_and_state() {
+    let config = RavenConfig::default();
+    let engine = TilingEngine::new(config);
+    let mut controller = RavenController::new(engine);
+
+    let mut workspaces = HashMap::new();
+    let screen = Rect {
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+    };
+    workspaces.insert("ws1||HDMI-A-1".to_string(), screen);
+
+    let win1 = create_test_window("win-1", "ws1||HDMI-A-1", "HDMI-A-1", false);
+    let win2 = create_test_window("win-2", "ws1||HDMI-A-1", "HDMI-A-1", false);
+
+    let _ = controller
+        .handle_state_change(workspaces.clone(), vec![win1.clone(), win2.clone()])
+        .expect("Sincronización inicial");
+
+    let topology = raven_core::geometry::Topology::default();
+
+    // 1. Alternar maximizado vía shortcut
+    let (needs_recalc, cmds) = controller
+        .handle_shortcut(
+            "toggle_maximize".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .expect("toggle_maximize shortcut exitoso");
+
+    assert!(needs_recalc);
+    assert_eq!(cmds.len(), 1);
+    assert_eq!(
+        cmds[0],
+        raven_core::action::RavenAction::SetMaximize {
+            window_id: "win-1".to_string(),
+            maximized: true,
+        }
+    );
+    assert!(controller.get_engine().maximized_windows.contains("win-1"));
+
+    // 2. Commit layout post-maximizado: solo win-2 debe organizarse en mosaico
+    let recalc_cmds = controller.commit_layout().expect("commit_layout exitoso");
+    assert_eq!(recalc_cmds.len(), 1);
+    assert_eq!(
+        recalc_cmds[0],
+        raven_core::action::RavenAction::MoveWindow {
+            window_id: "win-2".to_string(),
+            x: 8,
+            y: 8,
+            width: 1904,
+            height: 1064,
+        }
+    );
+
+    // 3. Desmaximizar vía shortcut
+    let (needs_recalc2, cmds2) = controller
+        .handle_shortcut(
+            "toggle_maximize".to_string(),
+            0,
+            Some("win-1".to_string()),
+            &topology,
+        )
+        .expect("toggle_maximize restauración exitosa");
+
+    assert!(needs_recalc2);
+    assert_eq!(cmds2.len(), 1);
+    assert_eq!(
+        cmds2[0],
+        raven_core::action::RavenAction::SetMaximize {
+            window_id: "win-1".to_string(),
+            maximized: false,
+        }
+    );
+    assert!(!controller.get_engine().maximized_windows.contains("win-1"));
 }

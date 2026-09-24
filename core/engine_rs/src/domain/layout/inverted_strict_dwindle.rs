@@ -157,6 +157,7 @@ mod tests {
             strict_birth: false,
             is_quarantined: false,
             is_fullscreen: false,
+            is_maximized: false,
             resource_class: String::new(),
             resource_name: String::new(),
             is_suspicious: false,

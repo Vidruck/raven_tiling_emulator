@@ -294,6 +294,9 @@ El script orquestador `./raven-setup.sh` ofrece una interfaz gráfica de consola
 | :--- | :--- | :--- |
 | **Mosaico & Flotación** | **`Meta + Space`** | Habilitar / Deshabilitar el motor de mosaico (On / Off) |
 | | **`Meta + Shift + F`** | Alternar Ventana Flotante Dinámica / Quick Peek (On / Off) |
+| | **`Meta + F`** | Alternar Maximizar ventana activa (On / Off) |
+| | **`Meta + X`** | Minimizar ventana activa |
+| | **`Meta + Q`** | Cerrar ventana activa |
 | | **`Meta + Shift + L`** | Ciclar secuencialmente entre los 6 algoritmos de Layout |
 | **Navegación & Foco** | **`Meta + J` / `Meta + K`** | Mover el foco a la ventana Siguiente / Anterior |
 | | **`Meta + Flechas`** | Foco direccional nativo (Izquierda / Derecha / Arriba / Abajo) |
