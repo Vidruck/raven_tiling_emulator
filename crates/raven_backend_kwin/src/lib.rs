@@ -11,11 +11,13 @@
 pub mod commands;
 pub mod effect;
 pub mod parser;
+pub mod quarantine;
 pub mod service;
 
 pub use commands::TilingCommand;
 pub use effect::{RavenEffectClient, WindowAnimation};
 pub use parser::{parse_payload, KWinPayload, KWinScreen, KWinTopology, KWinWindow};
+pub use quarantine::{KWinQuarantineManager, QuarantineCategory, StartupMode};
 pub use service::{actions_to_kwin_json, KWinBridgeMessage, KWinDbusService};
 
 use std::collections::HashMap;
@@ -38,7 +40,10 @@ pub struct KWinBackend {
     connection: Arc<tokio::sync::RwLock<Option<Arc<Connection>>>>,
     /// Cliente D-Bus para el efecto gráfico nativo de KWin (kwin4_effect_raven).
     effect_client: RavenEffectClient,
+    /// Administrador nativo de cuarentena, filtrado y temporizadores de estabilización.
+    quarantine_manager: KWinQuarantineManager,
 }
+
 
 impl Default for KWinBackend {
     fn default() -> Self {
@@ -53,6 +58,7 @@ impl KWinBackend {
             name: "kwin",
             connection: Arc::new(tokio::sync::RwLock::new(None)),
             effect_client: RavenEffectClient::new(),
+            quarantine_manager: KWinQuarantineManager::new(),
         }
     }
 
@@ -60,6 +66,12 @@ impl KWinBackend {
     pub fn effect_client(&self) -> &RavenEffectClient {
         &self.effect_client
     }
+
+    /// Retorna una referencia al administrador de cuarentena y filtrado.
+    pub fn quarantine_manager(&self) -> &KWinQuarantineManager {
+        &self.quarantine_manager
+    }
+
 
     /// Inicia el servicio D-Bus de KWin (`org.kde.raven.Daemon`) e intermedia los mensajes hacia el canal receptor de Raven.
     ///
@@ -202,6 +214,7 @@ impl CompositorBackend for KWinBackend {
                     KWinBridgeMessage::GetMonitorCount { reply } => {
                         let _ = reply.send(1);
                     }
+                    KWinBridgeMessage::CommandAppliedState { .. } => {}
                     KWinBridgeMessage::BridgeReady => {}
                 }
             }

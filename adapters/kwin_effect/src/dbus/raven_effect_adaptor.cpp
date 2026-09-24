@@ -43,5 +43,6 @@ void RavenEffectAdaptor::CancelAnimation(const QString &windowId)
 
 bool RavenEffectAdaptor::IsActive() const
 {
-    return m_effect->isEffectActive();
+    return m_effect != nullptr;
 }
+

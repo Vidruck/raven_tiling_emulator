@@ -32,10 +32,17 @@ RavenEffect::RavenEffect()
     } else {
         qCWarning(RAVEN_EFFECT) << "Fallo al registrar servicio D-Bus org.kde.kwin.RavenEffect (¿servicio duplicado?)";
     }
+
+    if (KWin::effects) {
+        connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
+    }
 }
 
 RavenEffect::~RavenEffect()
 {
+    if (KWin::effects) {
+        disconnect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
+    }
     QDBusConnection dbus = QDBusConnection::sessionBus();
     dbus.unregisterObject(QStringLiteral("/Effects/Raven"));
     dbus.unregisterService(QStringLiteral("org.kde.kwin.RavenEffect"));
@@ -46,10 +53,56 @@ bool RavenEffect::supported()
     return KWin::effects && KWin::effects->compositingType() != KWin::NoCompositing;
 }
 
-bool RavenEffect::isEffectActive() const
+bool RavenEffect::isActive() const
 {
-    return true;
+    return !m_activeAnimations.isEmpty();
 }
+
+void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
+{
+    Q_UNUSED(a);
+    Q_UNUSED(meta);
+    if (!w) {
+        return;
+    }
+
+    // Limpiar listas de animaciones que ya finalizaron para mantener isActive() fiel al estado real
+    for (auto it = m_activeAnimations.begin(); it != m_activeAnimations.end(); ) {
+        if (it.value().isEmpty()) {
+            it = m_activeAnimations.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
+{
+    if (!w) {
+        return;
+    }
+
+    // Filtrar ventanas no gestionables, overlays, paneles o popups
+    if (w->isDock() || w->isDesktop() || w->isNotification() || w->isTooltip() || !w->isNormalWindow()) {
+        return;
+    }
+
+    QString windowId = w->internalId().toString();
+    if (windowId.isEmpty()) {
+        windowId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(w), 0, 16);
+    }
+
+    qCInfo(RAVEN_EFFECT) << "Ventana detectada en compositing, iniciando nacimiento:" << windowId;
+
+    // 1. Iniciar animación de nacimiento nativa instantáneamente (180ms ágil)
+    animateWindowBirth(windowId, 180);
+
+    // 2. Emitir señal D-Bus hacia Raven Backend
+    if (m_dbusAdaptor) {
+        Q_EMIT m_dbusAdaptor->WindowBirthStarted(windowId);
+    }
+}
+
 
 KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
 {

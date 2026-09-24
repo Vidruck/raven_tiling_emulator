@@ -97,18 +97,6 @@ function initDBusBridge() {
         "org.kde.raven.Daemon",
         "/Events",
         "org.kde.raven.Events",
-        "getQuarantineClasses",
-        function (res) {
-          updateQuarantineClasses(res);
-        }
-      );
-    } catch (e) { }
-
-    try {
-      callDBus(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
         "getWindowRules",
         function (res) {
           try {

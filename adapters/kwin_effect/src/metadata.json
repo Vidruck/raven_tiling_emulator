@@ -9,9 +9,9 @@
         "Category": "Appearance",
         "Description": "Animaciones ultra-fluidas por hardware de movimiento, reorganización y apertura de ventanas para Raven Tiling Emulator",
         "Description[es]": "Animaciones ultra-fluidas por hardware de movimiento, reorganización y apertura de ventanas para Raven Tiling Emulator",
+        "EnabledByDefault": true,
         "ExclusiveGroup": "",
         "Icon": "org.kde.raven.tiling",
-        "Id": "kwin4_effect_raven",
         "License": "GPL-3.0+",
         "Name": "Raven Window Animation Effect",
         "Name[es]": "Efecto de Animación de Ventanas Raven",
@@ -21,3 +21,4 @@
         "Version": "3.4.0"
     }
 }
+

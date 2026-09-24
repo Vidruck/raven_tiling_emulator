@@ -204,176 +204,48 @@ function getSafeScreenGeometry(output, desktop) {
  * @file window_utils.js
  * @brief Funciones de clasificación, filtrado y evaluación heurística de ventanas de KWin.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @version 5.0
  */
 
-/** @type {string[]} Lista inmutable de clases base de navegadores Gecko y aplicaciones CSD que requieren estabilización. */
-var HARDCODED_QUARANTINE_BASE = [
-  "firefox",
-  "zen-browser",
-  "zen",
-  "floorp",
-  "waterfox",
-  "librewolf",
-  "tor-browser",
-  "gecko",
-  "chrome",
-  "google-chrome",
-  "chromium",
-  "brave",
-  "opera",
-  "vivaldi",
-  "thorium",
-  "edge",
-  "electron",
-  "code",
-  "vscodium",
-  "cursor",
-  "spotify",
-  "discord",
-  "slack",
-  "steam",
-  "telegram",
-  "obsidian",
-  "thunderbird",
-  "postman",
-  "intellij",
-  "java"
-];
-
-/** @type {string[]} Lista combinada y activa de clases en periodo de cuarentena. */
-var _quarantine_classes = HARDCODED_QUARANTINE_BASE.slice();
-
-/** @type {Array<{class: string, action: string, pip?: boolean}>} Reglas de comportamiento personalizadas recibidas del demonio Rust. */
 var _window_rules = [];
 
-/**
- * @brief Fusiona la lista base de cuarentena con las reglas personalizadas provistas por la configuración de usuario.
- * @param {string} res JSON serializado con la lista de clases adicionales.
- */
-function updateQuarantineClasses(res) {
-  if (!res) return;
-  try {
-    var userList = JSON.parse(res);
-    if (!Array.isArray(userList)) return;
-    
-    var map = {};
-    for (var i = 0; i < HARDCODED_QUARANTINE_BASE.length; i++) {
-      map[HARDCODED_QUARANTINE_BASE[i]] = true;
-    }
-    for (var j = 0; j < userList.length; j++) {
-      if (userList[j]) {
-        map[userList[j].toString().toLowerCase().trim()] = true;
-      }
-    }
-    
-    var merged = [];
-    for (var key in map) {
-      merged.push(key);
-    }
-    _quarantine_classes = merged;
-  } catch (e) {
-    Logger.error("updateQuarantineClasses", "Error fusionando clases de cuarentena", e);
-  }
-}
-
-/**
- * @brief Obtiene de forma segura el identificador único (internalId) de una ventana.
- * @param {KWin::Window} w Instancia de la ventana de KWin.
- * @returns {string|null} Identificador textual único o null si no es válida.
- */
 function getSafeWindowId(w) {
   try {
-    if (!w || !w.internalId) {
-      return null;
-    }
-    return w.internalId.toString();
+    return (w && w.internalId) ? w.internalId.toString() : null;
   } catch (e) {
     return null;
   }
 }
 
-/**
- * @brief Obtiene el identificador compuesto del área de trabajo (workspace ID) para una ventana.
- *
- * Formato: `"nombre_salida||id_escritorio"` (ej. `"DP-1||1"`).
- *
- * @param {KWin::Window} window Instancia de la ventana.
- * @returns {string} Identificador único del espacio de trabajo.
- */
 function getWorkspaceId(window) {
   try {
-    if (!window || window.deleted) {
-      return "default||default_desk";
-    }
-    var output = window.output || workspace.activeOutput;
-    var outName = output ? output.name : "default";
-    var desktopId =
-      window.desktops && window.desktops.length > 0
-        ? window.desktops[0].id.toString()
-        : workspace.currentDesktop
-          ? workspace.currentDesktop.id.toString()
-          : "default_desk";
-    return outName + "||" + desktopId;
+    if (!window || window.deleted) return "default||default_desk";
+    const out = window.output || workspace.activeOutput;
+    const outName = out ? out.name : "default";
+    const deskId = (window.desktops && window.desktops.length > 0)
+      ? window.desktops[0].id.toString()
+      : (workspace.currentDesktop ? workspace.currentDesktop.id.toString() : "default_desk");
+    return outName + "||" + deskId;
   } catch (e) {
     return "default||default_desk";
   }
 }
 
-/** @type {RegExp} Expresión regular para clases de aplicaciones que deben mantenerse siempre flotantes (herramientas, selectores, GUI de Raven). */
 const FLOATING_CLASSES_REGEX = /kcolorchooser|colorpicker|gcolor|eyedropper|spectacle|klipper|plasma\.clipboard|org\.kde\.kclock|org\.kde\.polkit|polkit|pinentry|zenity|kdialog|xdotool|portal|desktopdialog|plasmoidviewer|^raven_gui$|^raven-gui$|^raven config$/i;
-
-/** @type {RegExp} Expresión regular para títulos descriptivos de mini-widgets y selectores auxiliares. */
 const FLOATING_CAPTION_REGEX = /color picker|selector de color|mini player|mini-player|miniplayer|zuno widget|now playing widget|pip|quick view|raven control center|raven tiling emulator — control center/i;
+const PIP_CAPTION_REGEX = /picture[- ]?in[- ]?picture|imagen[- ]en[- ]imagen|pantalla en pantalla|reproductor en miniatura|incrustation|bild[- ]in[- ]bild|imagem em imagem|immagine nell'immagine|^pip$/i;
 
-/**
- * @brief Evalúa si una ventana debe ser administrada por el ciclo de vida de Raven.
- *
- * Excluye paneles, tooltips, notificaciones, menús emergentes (popups) y ventanas de escritorio.
- *
- * @param {KWin::Window} w Instancia de la ventana.
- * @returns {boolean} true si la ventana es apta para ser gestionada.
- */
 function isManageable(w) {
   try {
-    if (!w || w.deleted || !w.managed) {
-      return false;
-    }
-    // Blindaje de ventanas hijas, menús desplegables (combobox/submenús), tooltips y popups
-    if (
-      w.popupWindow ||
-      w.tooltip ||
-      w.onScreenDisplay ||
-      w.notification ||
-      w.specialWindow ||
-      w.splash ||
-      w.transientFor != null
-    ) {
-      return false;
-    }
-    if (w.desktopWindow || w.dock || w.skipTaskbar || w.skipPager) {
-      return false;
-    }
+    if (!w || w.deleted || !w.managed) return false;
+    if (w.popupWindow || w.tooltip || w.onScreenDisplay || w.notification || w.specialWindow || w.splash || w.transientFor != null) return false;
+    if (w.desktopWindow || w.dock || w.skipTaskbar || w.skipPager) return false;
 
-    var strClass = w.resourceClass
-      ? w.resourceClass.toString().toLowerCase()
-      : "";
-    if (strClass.indexOf("spectacle") !== -1 && w.fullScreen) {
-      return false;
-    }
-    if (!w.normalWindow && !w.dialog && !w.utility) {
-      return false;
-    }
-
-    // Diálogos modales o auxiliares con ventana padre nunca son gestionados como mosaico
-    if (w.transient || (w.dialog && w.transientFor != null)) {
-      return false;
-    }
-
-    // Ventanas sin geometría válida
-    if (w.frameGeometry && (w.frameGeometry.width <= 0 || w.frameGeometry.height <= 0)) {
-      return false;
-    }
+    const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+    if (strClass.indexOf("spectacle") !== -1 && w.fullScreen) return false;
+    if (!w.normalWindow && !w.dialog && !w.utility) return false;
+    if (w.transient || (w.dialog && w.transientFor != null)) return false;
+    if (w.frameGeometry && (w.frameGeometry.width <= 0 || w.frameGeometry.height <= 0)) return false;
 
     return true;
   } catch (e) {
@@ -381,49 +253,17 @@ function isManageable(w) {
   }
 }
 
-/** @type {RegExp} Expresión regular multilingüe para detectar reproductores flotantes Picture-in-Picture (PiP). */
-const PIP_CAPTION_REGEX = /picture[- ]?in[- ]?picture|imagen[- ]en[- ]imagen|pantalla en pantalla|reproductor en miniatura|incrustation|bild[- ]in[- ]bild|imagem em imagem|immagine nell'immagine|^pip$/i;
-
-/**
- * @brief Evalúa si una ventana debe flotar libremente sin someterse a la división en mosaico.
- *
- * Aplica un análisis de 6 fases:
- * 1. Tipo nativo (diálogos modales, utilidades transitorias).
- * 2. Pantalla completa nativa (delegada a control espacial de pantalla completa).
- * 3. Detección y anclaje superior de Picture-in-Picture (PiP).
- * 4. Filtrado por lista de exclusión (FLOATING_CLASSES_REGEX).
- * 5. Heurística de tamaño fijo (minSize === maxSize).
- * 6. Micro-dimensiones (< 380x320 px) para widgets dedicados.
- *
- * @param {KWin::Window} w Instancia de la ventana.
- * @returns {boolean} true si debe flotar libremente.
- */
 function isFloating(w) {
   try {
-    if (!w || w.deleted) return true;
-    if (w.__raven_dynamic_float) return true;
-
-    // 1. Tipos de ventana nativos de Wayland / X11 auxiliares o transitorios
+    if (!w || w.deleted || w.__raven_dynamic_float) return true;
     if (w.dialog || w.utility || w.specialWindow || w.modal || w.transient || w.transientFor != null) return true;
-
-    // 2. Fullscreen nativo (YouTube, juegos, etc.) NO es flotante:
-    // se envía como fs=true al motor Rust que le asigna pantalla completa.
     if (w.fullScreen) return false;
-
-    // 2.1 Si la ventana ha sido maximizada explícitamente por el usuario, debe flotar
-    // libremente sobre el mosaico sin que el motor fuerce su desmaximización ni pelee por sus dimensiones.
-    // Solo permitimos desmaximizar si la ventana está en nacimiento estricto (__raven_strict_birth)
-    // producto de una restauración de sesión de KWin.
-    if (w.maximizeMode !== 0 && !w.__raven_strict_birth) {
-      return true;
-    }
+    if (w.maximizeMode !== 0) return true;
 
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
-
     let isPip = PIP_CAPTION_REGEX.test(strCap);
 
-    // 3. Evaluamos reglas dinámicas enviadas desde la interfaz de usuario
     if (_window_rules && _window_rules.length > 0) {
       for (let i = 0; i < _window_rules.length; i++) {
         const rule = _window_rules[i];
@@ -437,50 +277,18 @@ function isFloating(w) {
       }
     }
 
-    if (isPip && !w.keepAbove) {
-      w.keepAbove = true;
-    }
+    if (isPip && !w.keepAbove) w.keepAbove = true;
+    if (FLOATING_CLASSES_REGEX.test(strClass) || FLOATING_CAPTION_REGEX.test(strCap)) return true;
 
-    // 4. Filtrado por clase o título de herramientas conocidas
-    if (FLOATING_CLASSES_REGEX.test(strClass) || FLOATING_CAPTION_REGEX.test(strCap)) {
-      return true;
-    }
-
-    const isVirtPopup = (strClass.indexOf("qemu") !== -1 || strClass.indexOf("virt-manager") !== -1) && !w.normalWindow;
-    if (isVirtPopup) {
-      return true;
-    }
-
-    // 5. Heurística de dimensiones fijas / restringidas (ej: widgets de Zuno, micro-selectores)
     const minS = w.minSize;
     const maxS = w.maxSize;
     if (minS && maxS && minS.width > 0 && minS.height > 0) {
-      // Ventana de tamaño completamente rígido (no redimensionable)
-      if (minS.width === maxS.width && minS.height === maxS.height) {
-        return true;
-      }
-      // Rango extremadamente estrecho o panel auxiliar
-      if (maxS.width > 0 && maxS.height > 0 && maxS.width <= 500 && maxS.height <= 450) {
-        return true;
-      }
+      if (minS.width === maxS.width && minS.height === maxS.height) return true;
+      if (maxS.width > 0 && maxS.height > 0 && maxS.width <= 500 && maxS.height <= 450) return true;
     }
 
-    // 6. Heurística geométrica de micro-ventanas / popups flotantes sin título o dimensiones mínimas
     const fg = w.frameGeometry;
-    const wWidth = fg ? fg.width : 0;
-    const wHeight = fg ? fg.height : 0;
-    if (wWidth > 0 && wHeight > 0) {
-      // Ventanas diminutas creadas como mini-widgets flotantes (ej. Zuno mini-player, color pickers sin clase específica)
-      if (wWidth < 380 && wHeight < 320) {
-        return true;
-      }
-
-      // Popups flotantes de aplicaciones complejas (JetBrains, Zen, Firefox) sin título
-      if ((strClass.indexOf("jetbrains") !== -1 || strClass.indexOf("idea") !== -1 || strClass.indexOf("zen") !== -1 || strClass.indexOf("firefox") !== -1) &&
-          (!strCap || strCap.trim() === "" || strCap === "win0") && (wWidth < 450 && wHeight < 350)) {
-        return true;
-      }
-    }
+    if (fg && fg.width > 0 && fg.height > 0 && fg.width < 380 && fg.height < 320) return true;
 
     return Boolean(isPip);
   } catch (e) {
@@ -488,136 +296,26 @@ function isFloating(w) {
   }
 }
 
-/**
- * @brief Determina si dos ventanas coexisten en el mismo escritorio virtual.
- * @param {KWin::Window} w1 Primera ventana.
- * @param {KWin::Window} w2 Segunda ventana.
- * @returns {boolean} true si comparten al menos un escritorio virtual.
- */
 function isSameDesktop(w1, w2) {
-  if (!w1.desktops || !w2.desktops || w1.desktops.length === 0 || w2.desktops.length === 0) {
-    return true; // En Wayland/ventanas fijadas, asumir coincidencia
-  }
+  if (!w1.desktops || !w2.desktops || w1.desktops.length === 0 || w2.desktops.length === 0) return true;
   for (let i = 0; i < w1.desktops.length; i++) {
-    if (w2.desktops.indexOf(w1.desktops[i]) !== -1) {
-      return true;
-    }
+    if (w2.desktops.indexOf(w1.desktops[i]) !== -1) return true;
   }
   return false;
 }
-
-/**
- * @brief Detecta la categoría de cuarentena de una ventana según su ejecutable y clase WM.
- *
- * Usa `resourceName` (primera parte WM_CLASS = ejecutable real) como fuente primaria,
- * y `resourceClass` (segunda parte WM_CLASS = clase de la app) como fallback.
- * Ambas estrategias son las mismas que usa la política Rust `QuarantinePolicy::from_class`.
- *
- * @param {KWin::Window} w Instancia de la ventana.
- * @returns {string} Categoría: "browser" | "heavy" | "standard"
- */
-function getKWinQuarantineCategory(w) {
-  try {
-    var cls  = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
-    var name = w.resourceName  ? w.resourceName.toString().toLowerCase()  : "";
-
-    // Navegadores: Gecko (Firefox/Zen/Floorp), Chromium, WebKit
-    var browserExes = [
-      "zen", "zen-browser", "firefox", "firefox-esr", "navigator",
-      "librewolf", "floorp", "waterfox", "icecat",
-      "chrome", "google-chrome", "chromium", "chromium-browser",
-      "brave-browser", "brave", "vivaldi", "vivaldi-stable",
-      "opera", "msedge", "microsoft-edge", "epiphany",
-      "falkon", "midori", "qutebrowser", "min",
-    ];
-    for (var i = 0; i < browserExes.length; i++) {
-      var exe = browserExes[i];
-      if (name === exe || name.indexOf(exe) === 0 || cls === exe || cls.indexOf(exe) === 0) {
-        return "browser";
-      }
-    }
-    if (cls.indexOf("browser") !== -1) return "browser";
-
-    // Apps pesadas: Electron, JVM, Discord, Steam…
-    var heavyExes = [
-      "code", "code-oss", "vscodium", "cursor",
-      "discord", "discordcanary", "slack", "steam",
-      "spotify", "obsidian", "thunderbird", "postman",
-      "idea", "idea64", "clion", "clion64", "pycharm", "pycharm64",
-      "datagrip", "goland", "rider", "webstorm",
-      "java", "teams", "signal", "telegram-desktop",
-      "notion-app", "figma-linux", "gimp", "inkscape", "blender", "krita",
-    ];
-    for (var j = 0; j < heavyExes.length; j++) {
-      var hExe = heavyExes[j];
-      if (name === hExe || name.indexOf(hExe) === 0 || cls === hExe || cls.indexOf(hExe) === 0) {
-        return "heavy";
-      }
-    }
-    if (cls.indexOf("electron") !== -1 || name.indexOf("electron") !== -1) return "heavy";
-    if (cls.indexOf("java") !== -1 || name.indexOf("java") !== -1) return "heavy";
-
-    return "standard";
-  } catch (e) {
-    return "standard";
-  }
-}
-
-/**
- * @brief Retorna la duración del Timer-0 de KWin (pre-Rust) en milisegundos.
- *
- * El Timer-0 es el primer escalón del modelo de 3 timers en cascada.
- * Se ejecuta en KWin *antes* de notificar a Rust, dando tiempo al cliente
- * Wayland para emitir su `xdg_surface.set_window_geometry` estable.
- * Durante este tiempo, `frameGeometryChanged` y señales de delta están suprimidos.
- *
- * | Categoría | Timer-0 KWin |
- * |-----------|-------------|
- * | Standard  |   60 ms     |
- * | Browser   |  100 ms     |
- * | Heavy     |  140 ms     |
- *
- * @param {KWin::Window} w Instancia de la ventana.
- * @returns {number} Tiempo en milisegundos.
- */
-function getKWinQuarantineDelay(w) {
-  var category = getKWinQuarantineCategory(w);
-  if (category === "browser") return 180;
-  if (category === "heavy")   return 220;
-  return 100;
-}
 /**
  * @file quarantine.js
- * @brief Estabilización temporal (cuarentena CSD) para ventanas de arranque asíncrono en Wayland.
+ * @brief Registro inicial de ventanas hacia el demonio Rust.
  * @author Alejandro González Hernández (Vidruck)
- * @version 4.0 — Modelo de 3 Timers en cascada
+ * @version 5.0 — Delegación completa a raven_backend_kwin
  *
- * ## Modelo de 3 Timers en Cascada
- *
- * **Timer-0 (KWin, este archivo)**: 60–140ms según categoría.
- *   - `__raven_kwin_stabilizing = true` → `frameGeometryChanged` suprimido.
- *   - Flood de señales → reinicia timer y marca `__raven_suspicious`.
- *   - Al expirar → limpia bandera, llama `requestStateSync()`.
- *
- * **Timer-1 (Rust Fase 1)**: 40–75ms.
- *   - Rust recibe ventana con `iq=true` → `schedule_release`.
- *   - Al expirar: libera cuarentena, `commit_layout`, manda `MoveWindow`.
- *
- * **Timer-2 (Rust Fase 2 — Sospecha Activa)**: 45–120ms.
- *   - Rust re-calcula layout y re-envía todos los comandos como `RectifyWindow`.
- *   - NO confía en geometría del bridge; fuente de verdad = árboles internos de Rust.
+ * La lógica de cuarentena, categorización, filtrado de flood y temporizadores de
+ * estabilización (Cold/Warm start) ahora reside en Rust (`KWinQuarantineManager`).
+ * El script de KWin simplemente vincula los listeners y despacha el delta de estado.
  */
-
-/** @type {number} Señales de geometría en Timer-0 antes de considerar flood. */
-var QUARANTINE_FLOOD_THRESHOLD = 4;
-
-/** @type {number} Máximo de reinicios de Timer-0 por flood antes de proceder. */
-var QUARANTINE_MAX_RESTARTS = 2;
 
 /**
  * @brief Evalúa y procesa la incorporación de una nueva ventana al sistema de mosaico.
- *
- * Implementa el Timer-0 del modelo de 3 timers en cascada.
  *
  * @param {KWin::Window} w Instancia de la ventana naciente.
  */
@@ -626,96 +324,10 @@ function processNewWindow(w) {
     return;
   }
 
-  var strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
-  var strName  = w.resourceName  ? w.resourceName.toString().toLowerCase()  : "";
-
-  // Necesita cuarentena si: sin clase/nombre (siempre sospechosa) o en la lista activa.
-  var needsQuarantine = (strClass === "" || strName === "");
-
-  if (!needsQuarantine && _quarantine_classes) {
-    for (var i = 0; i < _quarantine_classes.length; i++) {
-      if (strClass.indexOf(_quarantine_classes[i]) !== -1 ||
-          strName.indexOf(_quarantine_classes[i]) !== -1) {
-        needsQuarantine = true;
-        break;
-      }
-    }
-  }
-
   bindWindow(w);
-
-  if (needsQuarantine) {
-    w.__raven_quarantined      = true;   // Rust Timer-1: suprimir sync hasta liberación
-    w.__raven_strict_birth     = true;   // Rust Timer-1: indicador de nacimiento estricto
-    w.__raven_kwin_stabilizing = true;   // KWin Timer-0: suprimir frameGeometryChanged
-    w.__raven_stab_timer       = null;
-    w.__raven_flood_count      = 0;      // Contador de señales durante Timer-0
-    w.__raven_timer0_restarts  = 0;      // Reinicios de Timer-0 por flood
-
-    // Ventanas sin clase/nombre son doblemente sospechosas para Rust
-    if (strClass === "" || strName === "") {
-      w.__raven_suspicious = true;
-    }
-
-    _scheduleKWinTimer0(w);
-  } else {
-    requestStateSync();
-  }
+  syncWindowDelta(w);
 }
 
-/**
- * @brief Agenda el Timer-0 de KWin para una ventana en cuarentena.
- *
- * Al expirar: limpia `__raven_kwin_stabilizing` y llama `requestStateSync()`,
- * lo que dispara los Timers 1 y 2 de Rust en cascada.
- * Si hubo flood de señales durante el timer, se reinicia (máx. QUARANTINE_MAX_RESTARTS veces)
- * y la ventana queda marcada como `__raven_suspicious` para sospecha activa en Rust.
- *
- * @param {KWin::Window} w Instancia de la ventana.
- */
-function _scheduleKWinTimer0(w) {
-  if (!w || w.deleted) return;
-
-  var delay = getKWinQuarantineDelay(w);
-
-  setKWinTimeout(function () {
-    if (!w || w.deleted) return;
-
-    var floodCount = w.__raven_flood_count || 0;
-    var restarts   = w.__raven_timer0_restarts || 0;
-
-    if (floodCount >= QUARANTINE_FLOOD_THRESHOLD && restarts < QUARANTINE_MAX_RESTARTS) {
-      // Flood: reiniciar Timer-0 y elevar sospecha
-      w.__raven_flood_count     = 0;
-      w.__raven_timer0_restarts = restarts + 1;
-      w.__raven_suspicious      = true;
-
-      Logger.warn(
-        "quarantine",
-        "[TIMER-0] Flood (" + floodCount + " señales) para '" +
-        (w.resourceClass || "?") + "'/''" + (w.resourceName || "?") +
-        "'. Reiniciando (restart #" + (restarts + 1) + ") → SOSPECHOSA."
-      );
-
-      _scheduleKWinTimer0(w);
-      return;
-    }
-
-    // Timer-0 completado: liberar estabilización KWin y notificar a Rust
-    w.__raven_kwin_stabilizing = false;
-    w.__raven_flood_count      = 0;
-
-    Logger.info(
-      "quarantine",
-      "[TIMER-0] OK → notificando Rust para '" +
-      (w.resourceClass || "?") + "'/''" + (w.resourceName || "?") +
-      "'" + (w.__raven_suspicious ? " [SOSPECHOSA]" : "")
-    );
-
-    requestStateSync();
-
-  }, delay);
-}
 /**
  * @file focus.js
  * @brief Resalte visual interactivo mediante el sistema de contorno (Outline) nativo de KWin.
@@ -745,93 +357,65 @@ function highlightWindow(w) {
 
 /**
  * @file dbus_bridge.js
- * @brief Orquestador de comunicación D-Bus bidireccional entre el compositor KWin y el demonio Rust.
+ * @brief Orquestador D-Bus ultraligero entre KWin y el demonio Raven en Rust.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @version 5.0
  */
 
-/** @type {QTimer|null} Temporizador de anti-rebote (debounce) para agrupar ráfagas de eventos de ventana. */
 var _debounceTimer = null;
 
 /**
- * @brief Solicita una sincronización global de estado con amortiguación temporal (debouncing de 50 ms).
- *
- * Agrupa múltiples eventos simultáneos de KWin (ej. cambio de escritorio + foco) en un único payload D-Bus.
+ * @brief Solicita una sincronización global de estado agrupando eventos en 40ms.
  */
 function requestStateSync() {
   try {
     if (!_debounceTimer) {
       _debounceTimer = new QTimer();
-      _debounceTimer.interval = 50;
+      _debounceTimer.interval = 40;
       _debounceTimer.singleShot = true;
       _debounceTimer.timeout.connect(syncState);
     }
-    if (_debounceTimer.active) {
-      _debounceTimer.stop();
-    }
+    if (_debounceTimer.active) _debounceTimer.stop();
     _debounceTimer.start();
   } catch (e) {
-    Logger.error("requestStateSync", "Fallo al solicitar sincronización de estado", e);
-    try {
-      syncState();
-    } catch (err) { }
+    try { syncState(); } catch (err) { }
   }
 }
 
 /**
- * @brief Extrae la topología completa de pantallas, escritorios y ventanas activas y la despacha al demonio Rust vía D-Bus.
- *
- * Invoca el método `syncStateAndUpdateLayout` en `org.kde.raven.Events` y aplica de inmediato los comandos geométricos devueltos.
+ * @brief Extrae la topología y lista de ventanas y la despacha a Rust.
  */
 function syncState() {
   const windows = workspace.windowList();
   const winState = [];
   const screens = {};
-
   const outs = workspace.screens || [];
   const desks = workspace.desktops || [];
   const currentDesk = workspace.currentDesktop;
-
   const masterOutputs = [];
   const masterDesktops = [];
 
-  // Wayland provee la topología autoritativa de monitores directamente en Rust (raven_backend_wayland).
-  // Únicamente si se requiere fallback inicial o calibración de paneles Plasma, podemos obtener el área útil.
-  // Evitamos iterar pesadamente combinatorias innecesarias en cada syncState.
   try {
     for (let o = 0; o < outs.length; o++) {
-      const output = outs[o];
-      if (output && output.name) {
-        masterOutputs.push(output.name.toString());
+      const out = outs[o];
+      if (out && out.name) {
+        masterOutputs.push(out.name.toString());
         const deskId = currentDesk ? currentDesk.id.toString() : "default_desk";
-        const wsId = output.name + "||" + deskId;
-        screens[wsId] = getSafeScreenGeometry(output, currentDesk);
+        screens[out.name + "||" + deskId] = getSafeScreenGeometry(out, currentDesk);
       }
     }
     for (let d = 0; d < desks.length; d++) {
-      if (desks[d] && desks[d].id) {
-        masterDesktops.push(desks[d].id.toString());
-      }
+      if (desks[d] && desks[d].id) masterDesktops.push(desks[d].id.toString());
     }
-  } catch (e) {
-    Logger.error("syncState", "Error ligero obteniendo topología de pantallas", e);
-  }
+  } catch (e) { }
 
   for (let i = 0; i < windows.length; i++) {
     const w = windows[i];
     try {
-      if (!isManageable(w)) {
-        continue;
-      }
+      if (!isManageable(w)) continue;
       const safeId = getSafeWindowId(w);
-      if (!safeId) {
-        continue;
-      }
-
-      winState.push(buildWindowState(w, safeId));
-    } catch (e) {
-      Logger.error("syncState", "Error extrayendo geometría/estado de ventana", e);
-    }
+      if (safeId) winState.push(buildWindowState(w, safeId));
+    } catch (e) { }
   }
 
   const payload = {
@@ -852,80 +436,50 @@ function syncState() {
       "syncStateAndUpdateLayout",
       JSON.stringify(payload),
       function (response) {
-        if (response && response !== "[]") {
-          applyCommands(response);
-        }
+        if (response && response !== "[]") applyCommands(response);
       }
     );
   } catch (e) {
-    Logger.error("syncState", "D-Bus Drop: Fallo enviando payload", e);
+    Logger.error("syncState", "Fallo enviando payload D-Bus", e);
   }
 }
 
 /**
- * @brief Sincroniza de forma incremental el cambio de geometría o estado (delta sync) de una única ventana.
- *
- * Utilizado tras el redimensionamiento o movimiento manual de una ventana por el usuario para actualizar el modelo espacial de Rust.
- *
- * @param {KWin::Window} w Instancia de la ventana modificada.
+ * @brief Sincroniza incrementalmente el estado de una ventana individual.
  */
 function syncWindowDelta(w) {
   try {
-    if (!w || w.deleted || !isManageable(w)) {
-      return;
-    }
-
+    if (!w || w.deleted || !isManageable(w)) return;
     const safeId = getSafeWindowId(w);
-    if (!safeId) {
-      return;
-    }
+    if (!safeId) return;
 
-    const deltaPayload = buildWindowState(w, safeId);
     callDBus(
       "org.kde.raven.Daemon",
       "/Events",
       "org.kde.raven.Events",
       "syncWindowDelta",
-      JSON.stringify(deltaPayload),
+      JSON.stringify(buildWindowState(w, safeId)),
       function (response) {
-        if (response && response !== "[]") {
-          applyCommands(response);
-        }
+        if (response && response !== "[]") applyCommands(response);
       }
     );
   } catch (e) {
-    Logger.error("syncWindowDelta", "Fallo en sincronización incremental", e);
+    Logger.error("syncWindowDelta", "Fallo en delta sync", e);
   }
 }
 
 /**
- * @brief Migra nativamente una ventana a un monitor o escritorio virtual especificado.
- *
- * @param {KWin::Window} win Instancia de la ventana a desplazar.
- * @param {string|null} target_output_name Nombre del monitor destino o null si permanece en el mismo.
- * @param {string|null} target_desktop_id Identificador del escritorio virtual destino o null.
+ * @brief Migra una ventana a un monitor o escritorio virtual.
  */
 function migrateWindow(win, target_output_name, target_desktop_id) {
-  if (!win || win.deleted) {
-    return;
-  }
+  if (!win || win.deleted) return;
   try {
     if (target_output_name) {
       const outputs = workspace.screens || [];
       for (let i = 0; i < outputs.length; i++) {
-        const out = outputs[i];
-        if (out && out.name === target_output_name) {
-          try {
-            if (typeof workspace.sendClientToScreen === "function") {
-              workspace.sendClientToScreen(win, out);
-            }
-          } catch (errScreen) {
-            Logger.debug("migrateWindow", "workspace.sendClientToScreen fallback: " + errScreen);
-          }
-
-          try {
-            win.output = out;
-          } catch (errOut) {}
+        if (outputs[i] && outputs[i].name === target_output_name) {
+          try { if (typeof workspace.sendClientToScreen === "function") workspace.sendClientToScreen(win, outputs[i]); } catch (err) {}
+          try { win.output = outputs[i]; } catch (errOut) {}
           break;
         }
       }
@@ -939,429 +493,209 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
         }
       }
     }
-  } catch (e) {
-    Logger.error("migrateWindow", "Fallo al migrar ventana", e);
-  }
+  } catch (e) { }
 }
 
 /**
- * @brief Procesa y aplica en KWin la lista atómica de comandos JSON calculados por el demonio Rust.
- *
- * Ejecuta en dos pasadas:
- * 1. Mutaciones de estado y flotación (`set_floating`, `keepAbove`).
- * 2. Transformaciones geométricas (`move`, `focus`, `minimize`, `unminimize`, `migrate_to_output`).
- * Incorpora banderas `__raven_mutating` para suprimir ciclos recursivos de feedback con KWin.
- *
- * @param {string} commandsJson Cadena JSON con el vector de RavenAction devuelto por el demonio.
+ * @brief Aplica las acciones calculadas por Rust en KWin.
  */
 function applyCommands(commandsJson) {
-  if (!commandsJson) {
-    return;
-  }
+  if (!commandsJson) return;
   try {
     const cmds = JSON.parse(commandsJson);
+    if (!cmds || !cmds.length) return;
+
     const windows = workspace.windowList();
-
-    // Pasada 1: Comandos de mutación de estado/flags (set_floating, etc.)
-    for (let i = 0; i < cmds.length; i++) {
-      const cmd = cmds[i];
-      if (cmd.action === "set_floating") {
-        for (let j = 0; j < windows.length; j++) {
-          const w = windows[j];
-          if (getSafeWindowId(w) === cmd.window_id) {
-            try {
-              const wasFloating = Boolean(w.__raven_dynamic_float);
-              w.__raven_dynamic_float = Boolean(cmd.floating);
-              w.keepAbove = Boolean(cmd.keep_above);
-
-              // Feedback visual táctil: si pasa a flotante, aplicar un ligero desajuste (nudge)
-              if (cmd.floating && !wasFloating && !w.fullScreen && w.maximizeMode === 0) {
-                w.__raven_mutating = true;
-                const fg = w.frameGeometry;
-                w.frameGeometry = {
-                  x: fg.x + 24,
-                  y: fg.y + 24,
-                  width: Math.max(300, Math.round(fg.width * 0.95)),
-                  height: Math.max(200, Math.round(fg.height * 0.95))
-                };
-                (function (cw) {
-                  setKWinTimeout(function () {
-                    if (cw && !cw.deleted) {
-                      cw.__raven_mutating = false;
-                    }
-                  }, 150);
-                })(w);
-              }
-            } catch (e) {
-              Logger.error("applyCommands", "Error asignando estado flotante dinámico", e);
-            }
-            break;
-          }
-        }
-      }
+    const winMap = {};
+    for (let i = 0; i < windows.length; i++) {
+      const w = windows[i];
+      const id = getSafeWindowId(w);
+      if (id) winMap[id] = w;
     }
 
-    // Pasada 2: Comandos de posicionamiento, foco y migración
     for (let i = 0; i < cmds.length; i++) {
       const cmd = cmds[i];
-      if (cmd.action === "set_floating") {
-        continue;
-      }
       if (cmd.action === "request_sync") {
         requestStateSync();
         continue;
       }
-
       if (cmd.action === "saturation_warning") {
-        Logger.info("Raven UI", "Saturation warning received from core");
-        try {
-          if (workspace.showOutline) {
-            const activeWin = workspace.activeWindow;
-            if (activeWin) {
-              workspace.showOutline(activeWin.frameGeometry);
-            } else {
-              const ca = workspace.clientArea(0, 0, workspace.currentDesktop);
-              workspace.showOutline({
-                x: ca.x, y: ca.y, width: ca.width, height: ca.height
-              });
-            }
-            setKWinTimeout(function() {
-              if (workspace.hideOutline) workspace.hideOutline();
-            }, 300);
-          }
-        } catch(e) {}
+        Logger.warn("Saturation", "Saturación: " + cmd.active + "/" + cmd.cmax);
         continue;
       }
 
-      for (let j = 0; j < windows.length; j++) {
-        const w = windows[j];
-        if (getSafeWindowId(w) === cmd.window_id) {
-          if (!w || w.deleted) {
+      const w = cmd.window_id ? winMap[cmd.window_id] : null;
+      if (!w || w.deleted) continue;
+
+      switch (cmd.action) {
+        case "set_floating":
+          w.__raven_dynamic_float = Boolean(cmd.floating);
+          w.keepAbove = Boolean(cmd.keep_above);
+          break;
+
+        case "move":
+        case "rectify_window":
+          if (w.minimized || w.interactiveMove || w.interactiveResize || w.fullScreen) break;
+          if (w.transientChildren && w.transientChildren.length > 0) break;
+          if (w.maximizeMode !== 0) {
+            try { w.setMaximize(false, false); } catch (eMax) {}
+          }
+
+          const targetGeom = {
+            x: Math.round(cmd.x),
+            y: Math.round(cmd.y),
+            width: Math.round(cmd.width),
+            height: Math.round(cmd.height),
+          };
+
+          const curFg = w.frameGeometry;
+          if (cmd.action === "move" && curFg &&
+              Math.round(curFg.x) === targetGeom.x &&
+              Math.round(curFg.y) === targetGeom.y &&
+              Math.round(curFg.width) === targetGeom.width &&
+              Math.round(curFg.height) === targetGeom.height) {
             break;
           }
 
-          if (cmd.action === "move") {
-            try {
-              if (
-                w.interactiveMove ||
-                w.interactiveResize
-              ) {
-                break;
-              }
+          w.__raven_mutating = true;
+          w.frameGeometry = targetGeom;
 
-              if (w.fullScreen) {
-                break;
-              }
+          // Auditoría de geometría aplicada
+          try {
+            const fgApplied = w.frameGeometry || targetGeom;
+            callDBus(
+              "org.kde.raven.Daemon",
+              "/Events",
+              "org.kde.raven.Events",
+              "commandAppliedState",
+              cmd.window_id,
+              Math.round(fgApplied.x),
+              Math.round(fgApplied.y),
+              Math.round(fgApplied.width),
+              Math.round(fgApplied.height)
+            );
+          } catch (eAudit) {}
 
-              // Si la ventana tiene ventanas hijas transitorias o popups activos (ej. menús desplegables),
-              // NO moverla bajo ninguna circunstancia para evitar que Wayland o Plasma cierren el menú emergente.
-              if (w.transientChildren && w.transientChildren.length > 0) {
-                break;
-              }
+          (function (cw) {
+            setKWinTimeout(function () {
+              if (cw && !cw.deleted) cw.__raven_mutating = false;
+            }, 60);
+          })(w);
+          break;
 
-              // Si la ventana está maximizada por el usuario, respetar su estado y no forzar geometría
-              if (w.maximizeMode !== 0 && !w.__raven_strict_birth) {
-                break;
-              }
-
-              // Si es una ventana naciente que KWin abrió maximizada por sesión previa,
-              // la desmaximizamos suavemente para incorporarla al mosaico
-              if (w.maximizeMode !== 0 && w.__raven_strict_birth) {
-                try {
-                  w.setMaximize(false, false);
-                } catch (errMax) {
-                  Logger.debug("applyCommands", "Error desmaximizando ventana naciente: " + errMax);
-                }
-              }
-
-              const targetGeom = {
-                x: Math.round(cmd.x),
-                y: Math.round(cmd.y),
-                width: Math.round(cmd.width),
-                height: Math.round(cmd.height),
-              };
-
-              // Blindaje anti-redundancia: si la geometría actual ya coincide, no asignar para no disparar eventos innecesarios
-              const curFg = w.frameGeometry;
-              if (
-                curFg &&
-                Math.round(curFg.x) === targetGeom.x &&
-                Math.round(curFg.y) === targetGeom.y &&
-                Math.round(curFg.width) === targetGeom.width &&
-                Math.round(curFg.height) === targetGeom.height
-              ) {
-                break;
-              }
-
-              w.__raven_mutating = true;
-              w.frameGeometry = targetGeom;
-
-              (function (capturedWindow) {
-                setKWinTimeout(function () {
-                  if (capturedWindow && !capturedWindow.deleted) {
-                    capturedWindow.__raven_mutating = false;
-                  }
-                }, 80);
-              })(w);
-            } catch (e) { }
-          } else if (cmd.action === "focus") {
-            try {
-              const currentActive = workspace.activeWindow;
-              // Si la ventana ya está activa, no reasignar
-              if (currentActive === w) {
-                break;
-              }
-              // Blindaje de popups/menús desplegables: Si la ventana activa actual es una ventana hija
-              // transitoria o popup de esta ventana (o de cualquier otra), NO robarle el foco.
-              if (
-                currentActive &&
-                (currentActive.transientFor === w ||
-                  currentActive.popupWindow ||
-                  !isManageable(currentActive))
-              ) {
-                break;
-              }
-              workspace.activeWindow = w;
-            } catch (eFocus) { }
-          } else if (cmd.action === "request_feedback") {
-            if (w.__raven_strict_birth) {
-              w.__raven_strict_birth = false;
-
-              (function (cw) {
-                setKWinTimeout(function () {
-                  if (cw && !cw.deleted) {
-                    requestStateSync();
-                  }
-                }, 100);
-              })(w);
-            }
-          } else if (cmd.action === "release_quarantine") {
-            w.__raven_quarantined = false;
-            w.__raven_strict_birth = false;
-            w.__raven_stab_timer = null;
-          } else if (cmd.action === "rectify_window") {
-            // --- Rectificación Forzada Post-Cuarentena ---
-            //
-            // Este comando es emitido por el Modelo de Rectificación de Rust cuando detecta
-            // que la ventana no asumió las medidas calculadas tras la liberación de cuarentena.
-            // A diferencia del comando "move", NO aplica la guardia anti-redundancia de geometría,
-            // ya que su objetivo exacto es corregir una geometría incorrecta incluso si KWin
-            // reporta que ya coincide (puede ser desactualización del estado reportado).
-            try {
-              if (w.interactiveMove || w.interactiveResize) {
-                break;
-              }
-              if (w.fullScreen) {
-                break;
-              }
-              // Desmaximizar en caso de que la ventana haya re-restaurado su sesión maximizada
-              if (w.maximizeMode !== 0) {
-                try {
-                  w.setMaximize(false, false);
-                } catch (errMaxR) {
-                  Logger.debug("applyCommands", "Error desmaximizando en rectificación: " + errMaxR);
-                }
-              }
-              const rectifyGeom = {
-                x: Math.round(cmd.x),
-                y: Math.round(cmd.y),
-                width: Math.round(cmd.width),
-                height: Math.round(cmd.height),
-              };
-              w.__raven_mutating = true;
-              w.frameGeometry = rectifyGeom;
-              Logger.info("applyCommands", "[RECTIFICACION] Geometría corregida para '" + getSafeWindowId(w) +
-                "': " + rectifyGeom.width + "x" + rectifyGeom.height +
-                "+" + rectifyGeom.x + "," + rectifyGeom.y);
-              (function (capturedWindow) {
-                setKWinTimeout(function () {
-                  if (capturedWindow && !capturedWindow.deleted) {
-                    capturedWindow.__raven_mutating = false;
-                  }
-                }, 100);
-              })(w);
-            } catch (eRectify) {
-              Logger.error("applyCommands", "Error en rectificación forzada de ventana", eRectify);
-            }
-          } else if (cmd.action === "minimize") {
-            w.__raven_mutating = true;
-            w.minimized = true;
-            (function (cw) {
-              setKWinTimeout(function () {
-                if (cw && !cw.deleted) {
-                  cw.__raven_mutating = false;
-                  requestStateSync();
-                }
-              }, 80);
-            })(w);
-          } else if (cmd.action === "unminimize") {
-            w.__raven_mutating = true;
-            w.minimized = false;
-            (function (cw) {
-              setKWinTimeout(function () {
-                if (cw && !cw.deleted) {
-                  cw.__raven_mutating = false;
-                  requestStateSync();
-                }
-              }, 80);
-            })(w);
-          } else if (cmd.action === "migrate_to_output") {
-            w.__raven_mutating = true;
-            migrateWindow(w, cmd.target_ws, null);
-            (function (cw) {
-              setKWinTimeout(function () {
-                if (cw && !cw.deleted) {
-                  cw.__raven_mutating = false;
-                  requestStateSync();
-                }
-              }, 40);
-            })(w);
-          } else if (cmd.action === "migrate_to_desktop") {
-            w.__raven_mutating = true;
-            migrateWindow(w, null, cmd.target_ws);
-            (function (cw) {
-              setKWinTimeout(function () {
-                if (cw && !cw.deleted) {
-                  cw.__raven_mutating = false;
-                  requestStateSync();
-                }
-              }, 40);
-            })(w);
-          } else if (cmd.action === "saturation_warning") {
-            Logger.warn("Saturation", "Pantalla cerca de saturación: " + cmd.active + "/" + cmd.cmax + " ventanas");
+        case "focus":
+          if (workspace.activeWindow !== w && (!workspace.activeWindow || !workspace.activeWindow.popupWindow)) {
+            workspace.activeWindow = w;
           }
           break;
-        }
+
+        case "minimize":
+          w.__raven_mutating = true;
+          w.minimized = true;
+          (function (cw) {
+            setKWinTimeout(function () {
+              if (cw && !cw.deleted) {
+                cw.__raven_mutating = false;
+                requestStateSync();
+              }
+            }, 60);
+          })(w);
+          break;
+
+        case "unminimize":
+          w.__raven_mutating = true;
+          w.minimized = false;
+          (function (cw) {
+            setKWinTimeout(function () {
+              if (cw && !cw.deleted) {
+                cw.__raven_mutating = false;
+                requestStateSync();
+              }
+            }, 60);
+          })(w);
+          break;
+
+        case "migrate_to_output":
+          w.__raven_mutating = true;
+          migrateWindow(w, cmd.target_ws, null);
+          (function (cw) {
+            setKWinTimeout(function () {
+              if (cw && !cw.deleted) {
+                cw.__raven_mutating = false;
+                requestStateSync();
+              }
+            }, 40);
+          })(w);
+          break;
+
+        case "migrate_to_desktop":
+          w.__raven_mutating = true;
+          migrateWindow(w, null, cmd.target_ws);
+          (function (cw) {
+            setKWinTimeout(function () {
+              if (cw && !cw.deleted) {
+                cw.__raven_mutating = false;
+                requestStateSync();
+              }
+            }, 40);
+          })(w);
+          break;
+
+        case "release_quarantine":
+        case "request_feedback":
+          break;
       }
     }
   } catch (e) {
-    Logger.error("applyCommands", "Fallo crítico aplicando comandos del daemon. Payload: " + commandsJson, e);
+    Logger.error("applyCommands", "Error procesando comandos", e);
   }
 }
 
 /**
- * @brief Enlaza los eventos y señales reactivas del ciclo de vida de una ventana con el puente de Raven.
- *
- * Suscribe escuchadores para:
- * - Minimización y restauración (`minimizedChanged`).
- * - Maximización y desmaximización (`maximizedChanged`).
- * - Pantalla completa (`fullScreenChanged`).
- * - Cambio de título (`captionChanged` para refresco PiP).
- * - Migración de pantalla o escritorio virtual (`outputChanged`, `desktopsChanged`).
- * - Modificación geométrica interactiva (`frameGeometryChanged`, `interactiveMoveResizeFinished`).
- *
- * @param {KWin::Window} w Instancia de la ventana a enlazar.
+ * @brief Enlaza reactivamente los eventos del ciclo de vida de una ventana.
  */
 function bindWindow(w) {
   try {
-    if (!isManageable(w) || w.__raven_bound) {
-      return;
-    }
+    if (!isManageable(w) || w.__raven_bound) return;
     w.__raven_bound = true;
 
-    w.minimizedChanged.connect(function () {
-      if (
-        w &&
-        !w.deleted &&
-        !w.__raven_mutating &&
-        !w.interactiveMove &&
-        !w.interactiveResize
-      ) {
+    const onStateChange = function () {
+      if (w && !w.deleted && !w.__raven_mutating && !w.interactiveMove && !w.interactiveResize) {
         requestStateSync();
       }
-    });
+    };
 
-    w.maximizedChanged.connect(function () {
-      if (
-        w &&
-        !w.deleted &&
-        !w.__raven_mutating &&
-        !w.interactiveMove &&
-        !w.interactiveResize
-      ) {
-        requestStateSync();
-      }
-    });
-
-    if (w.fullScreenChanged !== undefined) {
-      w.fullScreenChanged.connect(function () {
-        if (
-          w &&
-          !w.deleted &&
-          !w.__raven_mutating &&
-          !w.interactiveMove &&
-          !w.interactiveResize
-        ) {
-          requestStateSync();
-        }
-      });
-    }
+    w.minimizedChanged.connect(onStateChange);
+    w.maximizedChanged.connect(onStateChange);
+    if (w.fullScreenChanged !== undefined) w.fullScreenChanged.connect(onStateChange);
 
     if (w.captionChanged !== undefined) {
       w.captionChanged.connect(function () {
-        if (
-          w &&
-          !w.deleted &&
-          !w.__raven_mutating
-        ) {
-          requestStateSync();
+        if (w && !w.deleted && !w.__raven_mutating) {
+          const cap = w.caption ? w.caption.toString().toLowerCase() : "";
+          if (PIP_CAPTION_REGEX.test(cap) || FLOATING_CAPTION_REGEX.test(cap)) requestStateSync();
         }
       });
     }
 
-    w.outputChanged.connect(function () {
-      if (!w || w.deleted || w.__raven_mutating) {
-        return;
-      }
+    const onOutputOrDesktop = function () {
+      if (!w || w.deleted || w.__raven_mutating) return;
       if (!w.interactiveMove && !w.interactiveResize) {
         w.__raven_ui_migrating = true;
         (function (cw) {
           setKWinTimeout(function () {
-            if (cw && !cw.deleted) {
-              cw.__raven_ui_migrating = false;
-            }
-          }, 80);
+            if (cw && !cw.deleted) cw.__raven_ui_migrating = false;
+          }, 60);
         })(w);
       }
       requestStateSync();
-    });
+    };
 
-    w.desktopsChanged.connect(function () {
-      if (!w || w.deleted || w.__raven_mutating) {
-        return;
-      }
-      if (!w.interactiveMove && !w.interactiveResize) {
-        w.__raven_ui_migrating = true;
-        (function (cw) {
-          setKWinTimeout(function () {
-            if (cw && !cw.deleted) {
-              cw.__raven_ui_migrating = false;
-            }
-          }, 80);
-        })(w);
-      }
-      requestStateSync();
-    });
+    w.outputChanged.connect(onOutputOrDesktop);
+    w.desktopsChanged.connect(onOutputOrDesktop);
 
     w.frameGeometryChanged.connect(function () {
-      if (!w || w.deleted) {
-        return;
-      }
-
-      // --- Guardia Timer-0 KWin ---
-      // Si la ventana está en el periodo de estabilización pre-Rust (Timer-0),
-      // suprimir completamente el delta sync. Además contar la señal para detección
-      // de flood: si la app emite demasiadas señales, Timer-0 se reiniciará.
-      if (w.__raven_kwin_stabilizing) {
-        w.__raven_flood_count = (w.__raven_flood_count || 0) + 1;
-        return;
-      }
-
-      // --- Guardia Timer-1/2 Rust ---
-      if (w.__raven_quarantined) {
-        return;
-      }
-
+      if (!w || w.deleted) return;
       if (w.interactiveMove || w.interactiveResize) {
         w.__was_interacting = true;
         return;
@@ -1371,15 +705,8 @@ function bindWindow(w) {
         requestStateSync();
         return;
       }
-      if (w.__raven_mutating || w.__raven_ui_migrating) {
-        return;
-      }
-
-      // Si la ventana tiene ventanas hijas transitorias activas (popups, menús emergentes),
-      // no emitir delta sync para no alterar el layout ni provocar reclamos de geometría
-      if (w.transientChildren && w.transientChildren.length > 0) {
-        return;
-      }
+      if (w.__raven_mutating || w.__raven_ui_migrating) return;
+      if (w.transientChildren && w.transientChildren.length > 0) return;
 
       syncWindowDelta(w);
     });
@@ -1393,23 +720,18 @@ function bindWindow(w) {
       });
     }
   } catch (e) {
-    Logger.error("bindWindow", "Error enlazando eventos de ventana", e);
+    Logger.error("bindWindow", "Error enlazando ventana", e);
   }
 }
 
 /**
  * @brief Extrae y normaliza el estado espacial de una ventana.
- * @param {KWin::Window} w Instancia de la ventana.
- * @param {string} safeId Identificador seguro de la ventana.
- * @return {Object} Diccionario plano con las propiedades estructuradas.
  */
 function buildWindowState(w, safeId) {
   const geom = getRectGeometry(w.frameGeometry);
   const deskIds = [];
   if (w.desktops) {
-    for (let d = 0; d < w.desktops.length; d++) {
-      deskIds.push(w.desktops[d].id.toString());
-    }
+    for (let d = 0; d < w.desktops.length; d++) deskIds.push(w.desktops[d].id.toString());
   }
   const output = w.output || workspace.activeOutput;
   return {
@@ -1425,10 +747,10 @@ function buildWindowState(w, safeId) {
     h: geom.h,
     min_w: w.minSize ? Math.round(w.minSize.width) : 0,
     min_h: w.minSize ? Math.round(w.minSize.height) : 0,
-    sb: Boolean(w.__raven_strict_birth),
-    iq: Boolean(w.__raven_quarantined),
+    sb: false,
+    iq: false,
     fs: Boolean(w.fullScreen),
-    sus: Boolean(w.__raven_suspicious),
+    sus: false,
     cls: w.resourceClass ? w.resourceClass.toString() : "",
     cls_name: w.resourceName ? w.resourceName.toString() : "",
     cap: w.caption ? w.caption.toString() : "",
@@ -1436,181 +758,82 @@ function buildWindowState(w, safeId) {
 }
 /**
  * @file shortcuts.js
- * @brief Registro e integración de atajos de teclado globales nativos de KWin en KDE Plasma 6.
+ * @brief Registro de atajos de teclado globales en KWin (KDE Plasma 6).
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @version 5.0
  */
 
-/**
- * @brief Registra todos los atajos de teclado globales de Raven en el subsistema de accesos rápidos de KWin.
- *
- * Expone las acciones del gestor de mosaico en la sección "KWin" del panel de Preferencias del Sistema.
- * Cada combinación despacha un método D-Bus hacia `org.kde.raven.Daemon` y ejecuta inmediatamente los comandos retornados.
- */
 function registerRavenShortcuts() {
-  /**
-   * @brief Envía una acción sin parámetros al demonio de Raven vía D-Bus.
-   * @param {string} actionStr Nombre del método D-Bus.
-   */
-  function dispatchToRaven(actionStr) {
+  function dispatchToRaven(actionStr, arg) {
     try {
-      callDBus(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
-        actionStr,
-        function (response) {
-          if (response && response !== "[]") {
-            applyCommands(response);
-          }
-        }
-      );
+      if (arg !== undefined) {
+        callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", actionStr, arg, function (res) {
+          if (res && res !== "[]") applyCommands(res);
+        });
+      } else {
+        callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", actionStr, function (res) {
+          if (res && res !== "[]") applyCommands(res);
+        });
+      }
     } catch (e) {
       Logger.error("Shortcuts", "Fallo al enviar atajo D-Bus: " + actionStr, e);
     }
   }
 
-  /**
-   * @brief Envía una acción con un argumento al demonio de Raven vía D-Bus.
-   * @param {string} actionStr Nombre del método D-Bus.
-   * @param {number|string} arg Valor del parámetro.
-   */
-  function dispatchToRavenArg(actionStr, arg) {
-    try {
-      callDBus(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
-        actionStr,
-        arg,
-        function (response) {
-          if (response && response !== "[]") {
-            applyCommands(response);
-          }
-        }
-      );
-    } catch (e) {
-      Logger.error("Shortcuts", "Fallo al enviar atajo D-Bus con arg: " + actionStr, e);
-    }
-  }
-
-  // ── GESTIÓN DE ESTADO Y FLOTACIÓN ──
+  // Gestión de estado y flotación
   registerShortcut("RavenToggleTiling", "Raven: Alternar Mosaico (On/Off)", "Meta+Space", function () {
     try {
-      callDBus(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
-        "toggleTiling",
-        function (response) {
-          if (response && response !== "[]") {
-            applyCommands(response);
-          }
-          // Verificar estado resultante para coordinar el comportamiento del puente
-          callDBus(
-            "org.kde.raven.Daemon",
-            "/Events",
-            "org.kde.raven.Events",
-            "getTilingState",
-            function (stateRes) {
-              var isEnabled = (stateRes === "true" || stateRes === true);
-              if (isEnabled) {
-                // Modo activado: Sincronización forzada completa ("patada del puente a Rust")
-                syncState();
-              }
-            }
-          );
-        }
-      );
+      callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "toggleTiling", function (response) {
+        if (response && response !== "[]") applyCommands(response);
+        callDBus("org.kde.raven.Daemon", "/Events", "org.kde.raven.Events", "getTilingState", function (stateRes) {
+          if (stateRes === "true" || stateRes === true) syncState();
+        });
+      });
     } catch (e) {
       Logger.error("Shortcuts", "Fallo en RavenToggleTiling: " + e);
     }
   });
-  registerShortcut("RavenToggleFloating", "Raven: Alternar Ventana Flotante Dinámica (Quick Peek)", "Meta+Shift+F", function () {
-    var aw = workspace.activeWindow;
-    var awId = aw ? getSafeWindowId(aw) : "";
-    dispatchToRavenArg("toggleFloating", awId);
+
+  registerShortcut("RavenToggleFloating", "Raven: Alternar Ventana Flotante Dinámica", "Meta+Shift+F", function () {
+    const aw = workspace.activeWindow;
+    dispatchToRaven("toggleFloating", aw ? getSafeWindowId(aw) || "" : "");
   });
 
-  // ── NAVEGACIÓN Y FOCO VISUAL ──
-  registerShortcut("RavenFocusNext", "Raven: Siguiente Ventana", "Meta+J", function () {
-    dispatchToRaven("focusNext");
-  });
-  registerShortcut("RavenFocusPrev", "Raven: Ventana Anterior", "Meta+K", function () {
-    dispatchToRaven("focusPrev");
-  });
-  registerShortcut("RavenFocusLeft", "Raven: Foco Izquierda", "Meta+Left", function () {
-    dispatchToRaven("focusLeft");
-  });
-  registerShortcut("RavenFocusRight", "Raven: Foco Derecha", "Meta+Right", function () {
-    dispatchToRaven("focusRight");
-  });
-  registerShortcut("RavenFocusUp", "Raven: Foco Arriba", "Meta+Up", function () {
-    dispatchToRaven("focusUp");
-  });
-  registerShortcut("RavenFocusDown", "Raven: Foco Abajo", "Meta+Down", function () {
-    dispatchToRaven("focusDown");
-  });
+  // Navegación y foco
+  registerShortcut("RavenFocusNext", "Raven: Siguiente Ventana", "Meta+J", function () { dispatchToRaven("focusNext"); });
+  registerShortcut("RavenFocusPrev", "Raven: Ventana Anterior", "Meta+K", function () { dispatchToRaven("focusPrev"); });
+  registerShortcut("RavenFocusLeft", "Raven: Foco Izquierda", "Meta+Left", function () { dispatchToRaven("focusLeft"); });
+  registerShortcut("RavenFocusRight", "Raven: Foco Derecha", "Meta+Right", function () { dispatchToRaven("focusRight"); });
+  registerShortcut("RavenFocusUp", "Raven: Foco Arriba", "Meta+Up", function () { dispatchToRaven("focusUp"); });
+  registerShortcut("RavenFocusDown", "Raven: Foco Abajo", "Meta+Down", function () { dispatchToRaven("focusDown"); });
 
-  // ── INTERCAMBIO Y RATIOS DE COMPOSICIÓN ──
-  registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function () {
-    dispatchToRaven("swapNext");
-  });
-  registerShortcut("RavenSwapPrev", "Raven: Intercambiar Anterior", "Meta+Shift+K", function () {
-    dispatchToRaven("swapPrev");
-  });
-  registerShortcut("RavenIncreaseRatio", "Raven: Expandir Master", "Meta+H", function () {
-    dispatchToRaven("increaseRatio");
-  });
-  registerShortcut("RavenDecreaseRatio", "Raven: Contraer Master", "Meta+L", function () {
-    dispatchToRaven("decreaseRatio");
-  });
+  // Intercambio y ratios
+  registerShortcut("RavenSwapNext", "Raven: Intercambiar Siguiente", "Meta+Shift+J", function () { dispatchToRaven("swapNext"); });
+  registerShortcut("RavenSwapPrev", "Raven: Intercambiar Anterior", "Meta+Shift+K", function () { dispatchToRaven("swapPrev"); });
+  registerShortcut("RavenIncreaseRatio", "Raven: Expandir Master", "Meta+H", function () { dispatchToRaven("increaseRatio"); });
+  registerShortcut("RavenDecreaseRatio", "Raven: Contraer Master", "Meta+L", function () { dispatchToRaven("decreaseRatio"); });
 
-  // ── MIGRACIÓN ENTRE MONITORES Y ESCRITORIOS ──
-  registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Monitor Siguiente", "Meta+Shift+M", function () {
-    dispatchToRaven("migrateActiveToScreen");
-  });
-  registerShortcut("RavenMigratePrevMonitor", "Raven: Enviar a Monitor Anterior", "Meta+Shift+N", function () {
-    dispatchToRaven("migrateActiveToPrevScreen");
-  });
-  registerShortcut("RavenMigrateDesktop", "Raven: Enviar a Escritorio Siguiente", "Meta+Shift+Right", function () {
-    dispatchToRaven("migrateActiveToDesktop");
-  });
-  registerShortcut("RavenMigratePrevDesktop", "Raven: Enviar a Escritorio Anterior", "Meta+Shift+Left", function () {
-    dispatchToRaven("migrateActiveToPrevDesktop");
-  });
+  // Migración entre monitores y escritorios
+  registerShortcut("RavenMigrateMonitor", "Raven: Enviar a Monitor Siguiente", "Meta+Shift+M", function () { dispatchToRaven("migrateActiveToScreen"); });
+  registerShortcut("RavenMigratePrevMonitor", "Raven: Enviar a Monitor Anterior", "Meta+Shift+N", function () { dispatchToRaven("migrateActiveToPrevScreen"); });
+  registerShortcut("RavenMigrateDesktop", "Raven: Enviar a Escritorio Siguiente", "Meta+Shift+Right", function () { dispatchToRaven("migrateActiveToDesktop"); });
+  registerShortcut("RavenMigratePrevDesktop", "Raven: Enviar a Escritorio Anterior", "Meta+Shift+Left", function () { dispatchToRaven("migrateActiveToPrevDesktop"); });
 
-  // ── MÁRGENES, CAPACIDAD Y CICLADO DE ALGORITMOS ──
-  registerShortcut("RavenIncrementGaps", "Raven: Incrementar Gaps", "Meta+=", function () {
-    dispatchToRavenArg("incrementGaps", 2);
-  });
-  registerShortcut("RavenDecrementGaps", "Raven: Decrementar Gaps", "Meta+-", function () {
-    dispatchToRavenArg("incrementGaps", -2);
-  });
-  registerShortcut("RavenIncrementMaster", "Raven: Incrementar Capacidad Master", "Meta+]", function () {
-    dispatchToRaven("incrementMaster");
-  });
-  registerShortcut("RavenDecrementMaster", "Raven: Decrementar Capacidad Master", "Meta+[", function () {
-    dispatchToRaven("decrementMaster");
-  });
+  // Márgenes, capacidad y layouts
+  registerShortcut("RavenIncrementGaps", "Raven: Incrementar Gaps", "Meta+=", function () { dispatchToRaven("incrementGaps", 2); });
+  registerShortcut("RavenDecrementGaps", "Raven: Decrementar Gaps", "Meta+-", function () { dispatchToRaven("incrementGaps", -2); });
+  registerShortcut("RavenIncrementMaster", "Raven: Incrementar Capacidad Master", "Meta+]", function () { dispatchToRaven("incrementMaster"); });
+  registerShortcut("RavenDecrementMaster", "Raven: Decrementar Capacidad Master", "Meta+[", function () { dispatchToRaven("decrementMaster"); });
   registerShortcut("RavenCycleLayout", "Raven: Ciclar Algoritmo de Disposición", "Meta+Shift+L", function() {
     dispatchToRaven("cycleLayout");
     if (workspace.activeWindow) highlightWindow(workspace.activeWindow);
   });
 
-  // ── REDIMENSIONAMIENTO FINO POR VENTANA ──
-  registerShortcut("RavenResizeWidthInc", "Raven: Aumentar Ancho de Ventana", "Meta+Alt+Right", function () {
-    dispatchToRaven("resize_width_inc");
-  });
-  registerShortcut("RavenResizeWidthDec", "Raven: Reducir Ancho de Ventana", "Meta+Alt+Left", function () {
-    dispatchToRaven("resize_width_dec");
-  });
-  registerShortcut("RavenResizeHeightInc", "Raven: Aumentar Alto de Ventana", "Meta+Alt+Down", function () {
-    dispatchToRaven("resize_height_inc");
-  });
-  registerShortcut("RavenResizeHeightDec", "Raven: Reducir Alto de Ventana", "Meta+Alt+Up", function () {
-    dispatchToRaven("resize_height_dec");
-  });
+  // Redimensionamiento fino por ventana
+  registerShortcut("RavenResizeWidthInc", "Raven: Aumentar Ancho de Ventana", "Meta+Alt+Right", function () { dispatchToRaven("resize_width_inc"); });
+  registerShortcut("RavenResizeWidthDec", "Raven: Reducir Ancho de Ventana", "Meta+Alt+Left", function () { dispatchToRaven("resize_width_dec"); });
+  registerShortcut("RavenResizeHeightInc", "Raven: Aumentar Alto de Ventana", "Meta+Alt+Down", function () { dispatchToRaven("resize_height_inc"); });
+  registerShortcut("RavenResizeHeightDec", "Raven: Reducir Alto de Ventana", "Meta+Alt+Up", function () { dispatchToRaven("resize_height_dec"); });
 }
 /**
  * @file index.js
@@ -1695,18 +918,6 @@ function initDBusBridge() {
         "/Events",
         "org.kde.raven.Events",
         "bridgeReady"
-      );
-    } catch (e) { }
-
-    try {
-      callDBus(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
-        "getQuarantineClasses",
-        function (res) {
-          updateQuarantineClasses(res);
-        }
       );
     } catch (e) { }
 

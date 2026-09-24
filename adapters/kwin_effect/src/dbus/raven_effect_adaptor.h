@@ -60,6 +60,13 @@ public Q_SLOTS:
      */
     bool IsActive() const;
 
+Q_SIGNALS:
+    /**
+     * @brief Señal emitida cuando el efecto detecta y comienza la animación de nacimiento de una ventana.
+     * @param windowId Identificador interno o QUuid de la ventana.
+     */
+    void WindowBirthStarted(const QString &windowId);
+
 private:
     RavenEffect *m_effect;
 };

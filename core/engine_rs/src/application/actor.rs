@@ -151,20 +151,24 @@ impl RavenControllerActor {
                                 if let Some(win) = self.controller.get_engine_mut().current_windows.get_mut(&window_id) {
                                     win.is_quarantined = false;
                                     win.strict_birth = false;
-                                    Some((win.resource_class.clone(), win.resource_name.clone()))
+                                    let is_min = win.is_minimized;
+                                    Some((win.resource_class.clone(), win.resource_name.clone(), is_min))
                                 } else {
                                     None
                                 }
                             };
 
-                            if let Some((resource_class, resource_name)) = class_info_opt {
+                            if let Some((resource_class, resource_name, is_min)) = class_info_opt {
                                 self.controller.clear_window_flapping(&window_id);
                                 info!("[ACTOR] Cuarentena liberada (Fase 1) para '{}' [cls='{}' exe='{}']. Agendando rectificación (Fase 2).",
                                     window_id, resource_class, resource_name);
                                 let mut commands = Vec::new();
-                                commands.push(raven_core::action::RavenAction::ReleaseQuarantine {
-                                    window_id: window_id.clone(),
-                                });
+                                // Solo emitir comando de liberación / animación de nacimiento si la ventana NO está minimizada
+                                if !is_min {
+                                    commands.push(raven_core::action::RavenAction::ReleaseQuarantine {
+                                        window_id: window_id.clone(),
+                                    });
+                                }
                                 if let Ok(cmds) = self.controller.commit_layout() {
                                     commands.extend(cmds);
                                 }
@@ -176,10 +180,12 @@ impl RavenControllerActor {
                                         }
                                     });
                                 }
-                                // --- Fase 2: Agendar verificación de rectificación ---
-                                self.quarantine_manager
-                                    .schedule_rectification(window_id.clone(), &resource_class, &resource_name)
-                                    .await;
+                                // --- Fase 2: Agendar verificación de rectificación solo si no está minimizada ---
+                                if !is_min {
+                                    self.quarantine_manager
+                                        .schedule_rectification(window_id.clone(), &resource_class, &resource_name)
+                                        .await;
+                                }
                             }
                         }
                         CompositorEvent::RectifyWindow(window_id) => {
@@ -198,56 +204,58 @@ impl RavenControllerActor {
                             //   → Re-enviar directamente el target calculado sin comparar con
                             //     win.geometry del bridge (fuente no confiable post-CSD).
 
-                            let is_suspicious = self
+                            let win_opt = self
                                 .controller
                                 .get_engine()
                                 .current_windows
                                 .get(&window_id)
-                                .map(|w| w.is_suspicious || w.resource_class.is_empty())
-                                .unwrap_or(false);
+                                .cloned();
 
-                            let window_exists = self
-                                .controller
-                                .get_engine()
-                                .current_windows
-                                .contains_key(&window_id);
-
-                            if !window_exists {
-                                info!("[SOSPECHA-ACTIVA] Ventana '{}' ya no existe. Rectificación omitida.", window_id);
-                            } else if is_suspicious {
-                                // ALTA SOSPECHA: re-calcular layout completo como RectifyWindow
-                                tracing::warn!(
-                                    "[SOSPECHA-ACTIVA] Ventana SOSPECHOSA '{}' → rectificación incondicional de workspace completo.",
-                                    window_id
-                                );
-                                if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(None) {
-                                    if !rectify_cmds.is_empty() {
-                                        let backend = self.backend.clone();
-                                        tokio::spawn(async move {
-                                            if let Err(e) = backend.apply_actions(rectify_cmds).await {
-                                                tracing::error!("[SOSPECHA-ACTIVA] Error en rectificación de workspace: {}", e);
-                                            }
-                                        });
-                                    }
+                            match win_opt {
+                                None => {
+                                    info!("[SOSPECHA-ACTIVA] Ventana '{}' ya no existe. Rectificación omitida.", window_id);
                                 }
-                            } else {
-                                // SOSPECHA NORMAL: re-enviar target desde last_known_layout
-                                // sin comparar contra win.geometry del bridge.
-                                if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
-                                    if !rectify_cmds.is_empty() {
-                                        let wid_log = window_id.clone();
-                                        info!(
-                                            "[SOSPECHA-ACTIVA] Re-enviando geometría calculada para '{}' (sospecha normal, {} cmds).",
-                                            wid_log, rectify_cmds.len()
+                                Some(win) if win.is_minimized => {
+                                    info!("[SOSPECHA-ACTIVA] Ventana '{}' está minimizada. Rectificación omitida.", window_id);
+                                }
+                                Some(win) => {
+                                    let is_suspicious = win.is_suspicious || win.resource_class.is_empty();
+                                    if is_suspicious {
+                                        // ALTA SOSPECHA: re-calcular layout completo como RectifyWindow
+                                        tracing::warn!(
+                                            "[SOSPECHA-ACTIVA] Ventana SOSPECHOSA '{}' → rectificación incondicional de workspace completo.",
+                                            window_id
                                         );
-                                        let backend = self.backend.clone();
-                                        tokio::spawn(async move {
-                                            if let Err(e) = backend.apply_actions(rectify_cmds).await {
-                                                tracing::error!("[SOSPECHA-ACTIVA] Error re-enviando para '{}': {}", wid_log, e);
+                                        if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(None) {
+                                            if !rectify_cmds.is_empty() {
+                                                let backend = self.backend.clone();
+                                                tokio::spawn(async move {
+                                                    if let Err(e) = backend.apply_actions(rectify_cmds).await {
+                                                        tracing::error!("[SOSPECHA-ACTIVA] Error en rectificación de workspace: {}", e);
+                                                    }
+                                                });
                                             }
-                                        });
+                                        }
                                     } else {
-                                        info!("[SOSPECHA-ACTIVA] Ventana '{}' no necesita rectificación (no en layout activo).", window_id);
+                                        // SOSPECHA NORMAL: re-enviar target desde last_known_layout
+                                        // sin comparar contra win.geometry del bridge.
+                                        if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
+                                            if !rectify_cmds.is_empty() {
+                                                let wid_log = window_id.clone();
+                                                info!(
+                                                    "[SOSPECHA-ACTIVA] Re-enviando geometría calculada para '{}' (sospecha normal, {} cmds).",
+                                                    wid_log, rectify_cmds.len()
+                                                );
+                                                let backend = self.backend.clone();
+                                                tokio::spawn(async move {
+                                                    if let Err(e) = backend.apply_actions(rectify_cmds).await {
+                                                        tracing::error!("[SOSPECHA-ACTIVA] Error re-enviando para '{}': {}", wid_log, e);
+                                                    }
+                                                });
+                                            } else {
+                                                info!("[SOSPECHA-ACTIVA] Ventana '{}' no necesita rectificación (no en layout activo).", window_id);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -291,10 +299,26 @@ impl RavenControllerActor {
                                 win.is_floating = true;
                             }
                             
-                            if win.is_quarantined || win.strict_birth {
+                            // Blindaje de Idempotencia: Solo agendar cuarentena si la ventana NO existe
+                            // en el registro activo de Rust o si Rust también la tiene en cuarentena.
+                            // Si Rust ya la liberó previamente (is_quarantined=false y strict_birth=false),
+                            // ignorar la bandera residual enviada por KWin para no disparar animaciones cíclicas.
+                            let already_released = self
+                                .controller
+                                .get_engine()
+                                .current_windows
+                                .get(&win.window_id)
+                                .map(|known| !known.is_quarantined && !known.strict_birth)
+                                .unwrap_or(false);
+
+                            if !already_released && (win.is_quarantined || win.strict_birth) {
                                 self.quarantine_manager
                                     .schedule_release(win.window_id.clone(), &win.resource_class, &win.resource_name)
                                     .await;
+                            } else if already_released {
+                                // Asegurar que el nodo entrante no reactive banderas obsoletas
+                                win.is_quarantined = false;
+                                win.strict_birth = false;
                             }
                         }
 
@@ -336,7 +360,7 @@ impl RavenControllerActor {
                                 .get_engine()
                                 .dynamic_floating_windows
                                 .contains(&win.id);
-                            let win_node = WindowNode::new(
+                            let mut win_node = WindowNode::new(
                                 win.id,
                                 ws_id,
                                 win.output,
@@ -353,14 +377,25 @@ impl RavenControllerActor {
                             )
                             .with_class_and_caption(win.cls, win.cls_name, win.sus, win.cap);
 
-                            let is_tiled = !win_node.is_floating && !win_node.is_minimized;
-                            let wid = win_node.window_id.clone();
-                            
-                            if win_node.is_quarantined || win_node.strict_birth {
+                            let already_released = self
+                                .controller
+                                .get_engine()
+                                .current_windows
+                                .get(&win_node.window_id)
+                                .map(|known| !known.is_quarantined && !known.strict_birth)
+                                .unwrap_or(false);
+
+                            if !already_released && (win_node.is_quarantined || win_node.strict_birth) {
                                 self.quarantine_manager
                                     .schedule_release(win_node.window_id.clone(), &win_node.resource_class, &win_node.resource_name)
                                     .await;
+                            } else if already_released {
+                                win_node.is_quarantined = false;
+                                win_node.strict_birth = false;
                             }
+
+                            let is_tiled = !win_node.is_floating && !win_node.is_minimized;
+                            let wid = win_node.window_id.clone();
                             
                             self.controller.handle_delta_change(win_node);
 
@@ -536,6 +571,32 @@ impl RavenControllerActor {
                             commands = cmds;
                         }
                         let _ = reply.send(commands);
+                    }
+                    KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height } => {
+                        // Auditoría de geometría aplicada: comparar con target calculado
+                        if let Some(target) = self.controller.get_target_rect_for_window(&window_id) {
+                            let matches = (target.x as i32 - x).abs() <= 2
+                                && (target.y as i32 - y).abs() <= 2
+                                && (target.width as i32 - width).abs() <= 2
+                                && (target.height as i32 - height).abs() <= 2;
+
+                            if !matches {
+                                tracing::info!(
+                                    "[AUDIT] Geometría divergente en '{}' (Esperado: {}x{}+{}+{}, Aplicado: {}x{}+{}+{}). Rectificando...",
+                                    window_id, target.width, target.height, target.x, target.y, width, height, x, y
+                                );
+                                if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
+                                    if !rectify_cmds.is_empty() {
+                                        let backend = self.backend.clone();
+                                        tokio::spawn(async move {
+                                            let _ = backend.apply_actions(rectify_cmds).await;
+                                        });
+                                    }
+                                }
+                            } else {
+                                tracing::debug!("[AUDIT] Geometría verificada correctamente para '{}'.", window_id);
+                            }
+                        }
                     }
                 },
             }

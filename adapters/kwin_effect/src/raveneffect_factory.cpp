@@ -9,3 +9,6 @@
 
 #include "raveneffect_factory.h"
 #include <QtPlugin>
+
+#include "moc_raveneffect_factory.cpp"
+

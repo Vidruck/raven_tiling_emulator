@@ -80,7 +80,22 @@ public:
      * @brief Comprueba si este efecto debe permanecer activo.
      * @return true si existen animaciones en progreso.
      */
-    bool isEffectActive() const;
+    bool isActive() const override;
+
+protected:
+    /**
+     * @brief Invocado por KWin cuando una animación concluye de forma natural.
+     * @param w Ventana animada.
+     * @param a Atributo animado.
+     * @param meta Metadatos asociados.
+     */
+     void animationEnded(KWin::EffectWindow *w, Attribute a, uint meta) override;
+
+private Q_SLOTS:
+    /**
+     * @brief Slot conectado a KWin::effects->windowAdded para iniciar animación de nacimiento y emitir D-Bus.
+     */
+    void slotWindowAdded(KWin::EffectWindow *w);
 
 private:
     /**
@@ -100,3 +115,4 @@ private:
     RavenEffectAdaptor *m_dbusAdaptor;                      ///< Adaptador para exponer métodos en D-Bus
     QHash<QString, QList<quint64>> m_activeAnimations;      ///< Mapeo de IDs de ventanas a sus animaciones en curso
 };
+

@@ -33,6 +33,13 @@ pub enum KWinBridgeMessage {
     WindowActivated {
         window_id: Option<String>,
     },
+    CommandAppliedState {
+        window_id: String,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    },
     GetQuarantineClasses {
         reply: oneshot::Sender<String>,
     },
@@ -162,6 +169,18 @@ impl KWinDbusService {
             Some(window_id.clone())
         };
         let _ = self.tx.send(KWinBridgeMessage::WindowActivated { window_id: val }).await;
+    }
+
+    /// Reporta la geometría física asumida por una ventana tras un comando de movimiento para auditoría.
+    #[zbus(name = "commandAppliedState")]
+    async fn command_applied_state(&self, window_id: String, x: i32, y: i32, width: i32, height: i32) {
+        let _ = self.tx.send(KWinBridgeMessage::CommandAppliedState {
+            window_id,
+            x,
+            y,
+            width,
+            height,
+        }).await;
     }
 
     /// Alterna el modo flotante temporal (Quick Peek) para la ventana activa o la especificada.

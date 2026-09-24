@@ -264,23 +264,32 @@ EOF
         if cmake --build "$SOURCE_DIR/adapters/kwin_effect/build" -j"$num_cores" >/dev/null 2>&1; then
             # El path de salida de kcoreaddons_add_plugin es kwin/effects/plugins/ dentro del build dir
             local EFFECT_SO="$SOURCE_DIR/adapters/kwin_effect/build/kwin/effects/plugins/kwin4_effect_raven.so"
+            if [ ! -f "$EFFECT_SO" ] && [ -f "$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so" ]; then
+                EFFECT_SO="$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so"
+            fi
             local SYS_PLUGIN_DIR="/usr/lib64/qt6/plugins/kwin/effects/plugins"
             local SYS_PLUGIN_DIR_ALT="/usr/lib/qt6/plugins/kwin/effects/plugins"
 
-            # KWin en Arch Linux NO busca en ~/.local; instalamos en path del sistema con sudo
+            # Blindaje anti-crash Plasma 6: Desactivar efecto antes de reemplazar binario en caliente
+            kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled false 2>/dev/null || true
+            qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+            sleep 0.4
+
+            # KWin en Arch Linux busca en /usr/lib/qt6/plugins/kwin/effects/plugins
             if [ -f "$EFFECT_SO" ]; then
-                if sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR/" 2>/dev/null; then
-                    log_success "Plugin instalado en $SYS_PLUGIN_DIR"
-                elif sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/" 2>/dev/null; then
-                    log_success "Plugin instalado en $SYS_PLUGIN_DIR_ALT"
+                log_info "Instalando binario del efecto (requiere privilegios sudo para el directorio de KWin)..."
+                if sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR/" || sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/"; then
+                    log_success "Plugin de efecto instalado en el sistema"
                 else
-                    log_warn "No se pudo instalar en path del sistema (¿permisos?). Intentando ~/.local..."
+                    log_warn "No se pudo instalar en path del sistema. Intentando ~/.local..."
                     mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
                     cp -f "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
                     cp -f "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
                 fi
             fi
-            # Habilitar efecto en KWin configuration
+
+            # Rehabilitar efecto en KWin de forma segura
+            sleep 0.2
             kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
             qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
             log_success "Efecto Nativo de KWin (kwin4_effect_raven) compilado y activado"
@@ -423,13 +432,32 @@ do_build_kwin_effect() {
         cmake -B "$SOURCE_DIR/adapters/kwin_effect/build" -S "$SOURCE_DIR/adapters/kwin_effect" -DCMAKE_BUILD_TYPE=Release
         log_info "Compilando módulo C++..."
         cmake --build "$SOURCE_DIR/adapters/kwin_effect/build" -j"$num_cores"
-        log_info "Instalando módulo en el directorio de plugins de KWin..."
-        cmake --install "$SOURCE_DIR/adapters/kwin_effect/build" --prefix "$HOME/.local" >/dev/null 2>&1 || true
-        mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
-        cp -f "$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
-        cp -f "$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
         
-        # Habilitar efecto en KWin configuration
+        local EFFECT_SO="$SOURCE_DIR/adapters/kwin_effect/build/kwin/effects/plugins/kwin4_effect_raven.so"
+        if [ ! -f "$EFFECT_SO" ] && [ -f "$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so" ]; then
+            EFFECT_SO="$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so"
+        fi
+        local SYS_PLUGIN_DIR="/usr/lib64/qt6/plugins/kwin/effects/plugins"
+        local SYS_PLUGIN_DIR_ALT="/usr/lib/qt6/plugins/kwin/effects/plugins"
+
+        # Blindaje anti-crash Plasma 6: Desactivar efecto antes de reemplazar binario en caliente
+        kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled false 2>/dev/null || true
+        qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+        sleep 0.4
+
+        log_info "Instalando módulo en el directorio de plugins de KWin (requiere sudo)..."
+        if [ -f "$EFFECT_SO" ]; then
+            if sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR/" || sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/"; then
+                log_success "Plugin instalado en el directorio del sistema"
+            else
+                mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
+                cp -f "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
+                cp -f "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
+            fi
+        fi
+        
+        # Rehabilitar efecto en KWin de forma segura
+        sleep 0.2
         kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
         qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
         log_success "Efecto Nativo de KWin (kwin4_effect_raven) instalado y activado en KWin 6"
@@ -468,10 +496,6 @@ do_quick_rebuild() {
     
     do_rebuild_kwin
     
-    if [ -d "$SOURCE_DIR/adapters/kwin_effect" ]; then
-        cmake --build "$SOURCE_DIR/adapters/kwin_effect/build" -j"$(nproc 2>/dev/null || echo 2)" >/dev/null 2>&1 || true
-    fi
-    
     systemctl --user restart raven.service 2>/dev/null || true
     log_success "Servicio raven.service reiniciado"
 }
@@ -502,12 +526,14 @@ do_uninstall() {
     rm -rf "$HOME/.local/share/plasma/plasmoids/$PLASMOID_ID"
     rm -f "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so"
     rm -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so"
+    sudo rm -f "/usr/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" "/usr/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
     kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled false 2>/dev/null || true
     qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
     rm -rf "$HOME/.local/lib/qt6/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
     rm -rf "$HOME/.local/lib64/qt6/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
     rm -rf "$HOME/.local/share/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
     log_success "Adaptadores, efecto C++ y módulos QML de Plasma 6 removidos"
+
 
     log_step "3" "5" "Limpiando Accesos Directos, Enlaces e Iconos"
     rm -f "$HOME/.local/share/applications/raven.desktop"
@@ -572,11 +598,15 @@ do_status() {
     fi
 
     # KWin Effect
-    if [ -f "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" ] || [ -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" ]; then
+    if [ -f "/usr/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" ] || \
+       [ -f "/usr/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" ] || \
+       [ -f "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" ] || \
+       [ -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" ]; then
         echo -e " ${SUCCESS}●${RESET} ${BOLD}Efecto Nativo KWin C++:${RESET}          ${SUCCESS}Instalado (kwin4_effect_raven.so)${RESET}"
     else
         echo -e " ${WARNING}●${RESET} ${BOLD}Efecto Nativo KWin C++:${RESET}          ${WARNING}No instalado${RESET}"
     fi
+
 
     # Plasmoid
     if [ -d "$HOME/.local/share/plasma/plasmoids/$PLASMOID_ID" ]; then
