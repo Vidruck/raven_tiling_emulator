@@ -270,31 +270,38 @@ EOF
             local SYS_PLUGIN_DIR="/usr/lib64/qt6/plugins/kwin/effects/plugins"
             local SYS_PLUGIN_DIR_ALT="/usr/lib/qt6/plugins/kwin/effects/plugins"
 
-            # Blindaje anti-crash Plasma 6: Desactivar efecto antes de reemplazar binario en caliente
-            kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled false 2>/dev/null || true
-            qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
-            sleep 0.4
-
-            # KWin en Arch Linux busca en /usr/lib/qt6/plugins/kwin/effects/plugins
             if [ -f "$EFFECT_SO" ]; then
-                log_info "Instalando binario del efecto (requiere privilegios sudo para el directorio de KWin)..."
-                if sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR/" || sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/"; then
+                log_info "Instalando binario del efecto KWin de forma segura (sin recarga en caliente)..."
+
+                # ── Blindaje anti-crash Plasma 6 ──────────────────────────────────────────
+                # PASO 1: Desactivar el efecto PRIMERO para que KWin lo libere de memoria
+                kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled false 2>/dev/null || true
+
+                # PASO 2: Solo reconfigurar KWin si está activo. Esperar más tiempo para que libere la .so
+                if qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1; then
+                    sleep 1.2  # Espera suficiente para que KWin descargue el plugin antes de copiar
+                else
+                    sleep 0.5
+                fi
+
+                # PASO 3: Copiar el binario (ya liberado por KWin)
+                if sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR/" 2>/dev/null || sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/" 2>/dev/null; then
                     log_success "Plugin de efecto instalado en el sistema"
                 else
-                    log_warn "No se pudo instalar en path del sistema. Intentando ~/.local..."
+                    log_warning "No se pudo instalar en path del sistema. Intentando ~/.local..."
                     mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
                     cp -f "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
                     cp -f "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
                 fi
-            fi
 
-            # Rehabilitar efecto en KWin de forma segura
-            sleep 0.2
-            kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
-            qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
-            log_success "Efecto Nativo de KWin (kwin4_effect_raven) compilado y activado"
+                # PASO 4: Rehabilitar el efecto y reconfigurar KWin
+                sleep 0.3
+                kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
+                qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+                log_success "Efecto Nativo de KWin (kwin4_effect_raven) compilado y activado"
+            fi
         else
-            log_warn "No se pudo compilar el Efecto Nativo de KWin C++ (fallback grácil a animaciones estándar)"
+            log_warning "No se pudo compilar el Efecto Nativo de KWin C++ (fallback grácil a animaciones estándar)"
         fi
     fi
 

@@ -42,6 +42,8 @@ pub struct KWinBackend {
     effect_client: RavenEffectClient,
     /// Administrador nativo de cuarentena, filtrado y temporizadores de estabilización.
     quarantine_manager: KWinQuarantineManager,
+    /// Registro de últimas geometrías conocidas por ventana para interpolación dinámica de movimientos y estiramiento.
+    last_known_geometries: Arc<tokio::sync::RwLock<HashMap<String, Rect>>>,
 }
 
 
@@ -59,6 +61,7 @@ impl KWinBackend {
             connection: Arc::new(tokio::sync::RwLock::new(None)),
             effect_client: RavenEffectClient::new(),
             quarantine_manager: KWinQuarantineManager::new(),
+            last_known_geometries: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
         }
     }
 
@@ -141,6 +144,7 @@ impl CompositorBackend for KWinBackend {
         info!("[KWIN-BACKEND] Iniciando CompositorBackend::start_listener para KWin / Plasma...");
 
         let (bridge_tx, mut bridge_rx) = mpsc::channel(256);
+        let last_known_geoms_clone = self.last_known_geometries.clone();
 
         // Subtarea que traduce eventos del bridge D-Bus de KWin hacia CompositorEvent universales
         tokio::spawn(async move {
@@ -174,7 +178,7 @@ impl CompositorBackend for KWinBackend {
                             };
 
                             let win_node = WindowNode::new(
-                                win.id,
+                                win.id.clone(),
                                 ws_id,
                                 win.output,
                                 win.desktops,
@@ -214,7 +218,10 @@ impl CompositorBackend for KWinBackend {
                     KWinBridgeMessage::GetMonitorCount { reply } => {
                         let _ = reply.send(1);
                     }
-                    KWinBridgeMessage::CommandAppliedState { .. } => {}
+                    KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height } => {
+                        let mut geom_guard = last_known_geoms_clone.write().await;
+                        geom_guard.insert(window_id, Rect::new(x, y, width, height));
+                    }
                     KWinBridgeMessage::BridgeReady => {}
                 }
             }
@@ -250,18 +257,42 @@ impl CompositorBackend for KWinBackend {
             return Ok(());
         }
 
-        // Si hay acciones de nacimiento o movimiento, notificar concurrentemente al efecto KWin C++
-        for action in &actions {
-            if let RavenAction::ReleaseQuarantine { window_id } = action {
-                // 250ms de animación de nacimiento, rápida y profesional
-                self.effect_client.animate_birth(window_id, 250).await;
+        let mut animations = Vec::new();
+        {
+            let mut geom_guard = self.last_known_geometries.write().await;
+            for action in &actions {
+                match action {
+                    RavenAction::ReleaseQuarantine { window_id } => {
+                        // 250ms de animación de nacimiento con zoom y elastic
+                        self.effect_client.animate_birth(window_id, 250).await;
+                    }
+                    RavenAction::MoveWindow { window_id, x, y, width, height } |
+                    RavenAction::RectifyWindow { window_id, x, y, width, height } => {
+                        let target_rect = Rect::new(*x, *y, *width, *height);
+                        if let Some(prev_rect) = geom_guard.get(window_id).copied() {
+                            if prev_rect != target_rect {
+                                animations.push(WindowAnimation {
+                                    id: window_id.clone(),
+                                    from: [prev_rect.x as f64, prev_rect.y as f64, prev_rect.width as f64, prev_rect.height as f64],
+                                    to: [target_rect.x as f64, target_rect.y as f64, target_rect.width as f64, target_rect.height as f64],
+                                    duration_ms: 150,
+                                    easing: "EaseOutCubic".to_string(),
+                                });
+                            }
+                        }
+                        geom_guard.insert(window_id.clone(), target_rect);
+                    }
+                    _ => {}
+                }
             }
         }
 
-        // Las órdenes D-Bus (C++ effect) y KWin Script se disparan concurrentemente.
-        // Al quitar el delay arbitrario, permitimos que KWin encole ambos cambios
-        // (animación + geometría) en el mismo frame del compositor, evitando saltos (flicker).
+        // Si hay animaciones de movimiento o redimensionamiento (estiramiento), despachar al efecto C++
+        if !animations.is_empty() {
+            self.effect_client.animate_batch(animations).await;
+        }
 
+        // Las órdenes D-Bus (C++ effect) y KWin Script se disparan concurrentemente.
         let conn_opt = self.connection.read().await.clone();
         if let Some(conn) = conn_opt {
             let json = actions_to_kwin_json(actions);

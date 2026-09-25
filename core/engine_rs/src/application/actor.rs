@@ -424,7 +424,11 @@ impl RavenControllerActor {
                             
                             self.controller.handle_delta_change(win_node);
 
-                            if is_tiled {
+                            // Solo actualizar active_window_id si es genuinamente diferente a la actual
+                            // Un SyncWindowDelta puede venir de un cambio de geometría causado por nuestro
+                            // propio mosaico — en ese caso, NO sobrescribimos la ventana activa.
+                            let is_new_focus = self.active_window_id.as_deref() != Some(wid.as_str());
+                            if is_tiled && is_new_focus {
                                 self.active_window_id = Some(wid.clone());
                                 self.controller.active_window_id = Some(wid.clone());
                                 self.controller.get_engine_mut().promote_to_recent(&wid);

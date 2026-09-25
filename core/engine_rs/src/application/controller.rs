@@ -327,10 +327,40 @@ impl RavenController {
         self.last_known_layout = confirmed_layout;
 
         self.engine.current_workspaces = workspaces;
-        self.engine.current_windows = windows
-            .into_iter()
-            .map(|w| (w.window_id.clone(), w))
-            .collect();
+
+        // ── Fusión defensiva de current_windows ──────────────────────────────────────
+        // NO reemplazamos completamente current_windows con el payload recibido.
+        // KWin puede enviar un payload que omita ventanas de otros escritorios o monitores
+        // no activos en este momento, lo que causaría evicción falsa de ventanas tileadas.
+        //
+        // Estrategia:
+        //   1. Identificar los workspaces cubiertos por este payload.
+        //   2. Eliminar de current_windows SOLO las ventanas cuyos workspaces coincidan
+        //      con el payload actual y que ya no vengan reportadas.
+        //   3. Insertar/actualizar todas las ventanas del payload.
+        {
+            // Workspaces reportados en este payload (fuente de verdad para esos ws)
+            let payload_window_ids: std::collections::HashSet<String> =
+                windows.iter().map(|w| w.window_id.clone()).collect();
+            let payload_workspace_ids: std::collections::HashSet<String> =
+                windows.iter().map(|w| w.workspace_id.clone()).collect();
+
+            // Eliminar solo las ventanas que pertenecen a workspaces reportados y ya no están
+            self.engine.current_windows.retain(|id, existing_win| {
+                // Si la ventana pertenece a un workspace reportado en este payload y ya no está → eliminar
+                if payload_workspace_ids.contains(&existing_win.workspace_id) {
+                    return payload_window_ids.contains(id);
+                }
+                // Si la ventana pertenece a un workspace NO reportado → conservar (otro escritorio/monitor)
+                true
+            });
+
+            // Insertar/actualizar todas las ventanas del payload
+            for win in windows {
+                self.engine.current_windows.insert(win.window_id.clone(), win);
+            }
+        }
+
         Ok(commands)
     }
 

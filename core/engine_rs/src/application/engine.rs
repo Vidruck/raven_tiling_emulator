@@ -71,7 +71,8 @@ impl TilingEngine {
     }
 
     /// Debounce duration in milliseconds to avoid excessive history updates.
-    pub const DEBOUNCE_DURATION_MS: u64 = 100;
+    /// 300ms — suficientemente largo para ignorar eventos transitorios de paneles y popups de Plasma.
+    pub const DEBOUNCE_DURATION_MS: u64 = 300;
 
     /// Checks whether enough time has passed since the last history update.
     fn should_update_history(&self) -> bool {

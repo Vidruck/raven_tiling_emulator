@@ -930,10 +930,14 @@ Item {
                         }
 
                         // Icono SVG nativo ocupando el espacio completo
+                        // Blindaje: solo cargar imagen si iconKey no está vacío para evitar "Invalid empty URL"
                         Image {
                             anchors.fill: parent
                             anchors.margins: isActive ? 1 : (layoutMa.containsMouse ? 0 : 2)
-                            source: Qt.resolvedUrl("../assets/icon_layouts/" + modelData.iconKey + "_" + iconSuffix + ".svg")
+                            source: (modelData.iconKey && modelData.iconKey.length > 0)
+                                ? Qt.resolvedUrl("../assets/icon_layouts/" + modelData.iconKey + "_" + iconSuffix + ".svg")
+                                : ""
+                            visible: (modelData.iconKey && modelData.iconKey.length > 0) && status === Image.Ready
                             sourceSize.width: 72
                             sourceSize.height: 72
                             smooth: true
@@ -944,6 +948,14 @@ Item {
                             Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutQuad } }
                             Behavior on opacity { NumberAnimation { duration: 120 } }
                             Behavior on anchors.margins { NumberAnimation { duration: 120 } }
+                        }
+                        // Fallback: icono genérico de Kirigami si el SVG no está disponible
+                        Kirigami.Icon {
+                            anchors.fill: parent
+                            anchors.margins: isActive ? 3 : (layoutMa.containsMouse ? 2 : 5)
+                            source: "view-grid"
+                            visible: !(modelData.iconKey && modelData.iconKey.length > 0)
+                            opacity: (layoutMa.containsMouse || isActive) ? 1.0 : 0.7
                         }
 
                         ToolTip.visible: layoutMa.containsMouse

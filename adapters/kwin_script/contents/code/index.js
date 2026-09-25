@@ -50,7 +50,12 @@ function initDBusBridge() {
   });
 
   workspace.windowRemoved.connect(function (w) {
-    requestStateSync();
+    // Blindaje: solo sincronizar estado si la ventana eliminada era una ventana manejable
+    // (no popups de panel, tooltips, menús de Plasma, etc.)
+    // Los menús de panel no son `managed`, por lo que se filtran aquí.
+    if (w && isManageable(w)) {
+      requestStateSync();
+    }
   });
 
   if (workspace.windowActivated) {

@@ -163,7 +163,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
     cancelWindowAnimation(windowId);
 
     if (durationMs <= 0) {
-        durationMs = 60; // 250ms para un movimiento súper rápido pero fluido
+        durationMs = 150; // Transición rápida y orgánica (150ms)
     }
 
     QEasingCurve curve = parseEasing(easingName);
@@ -171,18 +171,42 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
     uint meta = 0;
     setMetaData(SourceAnchor, Anchor::Left | Anchor::Top, meta);
 
-    // Animación de posición y geometría relativa usando AnimationEffect de KWin
-    quint64 animId = animate(w,
-                             KWin::AnimationEffect::Position,
-                             meta,
-                             std::chrono::milliseconds(durationMs),
-                             KWin::FPx2(0.0, 0.0),
-                             curve,
-                             0,
-                             KWin::FPx2(startRect.x() - targetRect.x(), startRect.y() - targetRect.y()));
+    // 1. Animación de posición (traslación desde startRect hacia targetRect)
+    quint64 posAnim = animate(w,
+                              KWin::AnimationEffect::Position,
+                              meta,
+                              std::chrono::milliseconds(durationMs),
+                              KWin::FPx2(0.0, 0.0),
+                              curve,
+                              0,
+                              KWin::FPx2(startRect.x() - targetRect.x(), startRect.y() - targetRect.y()));
 
-    if (animId != 0) {
-        m_activeAnimations[windowId].append(animId);
+    if (posAnim != 0) {
+        m_activeAnimations[windowId].append(posAnim);
+    }
+
+    // 2. Animación de estiramiento / redimensionamiento dinámico (Scale)
+    // Se interpola la escala desde (startW / targetW, startH / targetH) hacia (1.0, 1.0)
+    if (targetRect.width() > 0.0 && targetRect.height() > 0.0 &&
+        startRect.width() > 0.0 && startRect.height() > 0.0) {
+        qreal scaleX = startRect.width() / targetRect.width();
+        qreal scaleY = startRect.height() / targetRect.height();
+
+        // Solo disparar animación de escala si las dimensiones difieren perceptiblemente
+        if (qAbs(scaleX - 1.0) > 0.005 || qAbs(scaleY - 1.0) > 0.005) {
+            quint64 scaleAnim = animate(w,
+                                        KWin::AnimationEffect::Scale,
+                                        meta,
+                                        std::chrono::milliseconds(durationMs),
+                                        KWin::FPx2(1.0, 1.0),
+                                        curve,
+                                        0,
+                                        KWin::FPx2(scaleX, scaleY));
+
+            if (scaleAnim != 0) {
+                m_activeAnimations[windowId].append(scaleAnim);
+            }
+        }
     }
 }
 
