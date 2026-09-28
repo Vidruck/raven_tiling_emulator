@@ -917,11 +917,26 @@ function initDBusBridge() {
   });
 
   workspace.windowRemoved.connect(function (w) {
-    // Blindaje: solo sincronizar estado si la ventana eliminada era una ventana manejable
-    // (no popups de panel, tooltips, menús de Plasma, etc.)
-    // Los menús de panel no son `managed`, por lo que se filtran aquí.
-    if (w && isManageable(w)) {
-      requestStateSync();
+    // Blindaje: sincronizar si la ventana eliminada era manejable o ya estaba vinculada
+    if (w) {
+      var safeId = getSafeWindowId(w);
+      if (safeId) {
+        try {
+          callDBus(
+            "org.kde.raven.Daemon",
+            "/Events",
+            "org.kde.raven.Events",
+            "windowClosed",
+            safeId,
+            function (response) {
+              if (response && response !== "[]") applyCommands(response);
+            }
+          );
+        } catch (e) {}
+      }
+      if (w.__raven_bound || w.normalWindow || w.dialog || w.utility) {
+        requestStateSync();
+      }
     }
   });
 

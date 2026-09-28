@@ -30,6 +30,10 @@ pub enum KWinBridgeMessage {
         reply: oneshot::Sender<Vec<RavenAction>>,
     },
     BridgeReady,
+    WindowClosed {
+        window_id: String,
+        reply: oneshot::Sender<Vec<RavenAction>>,
+    },
     WindowActivated {
         window_id: Option<String>,
     },
@@ -158,6 +162,24 @@ impl KWinDbusService {
     #[zbus(name = "bridgeReady")]
     async fn bridge_ready(&self) {
         let _ = self.tx.send(KWinBridgeMessage::BridgeReady).await;
+    }
+
+    /// Notifica que una ventana ha sido cerrada y destruida en KWin, eliminándola inmediatamente de la memoria del motor.
+    #[zbus(name = "windowClosed")]
+    async fn window_closed(&self, window_id: String) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = KWinBridgeMessage::WindowClosed {
+            window_id,
+            reply: reply_tx,
+        };
+
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        actions_to_kwin_json(actions)
     }
 
     /// Registra el identificador de la ventana activa enfocada en KWin.

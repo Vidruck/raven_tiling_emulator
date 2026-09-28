@@ -302,8 +302,17 @@ impl TilingEngine {
     /// # Parámetros
     /// * `current_windows` - Estado actual de ventanas activas reportadas por el compositor.
     pub fn update_history(&mut self, current_windows: &[WindowNode]) -> bool {
-        // Debounce: skip if called too frequently
-        if !self.should_update_history() {
+        // Detectar si hay ventanas nuevas o removidas
+        let has_new_or_removed = current_windows.iter().any(|w| {
+            !w.is_floating
+                && !self.dynamic_floating_windows.contains(&w.window_id)
+                && !self.window_history.contains(&w.window_id)
+        }) || self.window_history.iter().any(|id| {
+            !current_windows.iter().any(|w| &w.window_id == id)
+        });
+
+        // Debounce: solo omitir si la estructura de ventanas no ha cambiado y se llamó con demasiada frecuencia
+        if !has_new_or_removed && !self.should_update_history() {
             return false;
         }
         let now = std::time::Instant::now();

@@ -101,8 +101,8 @@ print_header() {
   ██║  ██║ ██║  ██║  ╚████╔╝  ███████╗ ██║ ╚████║
   ╚═╝  ╚═╝ ╚═╝  ╚═╝   ╚═══╝   ╚══════╝ ╚═╝  ╚═══╝
 EOF
-    echo -e "${ACCENT}${BOLD}              🐦  — Tiling Emulator —  🐦${RESET}"
-    echo -e "${PRIMARY}${BOLD}           v3.4 — Suite de Gestión Interactiva ${RESET}"
+    echo -e "${ACCENT}${BOLD}            🐦  — Tiling Emulator —  🐦${RESET}"
+    echo -e "${PRIMARY}${BOLD}               - Menu de Instalación -${RESET}"
     echo -e "${MUTED} Engine: Native Rust | Host: KDE Plasma 6 (Wayland) | IPC: Single-Trip D-Bus${RESET}\n"
 }
 
@@ -262,7 +262,6 @@ EOF
         log_info "Configurando y compilando Efecto Nativo de KWin (adapters/kwin_effect)..."
         cmake -B "$SOURCE_DIR/adapters/kwin_effect/build" -S "$SOURCE_DIR/adapters/kwin_effect" -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 || true
         if cmake --build "$SOURCE_DIR/adapters/kwin_effect/build" -j"$num_cores" >/dev/null 2>&1; then
-            # El path de salida de kcoreaddons_add_plugin es kwin/effects/plugins/ dentro del build dir
             local EFFECT_SO="$SOURCE_DIR/adapters/kwin_effect/build/kwin/effects/plugins/kwin4_effect_raven.so"
             if [ ! -f "$EFFECT_SO" ] && [ -f "$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so" ]; then
                 EFFECT_SO="$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so"
@@ -271,34 +270,25 @@ EOF
             local SYS_PLUGIN_DIR_ALT="/usr/lib/qt6/plugins/kwin/effects/plugins"
 
             if [ -f "$EFFECT_SO" ]; then
-                log_info "Instalando binario del efecto KWin de forma segura (sin recarga en caliente)..."
+                log_info "Instalando binario del efecto KWin de forma segura (instalación atómica)..."
 
                 # ── Blindaje anti-crash Plasma 6 ──────────────────────────────────────────
-                # PASO 1: Desactivar el efecto PRIMERO para que KWin lo libere de memoria
-                kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled false 2>/dev/null || true
-
-                # PASO 2: Solo reconfigurar KWin si está activo. Esperar más tiempo para que libere la .so
-                if qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1; then
-                    sleep 1.2  # Espera suficiente para que KWin descargue el plugin antes de copiar
-                else
-                    sleep 0.5
-                fi
-
-                # PASO 3: Copiar el binario (ya liberado por KWin)
-                if sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR/" 2>/dev/null || sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/" 2>/dev/null; then
-                    log_success "Plugin de efecto instalado en el sistema"
-                else
-                    log_warning "No se pudo instalar en path del sistema. Intentando ~/.local..."
-                    mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
-                    cp -f "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
-                    cp -f "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
-                fi
-
-                # PASO 4: Rehabilitar el efecto y reconfigurar KWin
-                sleep 0.3
+                # En Plasma 6 Wayland, invocar 'reconfigure' de KWin o sobrescribir un inode .so en caliente
+                # mientras KWin lo tiene abierto mapeado en memoria (mmap) causa segfaults inmediatos.
+                # 'install' crea un nuevo inode atómicamente para que el proceso en ejecución mantenga su mapeo intacto.
                 kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
-                qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
-                log_success "Efecto Nativo de KWin (kwin4_effect_raven) compilado y activado"
+
+                if sudo install -m 755 "$EFFECT_SO" "$SYS_PLUGIN_DIR/kwin4_effect_raven.so" 2>/dev/null || sudo install -m 755 "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/kwin4_effect_raven.so" 2>/dev/null; then
+                    log_success "Plugin de efecto instalado en el sistema ($SYS_PLUGIN_DIR/kwin4_effect_raven.so)"
+                else
+                    log_warning "No se pudo instalar en path del sistema. Instalando en ~/.local..."
+                    mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
+                    install -m 755 "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
+                    install -m 755 "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
+                    log_success "Plugin de efecto instalado localmente en ~/.local"
+                fi
+
+                log_success "Efecto Nativo de KWin (kwin4_effect_raven) desplegado y habilitado en kwinrc"
             fi
         else
             log_warning "No se pudo compilar el Efecto Nativo de KWin C++ (fallback grácil a animaciones estándar)"
@@ -446,28 +436,19 @@ do_build_kwin_effect() {
         fi
         local SYS_PLUGIN_DIR="/usr/lib64/qt6/plugins/kwin/effects/plugins"
         local SYS_PLUGIN_DIR_ALT="/usr/lib/qt6/plugins/kwin/effects/plugins"
-
-        # Blindaje anti-crash Plasma 6: Desactivar efecto antes de reemplazar binario en caliente
-        kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled false 2>/dev/null || true
-        qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
-        sleep 0.4
-
-        log_info "Instalando módulo en el directorio de plugins de KWin (requiere sudo)..."
+        log_info "Instalando módulo en el directorio de plugins de KWin (instalación atómica)..."
         if [ -f "$EFFECT_SO" ]; then
-            if sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR/" || sudo cp -f "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/"; then
-                log_success "Plugin instalado en el directorio del sistema"
+            kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
+            if sudo install -m 755 "$EFFECT_SO" "$SYS_PLUGIN_DIR/kwin4_effect_raven.so" 2>/dev/null || sudo install -m 755 "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/kwin4_effect_raven.so" 2>/dev/null; then
+                log_success "Plugin instalado atómicamente en el directorio del sistema"
             else
                 mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
-                cp -f "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
-                cp -f "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/" 2>/dev/null || true
+                install -m 755 "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
+                install -m 755 "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
+                log_success "Plugin instalado localmente en ~/.local"
             fi
+            log_success "Efecto Nativo de KWin (kwin4_effect_raven) desplegado y activado en kwinrc"
         fi
-        
-        # Rehabilitar efecto en KWin de forma segura
-        sleep 0.2
-        kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
-        qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
-        log_success "Efecto Nativo de KWin (kwin4_effect_raven) instalado y activado en KWin 6"
     else
         log_error "No se encontró el directorio $SOURCE_DIR/adapters/kwin_effect"
     fi
@@ -535,7 +516,6 @@ do_uninstall() {
     rm -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so"
     sudo rm -f "/usr/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" "/usr/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
     kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled false 2>/dev/null || true
-    qdbus6 org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
     rm -rf "$HOME/.local/lib/qt6/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
     rm -rf "$HOME/.local/lib64/qt6/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true
     rm -rf "$HOME/.local/share/qml/org/kde/plasma/ravenlauncher" 2>/dev/null || true

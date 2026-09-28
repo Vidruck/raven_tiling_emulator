@@ -222,6 +222,10 @@ impl CompositorBackend for KWinBackend {
                         let mut geom_guard = last_known_geoms_clone.write().await;
                         geom_guard.insert(window_id, Rect::new(x, y, width, height));
                     }
+                    KWinBridgeMessage::WindowClosed { window_id, reply } => {
+                        let _ = event_tx.send(CompositorEvent::WindowClosed(window_id)).await;
+                        let _ = reply.send(Vec::new());
+                    }
                     KWinBridgeMessage::BridgeReady => {}
                 }
             }

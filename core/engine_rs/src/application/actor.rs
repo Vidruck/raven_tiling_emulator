@@ -291,20 +291,13 @@ impl RavenControllerActor {
                             }
                         }
 
-                        // Preservar la bandera de flotación dinámica y maximización si Rust o KWin las gestionan
+                        // Sincronizar la bandera de flotación dinámica y maximización
                         for win in &mut windows {
                             if win.is_maximized {
                                 self.controller.get_engine_mut().maximized_windows.insert(win.window_id.clone());
-                            }
-
-                            if self
-                                .controller
-                                .get_engine()
-                                .maximized_windows
-                                .contains(&win.window_id)
-                            {
-                                win.is_maximized = true;
                                 win.is_floating = true;
+                            } else {
+                                self.controller.get_engine_mut().maximized_windows.remove(&win.window_id);
                             }
 
                             if self
@@ -372,10 +365,10 @@ impl RavenControllerActor {
                                 format!("{}||{}", out_name, desk_name)
                             };
 
-                            let is_max = win.max || self.controller.get_engine().maximized_windows.contains(&win.id);
+                            let is_max = win.max;
                             if win.max {
                                 self.controller.get_engine_mut().maximized_windows.insert(win.id.clone());
-                            } else if !win.max && !win.f {
+                            } else {
                                 self.controller.get_engine_mut().maximized_windows.remove(&win.id);
                             }
 
@@ -476,6 +469,25 @@ impl RavenControllerActor {
                     KWinBridgeMessage::BridgeReady => {
                         self.last_payload_json.clear();
                         self.controller.reset_state();
+                    }
+                    KWinBridgeMessage::WindowClosed { window_id, reply } => {
+                        self.controller.clear_window_flapping(&window_id);
+                        let engine = self.controller.get_engine_mut();
+                        engine.current_windows.remove(&window_id);
+                        engine.window_history.retain(|id| id != &window_id);
+                        engine.spatial_order.retain(|id| id != &window_id);
+                        engine.dynamic_floating_windows.retain(|id| id != &window_id);
+                        engine.maximized_windows.retain(|id| id != &window_id);
+                        engine.minimized_windows.retain(|id| id != &window_id);
+                        if self.active_window_id.as_deref() == Some(&window_id) {
+                            self.active_window_id = None;
+                            self.controller.active_window_id = None;
+                        }
+                        let mut commands = Vec::new();
+                        if let Ok(recalc_cmds) = self.controller.commit_layout() {
+                            commands.extend(recalc_cmds);
+                        }
+                        let _ = reply.send(commands);
                     }
                     KWinBridgeMessage::WindowActivated { window_id } => {
                         if let Some(ref id) = window_id {
@@ -603,27 +615,33 @@ impl RavenControllerActor {
                     }
                     KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height } => {
                         // Auditoría de geometría aplicada: comparar con target calculado
-                        if let Some(target) = self.controller.get_target_rect_for_window(&window_id) {
-                            let matches = (target.x as i32 - x).abs() <= 2
-                                && (target.y as i32 - y).abs() <= 2
-                                && (target.width as i32 - width).abs() <= 2
-                                && (target.height as i32 - height).abs() <= 2;
+                        let is_special_mode = self.controller.get_engine().maximized_windows.contains(&window_id)
+                            || self.controller.get_engine().dynamic_floating_windows.contains(&window_id)
+                            || self.controller.get_engine().current_windows.get(&window_id).map(|w| w.is_floating || w.is_minimized || w.is_maximized).unwrap_or(false);
 
-                            if !matches {
-                                tracing::info!(
-                                    "[AUDIT] Geometría divergente en '{}' (Esperado: {}x{}+{}+{}, Aplicado: {}x{}+{}+{}). Rectificando...",
-                                    window_id, target.width, target.height, target.x, target.y, width, height, x, y
-                                );
-                                if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
-                                    if !rectify_cmds.is_empty() {
-                                        let backend = self.backend.clone();
-                                        tokio::spawn(async move {
-                                            let _ = backend.apply_actions(rectify_cmds).await;
-                                        });
+                        if !is_special_mode {
+                            if let Some(target) = self.controller.get_target_rect_for_window(&window_id) {
+                                let matches = (target.x as i32 - x).abs() <= 2
+                                    && (target.y as i32 - y).abs() <= 2
+                                    && (target.width as i32 - width).abs() <= 2
+                                    && (target.height as i32 - height).abs() <= 2;
+
+                                if !matches {
+                                    tracing::info!(
+                                        "[AUDIT] Geometría divergente en '{}' (Esperado: {}x{}+{}+{}, Aplicado: {}x{}+{}+{}). Rectificando...",
+                                        window_id, target.width, target.height, target.x, target.y, width, height, x, y
+                                    );
+                                    if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
+                                        if !rectify_cmds.is_empty() {
+                                            let backend = self.backend.clone();
+                                            tokio::spawn(async move {
+                                                let _ = backend.apply_actions(rectify_cmds).await;
+                                            });
+                                        }
                                     }
+                                } else {
+                                    tracing::debug!("[AUDIT] Geometría verificada correctamente para '{}'.", window_id);
                                 }
-                            } else {
-                                tracing::debug!("[AUDIT] Geometría verificada correctamente para '{}'.", window_id);
                             }
                         }
                     }
