@@ -9,5 +9,5 @@ eframe = { version = "0.27", default-features = false, features = ["wayland", "d
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 raven_core = { path = "../crates/raven_core" }
-notify = "6.1.1"
-rfd = "0.14"
+notify = "8.0.0"
+rfd = "0.17.2"

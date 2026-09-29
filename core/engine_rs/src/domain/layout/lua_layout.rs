@@ -136,10 +136,10 @@ impl LayoutStrategy for LuaLayoutStrategy {
         // Parsear resultado: un mapa de id_ventana -> {x, y, w, h}
         for (win_id, rect_tbl) in result_tbl.pairs::<String, Table>().flatten() {
             if let (Ok(x), Ok(y), Ok(w), Ok(h)) = (
-                rect_tbl.get::<_, f64>("x"),
-                rect_tbl.get::<_, f64>("y"),
-                rect_tbl.get::<_, f64>("w"),
-                rect_tbl.get::<_, f64>("h"),
+                rect_tbl.get::<f64>("x"),
+                rect_tbl.get::<f64>("y"),
+                rect_tbl.get::<f64>("w"),
+                rect_tbl.get::<f64>("h"),
             ) {
                 layout_map.insert(
                     win_id,
