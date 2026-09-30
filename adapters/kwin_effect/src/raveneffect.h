@@ -97,6 +97,11 @@ private Q_SLOTS:
      */
     void slotWindowAdded(KWin::EffectWindow *w);
 
+    /**
+     * @brief Slot conectado a KWin::effects->windowClosed para purgar inmediatamente animaciones huérfanas.
+     */
+    void slotWindowClosed(KWin::EffectWindow *w);
+
 private:
     /**
      * @brief Busca de manera segura un EffectWindow en el stack usando su ID interno.

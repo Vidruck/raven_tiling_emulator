@@ -35,6 +35,7 @@ RavenEffect::RavenEffect()
 
     if (KWin::effects) {
         connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
+        connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &RavenEffect::slotWindowClosed);
     }
 }
 
@@ -42,6 +43,7 @@ RavenEffect::~RavenEffect()
 {
     if (KWin::effects) {
         disconnect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
+        disconnect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &RavenEffect::slotWindowClosed);
     }
     QDBusConnection dbus = QDBusConnection::sessionBus();
     dbus.unregisterObject(QStringLiteral("/Effects/Raven"));
@@ -101,6 +103,24 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
     if (m_dbusAdaptor) {
         Q_EMIT m_dbusAdaptor->WindowBirthStarted(windowId);
     }
+}
+
+void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
+{
+    if (!w) {
+        return;
+    }
+
+    QString windowId = w->internalId().toString();
+    if (!windowId.isEmpty()) {
+        cancelWindowAnimation(windowId);
+    }
+
+    QString hexId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(w), 0, 16);
+    cancelWindowAnimation(hexId);
+
+    QString decId = QString::number(reinterpret_cast<quintptr>(w));
+    cancelWindowAnimation(decId);
 }
 
 
@@ -212,6 +232,10 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
 
 void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
 {
+    if (jsonPayload.isEmpty() || jsonPayload == QLatin1String("[]") || jsonPayload == QLatin1String("{}")) {
+        return;
+    }
+
     QJsonDocument doc = QJsonDocument::fromJson(jsonPayload.toUtf8());
     if (!doc.isObject()) {
         return;
@@ -219,6 +243,9 @@ void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
 
     QJsonObject root = doc.object();
     QJsonArray anims = root.value(QStringLiteral("animations")).toArray();
+    if (anims.isEmpty()) {
+        return;
+    }
 
     for (const auto &val : anims) {
         if (!val.isObject()) continue;

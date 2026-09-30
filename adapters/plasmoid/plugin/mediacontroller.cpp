@@ -37,16 +37,18 @@ MediaController::MediaController(QObject *parent)
     m_positionTimer->setInterval(1000);
     connect(m_positionTimer, &QTimer::timeout, this, &MediaController::updatePosition);
 
-    QTimer *discoveryTimer = new QTimer(this);
-    discoveryTimer->setInterval(3000);
-    connect(discoveryTimer, &QTimer::timeout, this, [this]() {
-        if (!m_hasPlayer || !isPlaying()) {
+    m_discoveryTimer = new QTimer(this);
+    m_discoveryTimer->setInterval(3000);
+    connect(m_discoveryTimer, &QTimer::timeout, this, [this]() {
+        if (m_active && (!m_hasPlayer || !isPlaying())) {
             findActivePlayer();
         }
     });
-    discoveryTimer->start();
 
-    findActivePlayer();
+    if (m_active) {
+        m_discoveryTimer->start();
+        findActivePlayer();
+    }
 }
 
 /**
@@ -320,11 +322,28 @@ void MediaController::setActive(bool active)
     m_active = active;
     emit activeChanged();
 
-    if (m_active && m_hasPlayer && isPlaying()) {
-        m_positionTimer->start();
-        queryPositionDirect();
+    if (m_active) {
+        if (!m_hasPlayer || !isPlaying()) {
+            findActivePlayer();
+        }
+        if (m_discoveryTimer) {
+            m_discoveryTimer->start();
+        }
+        if (m_hasPlayer && isPlaying()) {
+            m_positionTimer->start();
+            queryPositionDirect();
+        }
     } else {
-        m_positionTimer->stop();
+        if (m_discoveryTimer) {
+            m_discoveryTimer->stop();
+        }
+        if (m_positionTimer) {
+            m_positionTimer->stop();
+        }
+        if (m_posWatcher) {
+            m_posWatcher->deleteLater();
+            m_posWatcher = nullptr;
+        }
     }
 }
 

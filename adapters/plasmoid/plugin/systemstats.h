@@ -272,7 +272,7 @@ private slots:
     void updateTheme();
 
 private:
-    bool m_active = true;                      ///< Estado de actividad.
+    bool m_active = false;                     ///< Estado de actividad (inactivo por defecto hasta abrirse).
     QTimer *m_timer = nullptr;                 ///< Temporizador de sondeo (intervalo de 2s).
     QFileSystemWatcher *m_themeWatcher = nullptr; ///< Vigilante de archivo para ~/.config/kdeglobals.
     

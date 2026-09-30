@@ -45,6 +45,8 @@ Rectangle {
             anchors.fill: parent
             source: media.artUrl
             fillMode: Image.PreserveAspectCrop
+            sourceSize.width: 440
+            sourceSize.height: 120
             opacity: media.hasPlayer ? (RavenPlugin.RavenTheme.isDark ? 0.22 : 0.14) : 0
             visible: media.artUrl !== ""
             asynchronous: true
@@ -97,6 +99,8 @@ Rectangle {
                     anchors.fill: parent
                     source: media.artUrl
                     fillMode: Image.PreserveAspectCrop
+                    sourceSize.width: 92
+                    sourceSize.height: 92
                     visible: media.artUrl !== "" && status === Image.Ready
                     asynchronous: true
                 }

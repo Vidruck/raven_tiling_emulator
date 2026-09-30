@@ -192,7 +192,7 @@ private:
     /** @brief Envía la petición asíncrona 'Position' a través de D-Bus con timeout de 500ms. */
     void queryPositionDirect();
 
-    bool m_active = true;                      ///< Bandera de actividad del widget.
+    bool m_active = false;                     ///< Bandera de actividad del widget (inactivo por defecto hasta abrirse).
     bool m_hasPlayer = false;                  ///< Existencia de reproductor enlazado.
     QString m_currentService;                  ///< Nombre del servicio D-Bus actual.
     QString m_playerName;                      ///< Nombre del reproductor.
@@ -209,6 +209,7 @@ private:
     bool m_canGoPrevious = true;               ///< Disponibilidad de pista anterior.
 
     QTimer *m_positionTimer = nullptr;         ///< Temporizador de 1s para progreso y extrapolación.
+    QTimer *m_discoveryTimer = nullptr;        ///< Temporizador para descubrimiento de reproductores cuando está activo.
     QDBusPendingCallWatcher *m_posWatcher = nullptr; ///< Observador de llamada asíncrona a D-Bus.
 };
 
