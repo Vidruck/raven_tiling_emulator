@@ -9,6 +9,7 @@
 
 use tokio::sync::{mpsc, oneshot};
 use zbus::interface;
+use zbus::object_server::SignalEmitter;
 
 use raven_core::action::RavenAction;
 use crate::commands::TilingCommand;
@@ -77,13 +78,13 @@ pub struct KWinDbusService {
 }
 
 impl KWinDbusService {
-    async fn dispatch_shortcut(&self, signal_ctxt: &zbus::object_server::SignalContext<'_>, action: &str, payload: i32) -> String {
-        self.dispatch_shortcut_with_str(signal_ctxt, action, payload, None).await
+    async fn dispatch_shortcut(&self, emitter: &SignalEmitter<'_>, action: &str, payload: i32) -> String {
+        self.dispatch_shortcut_with_str(emitter, action, payload, None).await
     }
 
     async fn dispatch_shortcut_with_str(
         &self,
-        signal_ctxt: &zbus::object_server::SignalContext<'_>,
+        emitter: &SignalEmitter<'_>,
         action: &str,
         payload: i32,
         payload_str: Option<String>,
@@ -105,7 +106,7 @@ impl KWinDbusService {
         let response = actions_to_kwin_json(actions);
 
         if response != "[]" {
-            let _ = Self::tiling_commands_pending(signal_ctxt, &response).await;
+            let _ = Self::tiling_commands_pending(emitter, &response).await;
         }
 
         response
@@ -116,7 +117,7 @@ impl KWinDbusService {
 impl KWinDbusService {
     /// Señal emitida a KWin cuando se generan comandos de mosaico asíncronos.
     #[zbus(signal)]
-    pub async fn tiling_commands_pending(signal_ctxt: &zbus::object_server::SignalContext<'_>, commands_json: &str) -> zbus::Result<()>;
+    pub async fn tiling_commands_pending(emitter: &SignalEmitter<'_>, commands_json: &str) -> zbus::Result<()>;
 
     /// Recibe y procesa el estado global de las ventanas, retornando inmediatamente los comandos geométricos.
     #[zbus(name = "syncStateAndUpdateLayout")]
@@ -207,165 +208,165 @@ impl KWinDbusService {
 
     /// Alterna el modo flotante temporal (Quick Peek) para la ventana activa o la especificada.
     #[zbus(name = "toggleFloating")]
-    async fn toggle_floating(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>, window_id: String) -> String {
+    async fn toggle_floating(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>, window_id: String) -> String {
         let wid = if window_id.trim().is_empty() {
             None
         } else {
             Some(window_id)
         };
-        self.dispatch_shortcut_with_str(&signal_ctxt, "toggle_floating", 0, wid).await
+        self.dispatch_shortcut_with_str(&emitter, "toggle_floating", 0, wid).await
     }
 
     /// Alterna el estado maximizado para la ventana activa o la especificada.
     #[zbus(name = "toggleMaximize")]
-    async fn toggle_maximize(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>, window_id: String) -> String {
+    async fn toggle_maximize(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>, window_id: String) -> String {
         let wid = if window_id.trim().is_empty() {
             None
         } else {
             Some(window_id)
         };
-        self.dispatch_shortcut_with_str(&signal_ctxt, "toggle_maximize", 0, wid).await
+        self.dispatch_shortcut_with_str(&emitter, "toggle_maximize", 0, wid).await
     }
 
     /// Minimiza la ventana activa o la especificada.
     #[zbus(name = "minimizeActive")]
-    async fn minimize_active(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>, window_id: String) -> String {
+    async fn minimize_active(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>, window_id: String) -> String {
         let wid = if window_id.trim().is_empty() {
             None
         } else {
             Some(window_id)
         };
-        self.dispatch_shortcut_with_str(&signal_ctxt, "minimize_active", 0, wid).await
+        self.dispatch_shortcut_with_str(&emitter, "minimize_active", 0, wid).await
     }
 
     /// Cierra la ventana activa o la especificada.
     #[zbus(name = "closeActive")]
-    async fn close_active(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>, window_id: String) -> String {
+    async fn close_active(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>, window_id: String) -> String {
         let wid = if window_id.trim().is_empty() {
             None
         } else {
             Some(window_id)
         };
-        self.dispatch_shortcut_with_str(&signal_ctxt, "close_active", 0, wid).await
+        self.dispatch_shortcut_with_str(&emitter, "close_active", 0, wid).await
     }
 
     /// Alterna el estado operativo de activación del motor de mosaico.
     #[zbus(name = "toggleTiling")]
-    async fn toggle_tiling(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "toggle_tiling", 0).await
+    async fn toggle_tiling(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "toggle_tiling", 0).await
     }
 
     /// Incrementa o decrementa la separación (gaps) entre las ventanas.
     #[zbus(name = "incrementGaps")]
-    async fn increment_gaps(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>, amount: i32) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "increment_gaps", amount).await
+    async fn increment_gaps(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>, amount: i32) -> String {
+        self.dispatch_shortcut(&emitter, "increment_gaps", amount).await
     }
 
     /// Incrementa el límite óptimo de ventanas activas en la composición foveal.
     #[zbus(name = "incrementMaster")]
-    async fn increment_master(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "increment_nmaster", 1).await
+    async fn increment_master(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "increment_nmaster", 1).await
     }
 
     /// Decrementa el límite óptimo de ventanas activas en la composición foveal.
     #[zbus(name = "decrementMaster")]
-    async fn decrement_master(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "decrement_nmaster", 1).await
+    async fn decrement_master(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "decrement_nmaster", 1).await
     }
 
     /// Aumenta el ratio de división (split ratio) asimétrica de la espiral BSP.
     #[zbus(name = "increaseRatio")]
-    async fn increase_ratio(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "increase_ratio", 0).await
+    async fn increase_ratio(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "increase_ratio", 0).await
     }
 
     /// Disminuye el ratio de división (split ratio) asimétrica de la espiral BSP.
     #[zbus(name = "decreaseRatio")]
-    async fn decrease_ratio(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "decrease_ratio", 0).await
+    async fn decrease_ratio(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "decrease_ratio", 0).await
     }
 
     /// Envía el foco a la ventana siguiente del mosaico.
     #[zbus(name = "focusNext")]
-    async fn focus_next(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "focus_next", 0).await
+    async fn focus_next(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "focus_next", 0).await
     }
 
     /// Envía el foco a la ventana anterior del mosaico.
     #[zbus(name = "focusPrev")]
-    async fn focus_prev(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "focus_prev", 0).await
+    async fn focus_prev(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "focus_prev", 0).await
     }
 
     /// Envía el foco a la ventana a la izquierda en la topología.
     #[zbus(name = "focusLeft")]
-    async fn focus_left(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "focus_left", 0).await
+    async fn focus_left(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "focus_left", 0).await
     }
 
     /// Envía el foco a la ventana a la derecha en la topología.
     #[zbus(name = "focusRight")]
-    async fn focus_right(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "focus_right", 0).await
+    async fn focus_right(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "focus_right", 0).await
     }
 
     /// Envía el foco a la ventana superior en la topología.
     #[zbus(name = "focusUp")]
-    async fn focus_up(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "focus_up", 0).await
+    async fn focus_up(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "focus_up", 0).await
     }
 
     /// Envía el foco a la ventana inferior en la topología.
     #[zbus(name = "focusDown")]
-    async fn focus_down(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "focus_down", 0).await
+    async fn focus_down(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "focus_down", 0).await
     }
 
     /// Intercambia la ventana activa con la siguiente en la pila.
     #[zbus(name = "swapNext")]
-    async fn swap_next(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "swap_next", 0).await
+    async fn swap_next(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "swap_next", 0).await
     }
 
     /// Intercambia la ventana activa con la anterior en la pila.
     #[zbus(name = "swapPrev")]
-    async fn swap_prev(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "swap_prev", 0).await
+    async fn swap_prev(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "swap_prev", 0).await
     }
 
     /// Migra la ventana activa al monitor siguiente.
     #[zbus(name = "migrateActiveToScreen")]
-    async fn migrate_active_to_screen(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "migrate_active_to_screen", 0).await
+    async fn migrate_active_to_screen(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "migrate_active_to_screen", 0).await
     }
 
     /// Migra la ventana activa al monitor anterior.
     #[zbus(name = "migrateActiveToPrevScreen")]
-    async fn migrate_active_to_prev_screen(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "migrate_active_to_prev_screen", 0).await
+    async fn migrate_active_to_prev_screen(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "migrate_active_to_prev_screen", 0).await
     }
 
     /// Migra la ventana activa al escritorio virtual siguiente.
     #[zbus(name = "migrateActiveToDesktop")]
-    async fn migrate_active_to_desktop(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "migrate_active_to_desktop", 0).await
+    async fn migrate_active_to_desktop(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "migrate_active_to_desktop", 0).await
     }
 
     /// Migra la ventana activa al escritorio virtual anterior.
     #[zbus(name = "migrateActiveToPrevDesktop")]
-    async fn migrate_active_to_prev_desktop(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "migrate_active_to_prev_desktop", 0).await
+    async fn migrate_active_to_prev_desktop(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "migrate_active_to_prev_desktop", 0).await
     }
 
     /// Cicla al siguiente layout (estrategia de tiling).
     #[zbus(name = "cycleLayout")]
-    async fn cycle_layout(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>) -> String {
-        self.dispatch_shortcut(&signal_ctxt, "cycle_layout", 0).await
+    async fn cycle_layout(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "cycle_layout", 0).await
     }
 
     /// Asigna directamente el algoritmo de mosaico para el área de trabajo activa.
     #[zbus(name = "setLayoutForCurrentWorkspace")]
-    async fn set_layout_for_current_workspace(&self, #[zbus(signal_context)] signal_ctxt: zbus::object_server::SignalContext<'_>, layout_name: String) -> String {
+    async fn set_layout_for_current_workspace(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>, layout_name: String) -> String {
         let (reply_tx, reply_rx) = oneshot::channel();
         let msg = KWinBridgeMessage::SetLayoutForCurrentWorkspace {
             layout_name,
@@ -380,7 +381,7 @@ impl KWinDbusService {
         let response = actions_to_kwin_json(actions);
 
         if response != "[]" {
-            let _ = Self::tiling_commands_pending(&signal_ctxt, &response).await;
+            let _ = Self::tiling_commands_pending(&emitter, &response).await;
         }
 
         response

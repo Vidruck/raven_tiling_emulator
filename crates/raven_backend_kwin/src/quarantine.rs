@@ -82,12 +82,15 @@ pub enum StartupMode {
     Warm,
 }
 
+/// Tupla que representa la geometría `(x, y, ancho, alto)` de una ventana.
+pub type WindowGeometry = (i32, i32, i32, i32);
+
 /// Gestor nativo de cuarentena, filtrado y auditoría para KWin.
 #[derive(Clone)]
 pub struct KWinQuarantineManager {
     seen_classes: Arc<Mutex<HashSet<String>>>,
     active_quarantines: Arc<Mutex<HashSet<String>>>,
-    last_geometry_seen: Arc<Mutex<std::collections::HashMap<String, (i32, i32, i32, i32)>>>,
+    last_geometry_seen: Arc<Mutex<std::collections::HashMap<String, WindowGeometry>>>,
 }
 
 impl Default for KWinQuarantineManager {

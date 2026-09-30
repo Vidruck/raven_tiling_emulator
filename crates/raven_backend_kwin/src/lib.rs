@@ -25,7 +25,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 use tracing::info;
-use zbus::{Connection, ConnectionBuilder};
+use zbus::Connection;
+use zbus::connection::Builder;
 
 use raven_core::action::RavenAction;
 use raven_core::backend::{BackendError, CompositorBackend, CompositorEvent};
@@ -102,7 +103,7 @@ impl KWinBackend {
 
         let dbus_service = KWinDbusService { tx: bridge_tx };
 
-        let conn = ConnectionBuilder::session()
+        let conn = Builder::session()
             .map_err(|e| BackendError::ConnectionFailed(e.to_string()))?
             .name("org.kde.raven.Daemon")
             .map_err(|e| BackendError::ConnectionFailed(e.to_string()))?
@@ -235,7 +236,7 @@ impl CompositorBackend for KWinBackend {
         let is_registered = self.connection.read().await.is_some();
         if !is_registered {
             let dbus_service = KWinDbusService { tx: bridge_tx };
-            let conn = ConnectionBuilder::session()
+            let conn = Builder::session()
                 .map_err(|e| BackendError::ConnectionFailed(e.to_string()))?
                 .name("org.kde.raven.Daemon")
                 .map_err(|e| BackendError::ConnectionFailed(e.to_string()))?
