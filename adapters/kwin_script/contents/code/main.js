@@ -985,32 +985,6 @@ function initDBusBridge() {
     requestStateSync();
   });
 
-  if (workspace.screensChanged) {
-    workspace.screensChanged.connect(function () {
-      requestStateSync();
-    });
-  }
-
-  // Hook para detectar cuando Plasma Panels/Docks terminan de cargar o cambian de tamaño/geometría
-  if (workspace.clientAreaChanged) {
-    workspace.clientAreaChanged.connect(function () {
-      requestStateSync();
-    });
-  }
-
-  // Conectar cambios de geometría en cada pantalla/output individual
-  try {
-    var outs = workspace.screens || [];
-    for (var oi = 0; oi < outs.length; oi++) {
-      var o = outs[oi];
-      if (o && o.geometryChanged) {
-        o.geometryChanged.connect(function () {
-          requestStateSync();
-        });
-      }
-    }
-  } catch (eOut) { }
-
   // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (100ms)
   setKWinTimeout(function () {
     try {
