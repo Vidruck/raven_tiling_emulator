@@ -112,19 +112,21 @@ impl eframe::App for RavenGuiApp {
         let accent = self.kde_palette.selection_bg;
 
 
-        // ── Layout Principal ──
-        ui.horizontal(|ui| {
-            
-            // ── Panel Lateral Izquierdo ──
-            egui::Frame::new()
-                .fill(self.kde_palette.window_bg)
-                .inner_margin(egui::Margin::same(12))
-                .outer_margin(egui::Margin::same(8))
-                .corner_radius(16.0)
-                .stroke(egui::Stroke::NONE)
-                .show(ui, |ui| {
-                    ui.set_width(210.0);
-                    ui.set_height(ui.available_height());
+        // ── Panel Lateral Izquierdo ──
+        egui::Panel::left("navigation_rail")
+            .resizable(false)
+            .exact_size(210.0)
+            .show_separator_line(false)
+            .frame(
+                egui::Frame::new()
+                    .fill(self.kde_palette.window_bg)
+                    .inner_margin(egui::Margin::same(12))
+                    .outer_margin(egui::Margin::same(8))
+                    .corner_radius(16.0)
+                    .stroke(egui::Stroke::NONE)
+            )
+            .show(ui, |ui| {
+                ui.set_height(ui.available_height()); // Fuerza a ocupar toda la altura
                 ui.add_space(8.0);
                 ui.vertical_centered(|ui| {
                     ui.heading(
@@ -233,18 +235,20 @@ impl eframe::App for RavenGuiApp {
                         ui.label(egui::RichText::new(&self.status_msg).size(12.0).weak());
                     }
                 });
-            }); // Fin del panel izquierdo
+            });
 
-            // ── Panel Central ──
-            egui::Frame::new()
-                .fill(self.kde_palette.window_bg)
-                .inner_margin(egui::Margin::same(16))
-                .outer_margin(egui::Margin::same(8))
-                .corner_radius(16.0)
-                .stroke(egui::Stroke::NONE)
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.set_height(ui.available_height());
+        // ── Panel Central ──
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::new()
+                    .fill(self.kde_palette.window_bg)
+                    .inner_margin(egui::Margin::same(16))
+                    .outer_margin(egui::Margin::same(8))
+                    .corner_radius(16.0)
+                    .stroke(egui::Stroke::NONE)
+            )
+            .show(ui, |ui| {
+                ui.set_height(ui.available_height()); // Fuerza a ocupar toda la altura
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     match self.active_tab {
                         NavTab::Layouts => tabs::layouts_tab::show(&mut self.config, ui, accent, &self.kde_palette),
@@ -262,8 +266,7 @@ impl eframe::App for RavenGuiApp {
                         NavTab::About => tabs::about_tab::show(ui, accent),
                     }
                 });
-            }); // Fin del panel central
-        }); // Fin del layout horizontal
+            });
     }
 
 }
