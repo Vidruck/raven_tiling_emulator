@@ -71,6 +71,11 @@ impl RavenGuiApp {
 }
 
 impl eframe::App for RavenGuiApp {
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        // Fondo transparente para evitar líneas blancuzcas o fondos no deseados de eframe
+        [0.0, 0.0, 0.0, 0.0]
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         if let Some(ref rx) = self.rx_theme {
@@ -107,19 +112,19 @@ impl eframe::App for RavenGuiApp {
         let accent = self.kde_palette.selection_bg;
 
 
-        // ── Panel Lateral Izquierdo ──
-        egui::Panel::left("navigation_rail")
-            .resizable(false)
-            .exact_size(210.0)
-            .frame(
-                egui::Frame::new()
-                    .fill(self.kde_palette.window_bg)
-                    .inner_margin(egui::Margin::same(12))
-                    .outer_margin(egui::Margin::same(8))
-                    .corner_radius(16.0)
-                    .stroke(egui::Stroke::NONE)
-            )
-            .show(ui, |ui| {
+        // ── Layout Principal ──
+        ui.horizontal(|ui| {
+            
+            // ── Panel Lateral Izquierdo ──
+            egui::Frame::new()
+                .fill(self.kde_palette.window_bg)
+                .inner_margin(egui::Margin::same(12))
+                .outer_margin(egui::Margin::same(8))
+                .corner_radius(16.0)
+                .stroke(egui::Stroke::NONE)
+                .show(ui, |ui| {
+                    ui.set_width(210.0);
+                    ui.set_height(ui.available_height());
                 ui.add_space(8.0);
                 ui.vertical_centered(|ui| {
                     ui.heading(
@@ -228,19 +233,18 @@ impl eframe::App for RavenGuiApp {
                         ui.label(egui::RichText::new(&self.status_msg).size(12.0).weak());
                     }
                 });
-            });
+            }); // Fin del panel izquierdo
 
-        // ── Panel Central ──
-        egui::CentralPanel::default()
-            .frame(
-                egui::Frame::new()
-                    .fill(self.kde_palette.window_bg)
-                    .inner_margin(egui::Margin::same(16))
-                    .outer_margin(egui::Margin::same(8))
-                    .corner_radius(16.0)
-                    .stroke(egui::Stroke::NONE)
-            )
-            .show(ui, |ui| {
+            // ── Panel Central ──
+            egui::Frame::new()
+                .fill(self.kde_palette.window_bg)
+                .inner_margin(egui::Margin::same(16))
+                .outer_margin(egui::Margin::same(8))
+                .corner_radius(16.0)
+                .stroke(egui::Stroke::NONE)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.set_height(ui.available_height());
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     match self.active_tab {
                         NavTab::Layouts => tabs::layouts_tab::show(&mut self.config, ui, accent, &self.kde_palette),
@@ -258,14 +262,8 @@ impl eframe::App for RavenGuiApp {
                         NavTab::About => tabs::about_tab::show(ui, accent),
                     }
                 });
-            });
+            }); // Fin del panel central
+        }); // Fin del layout horizontal
     }
 
-    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        let bg = self.kde_palette.window_bg;
-        // Adaptamos el efecto "glass" dinámicamente:
-        // Toma el color de fondo del tema actual y le aplica translucidez (~70% opacidad).
-        // Así se ve oscuro en temas dark y claro en temas light.
-        egui::Color32::from_rgba_unmultiplied(bg.r(), bg.g(), bg.b(), 180).to_normalized_gamma_f32()
-    }
 }
