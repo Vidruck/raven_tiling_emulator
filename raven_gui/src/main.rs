@@ -31,6 +31,6 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "Raven Config",
         options,
-        Box::new(|cc| Box::new(RavenGuiApp::new(cc))),
+        Box::new(|cc| Ok(Box::new(RavenGuiApp::new(cc)))),
     )
 }

@@ -1,7 +1,6 @@
 //! # Estructura y Ciclo de Vida de la Aplicación (`RavenGuiApp`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Administra el estado global de la GUI, carga de configuración JSON,
@@ -72,7 +71,8 @@ impl RavenGuiApp {
 }
 
 impl eframe::App for RavenGuiApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         if let Some(ref rx) = self.rx_theme {
             if rx.try_recv().is_ok() {
                 if let Some(p) = KdePalette::read_from_system() {
@@ -233,10 +233,10 @@ impl eframe::App for RavenGuiApp {
         // ── Panel Central ──
         egui::CentralPanel::default()
             .frame(
-                egui::Frame::none()
+                egui::Frame::new()
                     .fill(self.kde_palette.window_bg)
-                    .inner_margin(egui::Margin::same(16.0))
-                    .outer_margin(egui::Margin::same(8.0))
+                    .inner_margin(egui::Margin::same(16))
+                    .outer_margin(egui::Margin::same(8))
                     .rounding(16.0)
                     .stroke(egui::Stroke::NONE)
             )

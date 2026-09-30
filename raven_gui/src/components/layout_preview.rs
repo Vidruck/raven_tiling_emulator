@@ -191,7 +191,7 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
                 egui::vec2(w - pad * 2.0, h - pad * 2.0),
             );
             painter.rect_filled(inner_rect, 8.0, palette.view_bg);
-            painter.rect_stroke(inner_rect, 8.0, egui::Stroke::new(1.5_f32, center_color));
+            painter.rect_stroke(inner_rect, 8.0, egui::Stroke::new(1.5_f32, center_color), egui::StrokeKind::Inside);
 
             // Cuadrícula decorativa
             let half_w = (w - pad * 2.0 - gap_f) / 2.0;
@@ -344,6 +344,6 @@ pub fn draw_layout_preview(ui: &mut egui::Ui, layout_type: &str, ratio: f32, gap
 
     let pip_rect = egui::Rect::from_min_size(pip_pos, pip_size);
     painter.rect_filled(pip_rect, 6.0, pip_color);
-    painter.rect_stroke(pip_rect, 6.0, egui::Stroke::new(1.0_f32, egui::Color32::WHITE));
+    painter.rect_stroke(pip_rect, 6.0, egui::Stroke::new(1.0_f32, egui::Color32::WHITE), egui::StrokeKind::Inside);
     painter.text(pip_rect.center(), egui::Align2::CENTER_CENTER, "📌 PiP", egui::FontId::monospace(9.5), pip_fg);
 }

@@ -1,7 +1,6 @@
 //! # Pestaña de Algoritmos y Presets de Mosaico (`layouts_tab.rs`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Proporciona la interfaz interactiva para selección de algoritmos (Raven, Tall, Monocle,
@@ -197,7 +196,7 @@ end"#;
 
                 ui.add_space(4.0);
                 if ui.button("📋 Copiar Plantilla al Portapapeles").clicked() {
-                    ui.output_mut(|o| o.copied_text = template_code.to_string());
+                    ui.ctx().copy_text(template_code.to_string());
                 }
                 ui.add_space(4.0);
             });

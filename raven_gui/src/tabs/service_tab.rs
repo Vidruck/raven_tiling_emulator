@@ -73,10 +73,10 @@ pub fn show(
 
             let logs = service_mgr.get_recent_logs();
 
-            egui::Frame::none()
+            egui::Frame::new()
                 .fill(egui::Color32::from_black_alpha(40))
                 .rounding(8.0)
-                .inner_margin(egui::Margin::same(8.0))
+                .inner_margin(egui::Margin::same(8))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     if logs.is_empty() {
