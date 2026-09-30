@@ -72,8 +72,11 @@ impl RavenGuiApp {
 
 impl eframe::App for RavenGuiApp {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        // Fondo transparente para evitar líneas blancuzcas o fondos no deseados de eframe
-        [0.0, 0.0, 0.0, 0.0]
+        let bg = self.kde_palette.window_bg;
+        // Adaptamos el efecto "glass" dinámicamente:
+        // Toma el color de fondo del tema actual y le aplica translucidez (~70% opacidad).
+        // Así se ve oscuro en temas dark y claro en temas light.
+        egui::Color32::from_rgba_unmultiplied(bg.r(), bg.g(), bg.b(), 180).to_normalized_gamma_f32()
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
