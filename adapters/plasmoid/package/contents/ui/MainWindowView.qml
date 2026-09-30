@@ -666,8 +666,13 @@ Item {
                 // ── ISLA 2: APP GRID & BÚSQUEDA ───────────────────────────────
                 Island {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.max(220, Math.min(300, root.height - 520))
+                    Layout.fillHeight: true
                     Layout.minimumHeight: 200
+                    Layout.preferredHeight: {
+                        var rows = (Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 3;
+                        // 38px buscador + 8px espaciado + (filas * 82px) + 20px márgenes de isla
+                        return (rows * 82) + 66;
+                    }
 
                     AppGridView {
                         id: appGridView

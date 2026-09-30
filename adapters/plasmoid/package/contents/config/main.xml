@@ -16,7 +16,7 @@
       <default></default>
     </entry>
     <entry name="gridRows" type="Int">
-      <default>10</default>
+      <default>3</default>
       <min>3</min>
       <max>30</max>
     </entry>

@@ -48,9 +48,12 @@ PlasmoidItem {
         hideOnWindowDeactivate: true
         visible: false
         property int calculatedHeight: {
-            var rows = (Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 10
-            var desired = (rows * 82) + 120
-            var maxH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? (Plasmoid.screenGeometry.height - 100) : 1200
+            var rows = (Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 3
+            // Isla 1 (195) + Isla 3 (155) + Isla 4 (118) + Espaciados entre 4 islas (3*8 = 24) = 492px fijos
+            // Isla 2 (Grilla): 38px buscador + 8px spacing + 20px márgenes + (rows * 82px) = (rows * 82) + 66px
+            // Total = 492 + 66 + (rows * 82) = 558 + (rows * 82)
+            var desired = 558 + (rows * 82)
+            var maxH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? (Plasmoid.screenGeometry.height - 80) : 1200
             return Math.min(desired, maxH)
         }
 
@@ -92,7 +95,10 @@ PlasmoidItem {
         Layout.minimumWidth: 380
         Layout.minimumHeight: 300
         Layout.preferredWidth: 440
-        Layout.preferredHeight: ((Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 10) * 82 + 120
+        Layout.preferredHeight: {
+            var rows = (Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 3
+            return 558 + (rows * 82)
+        }
         MainWindowView {
             anchors.fill: parent
             appletExpanded: root.expanded
