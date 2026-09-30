@@ -175,29 +175,46 @@ function getRectGeometry(rect) {
   };
 }
 
-/**
- * @brief Obtiene de forma segura el área útil de trabajo (excluyendo paneles y docks de Plasma)
- * para un monitor y escritorio virtual especificados.
- *
- * @param {KWin::Output} output Salida física o monitor reportado por KWin.
- * @param {KWin::VirtualDesktop} desktop Escritorio virtual activo.
- * @returns {{x: number, y: number, w: number, h: number}} Geometría utilizable del espacio de trabajo.
- */
 function getSafeScreenGeometry(output, desktop) {
   if (!output) {
     return { x: 0, y: 0, w: 1920, h: 1080 };
   }
-  try {
-    var area = workspace.clientArea(0, output, desktop);
-    if (area && area.width > 0 && area.height > 0) {
-      return getRectGeometry(area);
-    }
-  } catch (e) { }
+
+  // 1. Intentar clientArea con PlacementArea / MaximizeArea
+  // En KWin 6 (QJSEngine), clientArea(ClientAreaOption, Output, VirtualDesktop)
+  // KWin.PlacementArea = 0 (área de colocación libre excluyendo paneles)
+  // KWin.MaximizeArea = 1 (área máxima para ventanas maximizadas excluyendo paneles y struts)
+  var optionsToTry = [];
+  if (typeof KWin !== "undefined") {
+    if (KWin.PlacementArea !== undefined) optionsToTry.push(KWin.PlacementArea);
+    if (KWin.MaximizeArea !== undefined) optionsToTry.push(KWin.MaximizeArea);
+  }
+  optionsToTry.push(0);
+  optionsToTry.push(1);
+
+  for (var i = 0; i < optionsToTry.length; i++) {
+    try {
+      var opt = optionsToTry[i];
+      var area = workspace.clientArea(opt, output, desktop);
+      if (area) {
+        var geom = getRectGeometry(area);
+        if (geom.w > 0 && geom.h > 0) {
+          return geom;
+        }
+      }
+    } catch (e) { }
+  }
+
+  // 2. Fallback a geometry del output físico si clientArea aún no está disponible
   try {
     if (output.geometry) {
-      return getRectGeometry(output.geometry);
+      var outGeom = getRectGeometry(output.geometry);
+      if (outGeom.w > 0 && outGeom.h > 0) {
+        return outGeom;
+      }
     }
   } catch (e) { }
+
   return { x: 0, y: 0, w: 1920, h: 1080 };
 }
 /**
@@ -967,6 +984,32 @@ function initDBusBridge() {
   workspace.currentDesktopChanged.connect(function () {
     requestStateSync();
   });
+
+  if (workspace.screensChanged) {
+    workspace.screensChanged.connect(function () {
+      requestStateSync();
+    });
+  }
+
+  // Hook para detectar cuando Plasma Panels/Docks terminan de cargar o cambian de tamaño/geometría
+  if (workspace.clientAreaChanged) {
+    workspace.clientAreaChanged.connect(function () {
+      requestStateSync();
+    });
+  }
+
+  // Conectar cambios de geometría en cada pantalla/output individual
+  try {
+    var outs = workspace.screens || [];
+    for (var oi = 0; oi < outs.length; oi++) {
+      var o = outs[oi];
+      if (o && o.geometryChanged) {
+        o.geometryChanged.connect(function () {
+          requestStateSync();
+        });
+      }
+    }
+  } catch (eOut) { }
 
   // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (100ms)
   setKWinTimeout(function () {

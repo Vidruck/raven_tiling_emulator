@@ -129,11 +129,20 @@ impl RavenControllerActor {
                             info!("[WAYLAND] Topología actualizada recibida directamente de Wayland: {} salidas descubiertas", topology.output_nodes.len());
                             let engine = self.controller.get_engine_mut();
                             for node in &topology.output_nodes {
-                                // Para cada pantalla detectada por Wayland, mapear o actualizar su geometría nativa
                                 let ws_prefix = format!("{}||", node.name);
                                 for (ws_id, rect) in engine.current_workspaces.iter_mut() {
                                     if ws_id.starts_with(&ws_prefix) {
-                                        *rect = node.rect;
+                                        // Preservar la geometría de clientArea de KWin si ya tiene márgenes de panel
+                                        // Solo sobreescribir si las dimensiones cambiaron radicalmente (cambio de resolución física)
+                                        let is_panel_adjusted = rect.x >= node.rect.x
+                                            && rect.y >= node.rect.y
+                                            && (rect.x + rect.width <= node.rect.x + node.rect.width)
+                                            && (rect.y + rect.height <= node.rect.y + node.rect.height)
+                                            && rect.width > 0
+                                            && rect.height > 0;
+                                        if !is_panel_adjusted {
+                                            *rect = node.rect;
+                                        }
                                     }
                                 }
                                 // Si no existía para default, asegurarla
