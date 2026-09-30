@@ -247,11 +247,10 @@ impl KWinQuarantineManager {
 
         // 1. Reglas de usuario
         for rule in rules {
-            if !rule.class.is_empty() && cls_lower.contains(&rule.class.to_lowercase()) {
-                if rule.action == "float" || rule.pip {
+            if !rule.class.is_empty() && cls_lower.contains(&rule.class.to_lowercase())
+                && (rule.action == "float" || rule.pip) {
                     return true;
                 }
-            }
         }
 
         // 2. Detección PiP por título

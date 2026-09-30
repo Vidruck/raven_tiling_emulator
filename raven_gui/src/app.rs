@@ -101,25 +101,25 @@ impl eframe::App for RavenGuiApp {
         visuals.override_text_color = Some(primary_text);
         visuals.selection.bg_fill = self.kde_palette.selection_bg;
         visuals.selection.stroke = egui::Stroke::new(1.0_f32, self.kde_palette.selection_fg);
-        visuals.window_rounding = 14.0.into();
+        // visuals.window_rounding removed
         ctx.set_visuals(visuals);
 
         let accent = self.kde_palette.selection_bg;
 
 
         // ── Panel Lateral Izquierdo ──
-        egui::SidePanel::left("navigation_rail")
+        egui::Panel::left("navigation_rail")
             .resizable(false)
-            .default_width(210.0)
+            .exact_size(210.0)
             .frame(
-                egui::Frame::none()
+                egui::Frame::new()
                     .fill(self.kde_palette.window_bg)
-                    .inner_margin(egui::Margin::same(12.0))
-                    .outer_margin(egui::Margin::same(8.0))
-                    .rounding(16.0)
+                    .inner_margin(egui::Margin::same(12))
+                    .outer_margin(egui::Margin::same(8))
+                    .corner_radius(16.0)
                     .stroke(egui::Stroke::NONE)
             )
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 ui.add_space(8.0);
                 ui.vertical_centered(|ui| {
                     ui.heading(
@@ -237,10 +237,10 @@ impl eframe::App for RavenGuiApp {
                     .fill(self.kde_palette.window_bg)
                     .inner_margin(egui::Margin::same(16))
                     .outer_margin(egui::Margin::same(8))
-                    .rounding(16.0)
+                    .corner_radius(16.0)
                     .stroke(egui::Stroke::NONE)
             )
-            .show(ctx, |ui| {
+            .show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     match self.active_tab {
                         NavTab::Layouts => tabs::layouts_tab::show(&mut self.config, ui, accent, &self.kde_palette),

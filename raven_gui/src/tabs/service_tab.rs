@@ -75,7 +75,7 @@ pub fn show(
 
             egui::Frame::new()
                 .fill(egui::Color32::from_black_alpha(40))
-                .rounding(8.0)
+                .corner_radius(8.0)
                 .inner_margin(egui::Margin::same(8))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());

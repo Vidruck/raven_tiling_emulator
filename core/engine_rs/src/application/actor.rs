@@ -621,10 +621,10 @@ impl RavenControllerActor {
 
                         if !is_special_mode {
                             if let Some(target) = self.controller.get_target_rect_for_window(&window_id) {
-                                let matches = (target.x as i32 - x).abs() <= 2
-                                    && (target.y as i32 - y).abs() <= 2
-                                    && (target.width as i32 - width).abs() <= 2
-                                    && (target.height as i32 - height).abs() <= 2;
+                                let matches = (target.x - x).abs() <= 2
+                                    && (target.y - y).abs() <= 2
+                                    && (target.width - width).abs() <= 2
+                                    && (target.height - height).abs() <= 2;
 
                                 if !matches {
                                     tracing::info!(
