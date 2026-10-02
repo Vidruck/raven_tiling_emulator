@@ -64,34 +64,85 @@ void MediaController::findActivePlayer()
     if (!interface) return;
 
     QStringList services = interface->registeredServiceNames();
-    QString foundPlaying;
+    QString bestPlayingWithMetadata;
+    QString bestPlaying;
+    QString bestWithMetadata;
     QString firstFound;
 
     for (const QString &service : services) {
-        if (service.startsWith(QLatin1String("org.mpris.MediaPlayer2."))) {
-            if (firstFound.isEmpty()) {
-                firstFound = service;
-            }
+        if (!service.startsWith(QLatin1String("org.mpris.MediaPlayer2."))) {
+            continue;
+        }
 
-            QDBusMessage msg = QDBusMessage::createMethodCall(service,
-                                                              QStringLiteral("/org/mpris/MediaPlayer2"),
-                                                              QStringLiteral("org.freedesktop.DBus.Properties"),
-                                                              QStringLiteral("Get"));
-            msg << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("PlaybackStatus");
-            
-            // Tiempo de espera corto (100ms) para nunca bloquear la GUI de Plasma
-            QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 100);
-            if (reply.isValid()) {
-                QString status = reply.value().variant().toString();
-                if (status == QLatin1String("Playing")) {
-                    foundPlaying = service;
-                    break;
-                }
+        // Ignorar subprocesos sandboxed / webkit que no son el reproductor principal
+        if (service.contains(QLatin1String(".Sandboxed.")) || service.contains(QLatin1String(".instance-"))) {
+            continue;
+        }
+
+        if (firstFound.isEmpty()) {
+            firstFound = service;
+        }
+
+        // Consultar estado de reproducción
+        QDBusMessage msgStatus = QDBusMessage::createMethodCall(service,
+                                                               QStringLiteral("/org/mpris/MediaPlayer2"),
+                                                               QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                               QStringLiteral("Get"));
+        msgStatus << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("PlaybackStatus");
+        
+        QString status;
+        QDBusReply<QDBusVariant> replyStatus = bus.call(msgStatus, QDBus::Block, 100);
+        if (replyStatus.isValid()) {
+            status = replyStatus.value().variant().toString();
+        }
+
+        // Consultar metadatos para saber si tiene una canción real
+        QDBusMessage msgMeta = QDBusMessage::createMethodCall(service,
+                                                             QStringLiteral("/org/mpris/MediaPlayer2"),
+                                                             QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                             QStringLiteral("Get"));
+        msgMeta << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("Metadata");
+        QDBusReply<QDBusVariant> replyMeta = bus.call(msgMeta, QDBus::Block, 100);
+
+        bool hasTrack = false;
+        if (replyMeta.isValid()) {
+            QVariant var = replyMeta.value().variant();
+            QVariantMap metaMap;
+            if (var.canConvert<QDBusArgument>()) {
+                QDBusArgument arg = var.value<QDBusArgument>();
+                metaMap = qdbus_cast<QVariantMap>(arg);
+            } else if (var.canConvert<QVariantMap>()) {
+                metaMap = var.toMap();
             }
+            QString title = metaMap.value(QLatin1String("xesam:title")).toString();
+            QString art = metaMap.value(QLatin1String("mpris:artUrl")).toString();
+            if (!title.isEmpty() || !art.isEmpty()) {
+                hasTrack = true;
+            }
+        }
+
+        if (status == QLatin1String("Playing")) {
+            if (hasTrack) {
+                bestPlayingWithMetadata = service;
+                break; // Máxima prioridad alcanzada
+            } else if (bestPlaying.isEmpty()) {
+                bestPlaying = service;
+            }
+        } else if (hasTrack && bestWithMetadata.isEmpty()) {
+            bestWithMetadata = service;
         }
     }
 
-    QString targetService = !foundPlaying.isEmpty() ? foundPlaying : firstFound;
+    QString targetService;
+    if (!bestPlayingWithMetadata.isEmpty()) {
+        targetService = bestPlayingWithMetadata;
+    } else if (!bestPlaying.isEmpty()) {
+        targetService = bestPlaying;
+    } else if (!bestWithMetadata.isEmpty()) {
+        targetService = bestWithMetadata;
+    } else {
+        targetService = firstFound;
+    }
 
     if (!targetService.isEmpty()) {
         connectToPlayer(targetService);
@@ -115,8 +166,8 @@ void MediaController::findActivePlayer()
 /**
  * @brief Conecta el controlador a un reproductor MPRIS específico.
  *
- * Limpia el nombre del reproductor para propósitos de visualización en la UI
- * (ej. "spotify" a "Spotify") y se suscribe a los cambios de propiedades del mismo.
+ * Obtiene el nombre comercial del reproductor consultando la propiedad `Identity`
+ * de la interfaz `org.mpris.MediaPlayer2` y suscribe a los cambios de propiedades.
  *
  * @param service Nombre del servicio D-Bus del reproductor.
  */
@@ -134,35 +185,63 @@ void MediaController::connectToPlayer(const QString &service)
     m_currentService = service;
     m_hasPlayer = true;
 
-    QString cleanName = service.mid(QStringLiteral("org.mpris.MediaPlayer2.").length());
-    if (cleanName.contains(QLatin1String("spotify"), Qt::CaseInsensitive)) {
-        cleanName = QStringLiteral("Spotify");
-    } else if (cleanName.contains(QLatin1String("vlc"), Qt::CaseInsensitive)) {
-        cleanName = QStringLiteral("VLC Media Player");
-    } else if (cleanName.contains(QLatin1String("mpv"), Qt::CaseInsensitive)) {
-        cleanName = QStringLiteral("MPV");
-    } else if (cleanName.contains(QLatin1String("elisa"), Qt::CaseInsensitive)) {
-        cleanName = QStringLiteral("Elisa");
-    } else if (cleanName.contains(QLatin1String("rhythmbox"), Qt::CaseInsensitive)) {
-        cleanName = QStringLiteral("Rhythmbox");
-    } else if (cleanName.contains(QLatin1String("audacious"), Qt::CaseInsensitive)) {
-        cleanName = QStringLiteral("Audacious");
-    } else if (cleanName.contains(QLatin1String("cider"), Qt::CaseInsensitive)) {
-        cleanName = QStringLiteral("Apple Music / Cider");
-    } else if (cleanName.contains(QLatin1String("plasma-browser-integration"), Qt::CaseInsensitive) ||
-               cleanName.contains(QLatin1String("chromium"), Qt::CaseInsensitive) ||
-               cleanName.contains(QLatin1String("chrome"), Qt::CaseInsensitive) ||
-               cleanName.contains(QLatin1String("brave"), Qt::CaseInsensitive) ||
-               cleanName.contains(QLatin1String("firefox"), Qt::CaseInsensitive)) {
-        cleanName = QStringLiteral("Web Player / YouTube");
-    } else {
-        int dotIdx = cleanName.indexOf(QLatin1Char('.'));
-        if (dotIdx != -1) cleanName = cleanName.left(dotIdx);
-        if (!cleanName.isEmpty()) {
-            cleanName = cleanName.left(1).toUpper() + cleanName.mid(1);
+    // Intentar leer la propiedad 'Identity' de org.mpris.MediaPlayer2 en D-Bus
+    QString identityName;
+    {
+        QDBusMessage msg = QDBusMessage::createMethodCall(service,
+                                                          QStringLiteral("/org/mpris/MediaPlayer2"),
+                                                          QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                          QStringLiteral("Get"));
+        msg << QStringLiteral("org.mpris.MediaPlayer2") << QStringLiteral("Identity");
+        QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 100);
+        if (reply.isValid()) {
+            identityName = reply.value().variant().toString().trimmed();
         }
     }
-    m_playerName = cleanName;
+
+    if (!identityName.isEmpty()) {
+        // Normalizar primera letra a mayúscula si viene en minúsculas (ej. "zuno" -> "Zuno")
+        if (identityName.length() == 1) {
+            m_playerName = identityName.toUpper();
+        } else if (identityName.at(0).isLower()) {
+            m_playerName = identityName.left(1).toUpper() + identityName.mid(1);
+        } else {
+            m_playerName = identityName;
+        }
+    } else {
+        QString cleanName = service.mid(QStringLiteral("org.mpris.MediaPlayer2.").length());
+        if (cleanName.contains(QLatin1String("spotify"), Qt::CaseInsensitive)) {
+            cleanName = QStringLiteral("Spotify");
+        } else if (cleanName.contains(QLatin1String("vlc"), Qt::CaseInsensitive)) {
+            cleanName = QStringLiteral("VLC Media Player");
+        } else if (cleanName.contains(QLatin1String("mpv"), Qt::CaseInsensitive)) {
+            cleanName = QStringLiteral("MPV");
+        } else if (cleanName.contains(QLatin1String("elisa"), Qt::CaseInsensitive)) {
+            cleanName = QStringLiteral("Elisa");
+        } else if (cleanName.contains(QLatin1String("rhythmbox"), Qt::CaseInsensitive)) {
+            cleanName = QStringLiteral("Rhythmbox");
+        } else if (cleanName.contains(QLatin1String("audacious"), Qt::CaseInsensitive)) {
+            cleanName = QStringLiteral("Audacious");
+        } else if (cleanName.contains(QLatin1String("cider"), Qt::CaseInsensitive)) {
+            cleanName = QStringLiteral("Apple Music / Cider");
+        } else if (cleanName.contains(QLatin1String("plasma-browser-integration"), Qt::CaseInsensitive) ||
+                   cleanName.contains(QLatin1String("chromium"), Qt::CaseInsensitive) ||
+                   cleanName.contains(QLatin1String("chrome"), Qt::CaseInsensitive) ||
+                   cleanName.contains(QLatin1String("brave"), Qt::CaseInsensitive) ||
+                   cleanName.contains(QLatin1String("firefox"), Qt::CaseInsensitive)) {
+            cleanName = QStringLiteral("Web Player / YouTube");
+        } else {
+            // Si tiene formato de dominio reverso (ej. org.gnome.Music, io.bassi.Amberol, etc.)
+            QStringList parts = cleanName.split(QLatin1Char('.'));
+            if (!parts.isEmpty()) {
+                cleanName = parts.last();
+            }
+            if (!cleanName.isEmpty()) {
+                cleanName = cleanName.left(1).toUpper() + cleanName.mid(1);
+            }
+        }
+        m_playerName = cleanName;
+    }
 
     bus.connect(service, QStringLiteral("/org/mpris/MediaPlayer2"),
                 QStringLiteral("org.freedesktop.DBus.Properties"),

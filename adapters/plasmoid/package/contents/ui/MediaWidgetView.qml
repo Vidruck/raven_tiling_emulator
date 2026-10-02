@@ -101,15 +101,16 @@ Rectangle {
                     fillMode: Image.PreserveAspectCrop
                     sourceSize.width: 92
                     sourceSize.height: 92
-                    visible: media.artUrl !== "" && status === Image.Ready
+                    visible: media.artUrl !== "" && status !== Image.Error && status !== Image.Null
                     asynchronous: true
+                    cache: true
                 }
 
                 Kirigami.Icon {
                     anchors.centerIn: parent
                     source: media.isPlaying ? "media-playback-start" : "audio-x-generic"
                     implicitWidth: 22; implicitHeight: 22
-                    visible: !albumCoverImg.visible
+                    visible: !albumCoverImg.visible || albumCoverImg.status !== Image.Ready
                     opacity: 0.6
                 }
             }
