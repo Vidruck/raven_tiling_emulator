@@ -68,7 +68,7 @@ void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
         return;
     }
 
-    // Limpiar listas de animaciones que ya finalizaron para mantener isActive() fiel al estado real
+    // Purgar entradas huérfanas en m_activeAnimations
     for (auto it = m_activeAnimations.begin(); it != m_activeAnimations.end(); ) {
         if (it.value().isEmpty()) {
             it = m_activeAnimations.erase(it);
@@ -94,10 +94,10 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
         windowId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(w), 0, 16);
     }
 
-    qCInfo(RAVEN_EFFECT) << "Ventana detectada en compositing, iniciando nacimiento:" << windowId;
+    qCInfo(RAVEN_EFFECT) << "Ventana detectada en compositing, iniciando nacimiento reactivo:" << windowId;
 
-    // 1. Iniciar animación de nacimiento nativa instantáneamente (180ms ágil)
-    animateWindowBirth(windowId, 180);
+    // 1. Iniciar animación de nacimiento nativa instantáneamente (140ms reactivo y ágil)
+    animateWindowBirth(windowId, 140);
 
     // 2. Emitir señal D-Bus hacia Raven Backend
     if (m_dbusAdaptor) {
@@ -161,15 +161,19 @@ QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
         return QEasingCurve(QEasingCurve::OutCubic);
     } else if (easingName == QLatin1String("EaseOutBack")) {
         return QEasingCurve(QEasingCurve::OutBack);
-    } else if (easingName == QLatin1String("EaseOutElastic")) {
-        return QEasingCurve(QEasingCurve::OutElastic);
+    } else if (easingName == QLatin1String("EaseOutElastic") || easingName == QLatin1String("Jelly")) {
+        // Curva elástica amortiguada tipo gelatina súper reactiva
+        QEasingCurve elastic(QEasingCurve::OutElastic);
+        elastic.setPeriod(0.25);
+        elastic.setAmplitude(1.05);
+        return elastic;
     } else if (easingName == QLatin1String("EaseInOutQuad")) {
         return QEasingCurve(QEasingCurve::InOutQuad);
     } else if (easingName == QLatin1String("Linear")) {
         return QEasingCurve(QEasingCurve::Linear);
     }
-    // Efecto ágil y profesional por defecto (rebote sutil)
-    return QEasingCurve(QEasingCurve::OutBack);
+    // Efecto súper ágil por defecto (OutCubic / OutBack controlado)
+    return QEasingCurve(QEasingCurve::OutCubic);
 }
 
 void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &startRect, const QRectF &targetRect,
@@ -182,8 +186,9 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
 
     cancelWindowAnimation(windowId);
 
-    if (durationMs <= 0) {
-        durationMs = 150; // Transición rápida y orgánica (150ms)
+    // Duración hiper-reactiva (120ms - 150ms) para dar tiempo de respuesta instantáneo al compositor sin rasgados
+    if (durationMs <= 0 || durationMs > 300) {
+        durationMs = 130;
     }
 
     QEasingCurve curve = parseEasing(easingName);
@@ -205,7 +210,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
         m_activeAnimations[windowId].append(posAnim);
     }
 
-    // 2. Animación de estiramiento / redimensionamiento dinámico (Scale)
+    // 2. Animación de estiramiento / redimensionamiento dinámico elástico (Scale)
     // Se interpola la escala desde (startW / targetW, startH / targetH) hacia (1.0, 1.0)
     if (targetRect.width() > 0.0 && targetRect.height() > 0.0 &&
         startRect.width() > 0.0 && startRect.height() > 0.0) {

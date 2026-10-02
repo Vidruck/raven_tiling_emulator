@@ -268,8 +268,8 @@ impl CompositorBackend for KWinBackend {
             for action in &actions {
                 match action {
                     RavenAction::ReleaseQuarantine { window_id } => {
-                        // 250ms de animación de nacimiento con zoom y elastic
-                        self.effect_client.animate_birth(window_id, 250).await;
+                        // 140ms de animación de nacimiento reactiva con zoom y elastic
+                        self.effect_client.animate_birth(window_id, 140).await;
                     }
                     RavenAction::MoveWindow { window_id, x, y, width, height } |
                     RavenAction::RectifyWindow { window_id, x, y, width, height } => {
@@ -280,8 +280,8 @@ impl CompositorBackend for KWinBackend {
                                     id: window_id.clone(),
                                     from: [prev_rect.x as f64, prev_rect.y as f64, prev_rect.width as f64, prev_rect.height as f64],
                                     to: [target_rect.x as f64, target_rect.y as f64, target_rect.width as f64, target_rect.height as f64],
-                                    duration_ms: 150,
-                                    easing: "EaseOutCubic".to_string(),
+                                    duration_ms: 130,
+                                    easing: "EaseOutBack".to_string(),
                                 });
                             }
                         }
