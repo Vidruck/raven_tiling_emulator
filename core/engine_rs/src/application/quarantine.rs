@@ -262,7 +262,7 @@ impl QuarantineManager {
     pub async fn schedule_rectification(&self, window_id: String, resource_class: &str, resource_name: &str) {
         let policy = QuarantinePolicy::from_class(resource_class, resource_name);
         let delay = policy.rectification_delay();
-        let target_id = window_id.clone();
+        let target_id = window_id;
         let tx = self.tx.clone();
 
         tokio::spawn(async move {

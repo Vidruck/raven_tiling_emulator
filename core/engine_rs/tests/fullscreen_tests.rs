@@ -270,7 +270,7 @@ async fn test_toggle_maximize_shortcut_and_state() {
     let win2 = create_test_window("win-2", "ws1||HDMI-A-1", "HDMI-A-1", false);
 
     let _ = controller
-        .handle_state_change(workspaces.clone(), vec![win1.clone(), win2.clone()])
+        .handle_state_change(workspaces.clone(), vec![win1, win2])
         .expect("Sincronización inicial");
 
     let topology = raven_core::geometry::Topology::default();
