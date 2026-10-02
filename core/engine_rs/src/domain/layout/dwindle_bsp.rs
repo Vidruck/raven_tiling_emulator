@@ -68,18 +68,29 @@ impl LayoutStrategy for DwindleBSPStrategy {
         let current_ordered = active_windows;
 
         if !current_ordered.is_empty() {
-            // 4. Clasificar ventanas en 4 zonas dinámicas: Centro, Izquierda, Derecha e Inferior
             let total_count = current_ordered.len();
             let mut left_group = Vec::with_capacity(total_count);
             let mut right_group = Vec::with_capacity(total_count);
             let mut bottom_group = Vec::with_capacity(total_count);
             let mut center_group = Vec::with_capacity(total_count);
 
+            // Analizar relación de aspecto de la pantalla útil (Width / Height)
+            let aspect_ratio = container.width as f32 / container.height.max(1) as f32;
+
             if total_count == 3 {
-                // Caso optimizado v3.2: 3 ventanas (Master Superior + Dúo Inferior)
-                center_group.push(current_ordered[0]); // Ventana 1: Master Superior
-                bottom_group.push(current_ordered[1]); // Ventana 2: Panel Inferior Izquierdo
-                bottom_group.push(current_ordered[2]); // Ventana 3: Panel Inferior Derecho
+                // En pantallas anchas / ultraanchas (>= 1.55) o donde el alto es amplio,
+                // un Master Superior + Dúo Inferior luce armónico.
+                // En pantallas 16:10, 3:2, cuadradas o verticales (< 1.55),
+                // una columna principal con una pila lateral dividida evita aplastamiento vertical.
+                if aspect_ratio >= 1.55 {
+                    center_group.push(current_ordered[0]); // Master Superior
+                    bottom_group.push(current_ordered[1]); // Panel Inferior Izquierdo
+                    bottom_group.push(current_ordered[2]); // Panel Inferior Derecho
+                } else {
+                    center_group.push(current_ordered[0]); // Master Central / Principal
+                    right_group.push(current_ordered[1]);  // Lateral Superior
+                    right_group.push(current_ordered[2]);  // Lateral Inferior
+                }
             } else {
                 for (idx, &win) in current_ordered.iter().enumerate() {
                     if idx == 0 {
@@ -105,31 +116,11 @@ impl LayoutStrategy for DwindleBSPStrategy {
                 }
             }
 
-            // 5. Acotar requerimientos de tamaño mínimo defensivamente al 35% de la dimensión útil
-            let max_allowed_min_w = (container.width as f32 * 0.35) as i32;
-            let max_allowed_min_h = (container.height as f32 * 0.35) as i32;
-
-            let left_min_w = left_group
-                .iter()
-                .map(|w| w.min_w.min(max_allowed_min_w))
-                .max()
-                .unwrap_or(0);
-            let right_min_w = right_group
-                .iter()
-                .map(|w| w.min_w.min(max_allowed_min_w))
-                .max()
-                .unwrap_or(0);
-            let center_min_w = center_group
-                .iter()
-                .map(|w| w.min_w.min(max_allowed_min_w))
-                .max()
-                .unwrap_or(0);
-
-            let bottom_min_h = bottom_group
-                .iter()
-                .map(|w| w.min_h.min(max_allowed_min_h))
-                .max()
-                .unwrap_or(0);
+            // 5. Requerimientos de tamaño mínimo
+            let left_min_w = left_group.iter().map(|w| w.min_w).max().unwrap_or(0);
+            let right_min_w = right_group.iter().map(|w| w.min_w).max().unwrap_or(0);
+            let center_min_w = center_group.iter().map(|w| w.min_w).max().unwrap_or(0);
+            let bottom_min_h = bottom_group.iter().map(|w| w.min_h).max().unwrap_or(0);
 
             // 6. Calcular proporciones y alturas de paneles
             let central_ratio = master_ratio.clamp(0.35, 0.85);
@@ -147,9 +138,9 @@ impl LayoutStrategy for DwindleBSPStrategy {
                 0
             };
 
-            // Garantía defensiva: La altura del panel inferior no debe superar el 65% de la pantalla
-            if bottom_height > (container.height as f32 * 0.65) as i32 {
-                bottom_height = (container.height as f32 * 0.65) as i32;
+            // Garantía defensiva: La altura del panel inferior no debe superar el 70% de la pantalla
+            if bottom_height > (container.height as f32 * 0.70) as i32 {
+                bottom_height = (container.height as f32 * 0.70) as i32;
             }
 
             // 7. Calcular anchos de los paneles laterales y del área central
@@ -159,32 +150,45 @@ impl LayoutStrategy for DwindleBSPStrategy {
             } else if !left_group.is_empty() {
                 let sw = ((container.width as f32 * (1.0 - central_ratio)).round()) as i32;
                 std::cmp::max(sw, left_min_w)
+            } else if !right_group.is_empty() {
+                let sw = ((container.width as f32 * (1.0 - central_ratio)).round()) as i32;
+                std::cmp::max(sw, right_min_w)
             } else {
                 0
             };
 
-            let total_sidebars_width = if !right_group.is_empty() {
-                2 * sidebar_width
-            } else if !left_group.is_empty() {
+            let left_sidebar_w = if !left_group.is_empty() {
                 sidebar_width
             } else {
                 0
             };
 
+            let right_sidebar_w = if !right_group.is_empty() {
+                sidebar_width
+            } else {
+                0
+            };
+
+            let total_sidebars_width = left_sidebar_w + right_sidebar_w;
             let mut center_width = container.width - total_sidebars_width;
 
             // Ajuste dinámico: Si el espacio asignado al centro cae por debajo de su requerimiento mínimo
             if center_width < center_min_w {
                 let needed_for_sidebars = container.width - center_min_w;
                 if needed_for_sidebars >= 0 {
-                    sidebar_width =
-                        needed_for_sidebars / (if !right_group.is_empty() { 2 } else { 1 });
-                    center_width = container.width
-                        - (if !right_group.is_empty() {
-                            2 * sidebar_width
-                        } else {
-                            sidebar_width
-                        });
+                    let count_sidebars = if !left_group.is_empty() && !right_group.is_empty() {
+                        2
+                    } else if !left_group.is_empty() || !right_group.is_empty() {
+                        1
+                    } else {
+                        0
+                    };
+                    if count_sidebars > 0 {
+                        sidebar_width = needed_for_sidebars / count_sidebars;
+                        let active_left_w = if !left_group.is_empty() { sidebar_width } else { 0 };
+                        let active_right_w = if !right_group.is_empty() { sidebar_width } else { 0 };
+                        center_width = container.width - (active_left_w + active_right_w);
+                    }
                 }
             }
 
@@ -243,9 +247,10 @@ impl LayoutStrategy for DwindleBSPStrategy {
                     center_group.iter().map(|w| w.custom_h_ratio).collect();
                 let heights = distribute_weighted_sizes(main_h, &mins, &weights);
                 let mut current_y = container.y;
+                let actual_left_w = if !left_group.is_empty() { sidebar_width } else { 0 };
                 for (i, win) in center_group.iter().enumerate() {
                     let rect = Rect {
-                        x: container.x + sidebar_width,
+                        x: container.x + actual_left_w,
                         y: current_y,
                         width: center_width,
                         height: heights[i],

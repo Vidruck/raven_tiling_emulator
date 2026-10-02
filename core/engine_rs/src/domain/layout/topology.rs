@@ -470,6 +470,46 @@ mod tests {
     }
 
     #[test]
+    fn test_raven_3_windows_balanced_16_10_layout() {
+        let windows = vec![
+            mock_window("win_1"),
+            mock_window("win_2"),
+            mock_window("win_3"),
+        ];
+
+        let strategy = DwindleBSPStrategy;
+        // Pantalla laptop / 16:10 (ej. 1920x1200 -> aspect ratio 1.6, o 1440x1080 -> 1.33)
+        let (layout, evicted) =
+            strategy.calculate(&windows, Rect::new(0, 0, 1440, 1080), 1, 0.60, 0, None);
+
+        assert!(evicted.is_empty());
+        assert_eq!(layout.len(), 3);
+
+        let r1 = layout.get("win_1").unwrap();
+        let r2 = layout.get("win_2").unwrap();
+        let r3 = layout.get("win_3").unwrap();
+
+        // En pantalla < 1.55 aspect ratio, pasa a Columna Maestra (60%) + Pila Lateral Dividida (40%)
+        // Master (60% de 1440 = 864)
+        assert_eq!(r1.x, 0);
+        assert_eq!(r1.y, 0);
+        assert_eq!(r1.width, 864);
+        assert_eq!(r1.height, 1080);
+
+        // Lateral Superior (40% de 1440 = 576, 50% de 1080 = 540)
+        assert_eq!(r2.x, 864);
+        assert_eq!(r2.y, 0);
+        assert_eq!(r2.width, 576);
+        assert_eq!(r2.height, 540);
+
+        // Lateral Inferior
+        assert_eq!(r3.x, 864);
+        assert_eq!(r3.y, 540);
+        assert_eq!(r3.width, 576);
+        assert_eq!(r3.height, 540);
+    }
+
+    #[test]
     fn test_dynamic_floating_stack_peek() {
         use crate::application::engine::TilingEngine;
         use crate::infrastructure::config::RavenConfig;

@@ -48,49 +48,57 @@ pub(crate) fn distribute_sizes(total: i32, minimums: &[i32]) -> Vec<i32> {
         return vec![];
     }
 
-    // 1. Medida defensiva global: evitar que la suma de mínimos consuma todo el espacio útil
-    let max_min_per_item = std::cmp::max(10, total / n as i32);
-    let sanitized_mins: Vec<i32> = minimums.iter().map(|&m| m.min(max_min_per_item)).collect();
+    let sum_mins: i32 = minimums.iter().sum();
+    // Si la suma total de mínimos excede el espacio disponible, escalamos proporcionalmente
+    let sanitized_mins: Vec<i32> = if sum_mins > total && sum_mins > 0 {
+        let scale = total as f32 / sum_mins as f32;
+        minimums
+            .iter()
+            .map(|&m| std::cmp::max(1, (m as f32 * scale).floor() as i32))
+            .collect()
+    } else {
+        minimums.to_vec()
+    };
 
-    // 2. Asignar reparto inicial equitativo y acumular el residuo en el último elemento
+    // Asignar reparto inicial equitativo y acumular el residuo en el último elemento
     let mut sizes = vec![total / n as i32; n];
-    sizes[n - 1] += total % n as i32;
+    let rem = total % n as i32;
+    if let Some(last) = sizes.last_mut() {
+        *last += rem;
+    }
 
-    // 3. Resolver iterativamente los déficits de tamaño mínimo
+    // Resolver iterativamente los déficits de tamaño mínimo
     let mut unresolved = true;
-    while unresolved {
+    let mut iterations = 0;
+    while unresolved && iterations < 16 {
+        iterations += 1;
         unresolved = false;
         let mut deficit = 0;
-        let mut flexible_count = 0;
+        let mut flexible_indices = Vec::new();
 
-        // Identificar elementos que no alcanzan su mínimo y los que pueden ceder espacio
         for i in 0..n {
             if sizes[i] < sanitized_mins[i] {
                 deficit += sanitized_mins[i] - sizes[i];
                 sizes[i] = sanitized_mins[i];
                 unresolved = true;
             } else if sizes[i] > sanitized_mins[i] {
-                flexible_count += 1;
+                flexible_indices.push(i);
             }
         }
 
-        // Deducir proporcionalmente el déficit de los elementos con margen disponible
-        if deficit > 0 && flexible_count > 0 {
-            let deduction = deficit / flexible_count;
-            let mut remainder = deficit % flexible_count;
-            for i in 0..n {
-                if sizes[i] > sanitized_mins[i] {
-                    let mut take = deduction;
-                    if remainder > 0 {
-                        take += 1;
-                        remainder -= 1;
-                    }
-                    let actual_take = std::cmp::min(take, sizes[i] - sanitized_mins[i]);
-                    sizes[i] -= actual_take;
+        if deficit > 0 && !flexible_indices.is_empty() {
+            let deduction = deficit / flexible_indices.len() as i32;
+            let mut remainder = deficit % flexible_indices.len() as i32;
+            for &idx in &flexible_indices {
+                let mut take = deduction;
+                if remainder > 0 {
+                    take += 1;
+                    remainder -= 1;
                 }
+                let actual_take = std::cmp::min(take, sizes[idx] - sanitized_mins[idx]);
+                sizes[idx] -= actual_take;
             }
         } else if deficit > 0 {
-            // Si el déficit no se puede reducir más, finalizar para evitar bucles infinitos
             break;
         }
     }
@@ -122,8 +130,16 @@ pub(crate) fn distribute_weighted_sizes(
         return distribute_sizes(total, minimums);
     }
 
-    let max_min_per_item = std::cmp::max(10, total / n as i32);
-    let sanitized_mins: Vec<i32> = minimums.iter().map(|&m| m.min(max_min_per_item)).collect();
+    let sum_mins: i32 = minimums.iter().sum();
+    let sanitized_mins: Vec<i32> = if sum_mins > total && sum_mins > 0 {
+        let scale = total as f32 / sum_mins as f32;
+        minimums
+            .iter()
+            .map(|&m| std::cmp::max(1, (m as f32 * scale).floor() as i32))
+            .collect()
+    } else {
+        minimums.to_vec()
+    };
 
     let mut sizes: Vec<i32> = effective_weights
         .iter()
@@ -137,10 +153,12 @@ pub(crate) fn distribute_weighted_sizes(
     }
 
     let mut unresolved = true;
-    while unresolved {
+    let mut iterations = 0;
+    while unresolved && iterations < 16 {
+        iterations += 1;
         unresolved = false;
         let mut deficit = 0;
-        let mut flexible_count = 0;
+        let mut flexible_indices = Vec::new();
 
         for i in 0..n {
             if sizes[i] < sanitized_mins[i] {
@@ -148,23 +166,21 @@ pub(crate) fn distribute_weighted_sizes(
                 sizes[i] = sanitized_mins[i];
                 unresolved = true;
             } else if sizes[i] > sanitized_mins[i] {
-                flexible_count += 1;
+                flexible_indices.push(i);
             }
         }
 
-        if deficit > 0 && flexible_count > 0 {
-            let deduction = deficit / flexible_count;
-            let mut remainder = deficit % flexible_count;
-            for i in 0..n {
-                if sizes[i] > sanitized_mins[i] {
-                    let mut take = deduction;
-                    if remainder > 0 {
-                        take += 1;
-                        remainder -= 1;
-                    }
-                    let actual_take = std::cmp::min(take, sizes[i] - sanitized_mins[i]);
-                    sizes[i] -= actual_take;
+        if deficit > 0 && !flexible_indices.is_empty() {
+            let deduction = deficit / flexible_indices.len() as i32;
+            let mut remainder = deficit % flexible_indices.len() as i32;
+            for &idx in &flexible_indices {
+                let mut take = deduction;
+                if remainder > 0 {
+                    take += 1;
+                    remainder -= 1;
                 }
+                let actual_take = std::cmp::min(take, sizes[idx] - sanitized_mins[idx]);
+                sizes[idx] -= actual_take;
             }
         } else if deficit > 0 {
             break;

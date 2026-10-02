@@ -70,7 +70,7 @@ impl LayoutStrategy for StrictDwindleStrategy {
         let mut split_horizontal = true;
         let count = active_windows.len();
 
-        // 3. Iterar ventana por ventana creando el árbol espiral
+        // 3. Iterar ventana por ventana creando el árbol espiral amortiguado
         for (i, win) in active_windows.iter().enumerate() {
             // La última ventana de la lista toma todo el espacio restante disponible
             if i == count - 1 {
@@ -79,23 +79,32 @@ impl LayoutStrategy for StrictDwindleStrategy {
             }
 
             let mut curr = container;
+            let current_ratio = master_ratio.clamp(0.20, 0.80);
 
-            // División según la dirección alternante actual respetando requerimientos mínimos defensivos
+            // División según la dirección alternante actual respetando requerimientos mínimos
             if split_horizontal {
-                let win_min_w = std::cmp::max(win.min_w, 120);
-                let min_rem = 120;
+                let win_min_w = win.min_w;
+                let min_rem = 80;
                 let max_allowed = std::cmp::max(1, container.width - min_rem);
-                let raw_w = (container.width as f32 * master_ratio) as i32;
-                let w = raw_w.clamp(std::cmp::min(win_min_w, max_allowed), max_allowed);
+                let raw_w = (container.width as f32 * current_ratio) as i32;
+                let w = if max_allowed >= win_min_w {
+                    raw_w.clamp(win_min_w.max(1), max_allowed)
+                } else {
+                    raw_w.clamp(1, max_allowed)
+                };
                 curr.width = w;
                 container.x += w;
                 container.width = std::cmp::max(1, container.width - w);
             } else {
-                let win_min_h = std::cmp::max(win.min_h, 100);
-                let min_rem = 100;
+                let win_min_h = win.min_h;
+                let min_rem = 80;
                 let max_allowed = std::cmp::max(1, container.height - min_rem);
-                let raw_h = (container.height as f32 * master_ratio) as i32;
-                let h = raw_h.clamp(std::cmp::min(win_min_h, max_allowed), max_allowed);
+                let raw_h = (container.height as f32 * current_ratio) as i32;
+                let h = if max_allowed >= win_min_h {
+                    raw_h.clamp(win_min_h.max(1), max_allowed)
+                } else {
+                    raw_h.clamp(1, max_allowed)
+                };
                 curr.height = h;
                 container.y += h;
                 container.height = std::cmp::max(1, container.height - h);
