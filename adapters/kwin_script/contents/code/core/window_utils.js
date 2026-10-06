@@ -54,7 +54,8 @@ function isManageable(w) {
 function isFloating(w) {
   try {
     if (!w || w.deleted || w.__raven_dynamic_float) return true;
-    if (w.dialog || w.utility || w.specialWindow || w.modal || w.transient || w.transientFor != null) return true;
+    if (w.specialWindow || w.modal || w.transient || w.transientFor != null) return true;
+    if (w.dialog && w.transientFor != null) return true;
     if (w.fullScreen) return false;
     if (w.maximizeMode !== 0) return true;
 
@@ -82,11 +83,12 @@ function isFloating(w) {
     const maxS = w.maxSize;
     if (minS && maxS && minS.width > 0 && minS.height > 0) {
       if (minS.width === maxS.width && minS.height === maxS.height) return true;
-      if (maxS.width > 0 && maxS.height > 0 && maxS.width <= 500 && maxS.height <= 450) return true;
     }
 
-    const fg = w.frameGeometry;
-    if (fg && fg.width > 0 && fg.height > 0 && fg.width < 380 && fg.height < 320) return true;
+    if (strClass.indexOf("zuno-widget") !== -1 || strClass.indexOf("raven-widget") !== -1) {
+      const fg = w.frameGeometry;
+      if (fg && fg.width > 0 && fg.height > 0 && fg.width < 380 && fg.height < 320) return true;
+    }
 
     return Boolean(isPip);
   } catch (e) {
