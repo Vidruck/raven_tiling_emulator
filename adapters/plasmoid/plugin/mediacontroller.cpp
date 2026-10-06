@@ -16,6 +16,12 @@
 #include <QDBusObjectPath>
 #include <QDebug>
 
+#include <QProcess>
+#include <QStandardPaths>
+#include <QTemporaryFile>
+#include <QDir>
+#include <QFile>
+
 /**
  * @brief Constructor del controlador multimedia MPRIS.
  * @param parent Objeto padre.
@@ -32,6 +38,11 @@ MediaController::MediaController(QObject *parent)
         this,
         SLOT(onNameOwnerChanged(QString,QString,QString))
     );
+
+    // Inicializar lista del espectro de 31 bandas en 0.0
+    for (int i = 0; i < 31; ++i) {
+        m_spectrumList.append(0.0);
+    }
 
     m_positionTimer = new QTimer(this);
     m_positionTimer->setInterval(1000);
@@ -297,6 +308,7 @@ void MediaController::onPropertiesChanged(const QString &interfaceName, const QV
         } else {
             m_positionTimer->stop();
         }
+        updateCavaState();
     }
 
     if (changedProperties.contains(QLatin1String("Metadata"))) {
@@ -395,6 +407,105 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
  *
  * @param active booleano que indica si se debe monitorizar activamente.
  */
+void MediaController::updateCavaState()
+{
+    bool shouldRun = m_active && isPlaying();
+
+    if (shouldRun) {
+        if (!m_cavaProcess) {
+            // Verificar si cava existe en el sistema
+            QString cavaExe = QStandardPaths::findExecutable(QStringLiteral("cava"));
+            if (cavaExe.isEmpty()) {
+                // Si CAVA no está instalado, m_cavaProcess permanece nulo y la UI usará fallback
+                return;
+            }
+
+            // Crear archivo temporal de configuración para CAVA si no existe
+            if (m_cavaConfigPath.isEmpty()) {
+                QString tempDir = QDir::tempPath();
+                m_cavaConfigPath = QStringLiteral("%1/raven_cava_config").arg(tempDir);
+                QFile cfgFile(m_cavaConfigPath);
+                if (cfgFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                    QTextStream out(&cfgFile);
+                    out << "[general]\n"
+                        << "bars = 31\n"
+                        << "framerate = 30\n"
+                        << "sensitivity = 100\n\n"
+                        << "[output]\n"
+                        << "method = raw\n"
+                        << "raw_target = /dev/stdout\n"
+                        << "data_format = ascii\n"
+                        << "ascii_max_range = 100\n"
+                        << "bar_delimiter = 59\n"; // carácter ';'
+                    cfgFile.close();
+                }
+            }
+
+            m_cavaProcess = new QProcess(this);
+            m_cavaProcess->setProgram(cavaExe);
+            m_cavaProcess->setArguments({QStringLiteral("-p"), m_cavaConfigPath});
+
+            connect(m_cavaProcess, &QProcess::readyReadStandardOutput, this, &MediaController::readCavaOutput);
+            m_cavaProcess->start();
+        }
+    } else {
+        if (m_cavaProcess) {
+            m_cavaProcess->kill();
+            m_cavaProcess->deleteLater();
+            m_cavaProcess = nullptr;
+        }
+        // Resetear barras a cero
+        bool changed = false;
+        for (int i = 0; i < m_spectrumList.size(); ++i) {
+            if (m_spectrumList[i].toDouble() != 0.0) {
+                m_spectrumList[i] = 0.0;
+                changed = true;
+            }
+        }
+        if (changed) {
+            emit spectrumChanged();
+        }
+    }
+}
+
+/**
+ * @brief Lee la salida ascii de CAVA y actualiza m_spectrumList con valores normalizados (0.0 a 1.0).
+ */
+void MediaController::readCavaOutput()
+{
+    if (!m_cavaProcess) return;
+
+    while (m_cavaProcess->canReadLine()) {
+        QByteArray line = m_cavaProcess->readLine().trimmed();
+        if (line.isEmpty()) continue;
+
+        QList<QByteArray> parts = line.split(';');
+        if (parts.isEmpty()) continue;
+
+        bool hasUpdate = false;
+        int count = qMin(parts.size(), m_spectrumList.size());
+        for (int i = 0; i < count; ++i) {
+            int val = parts[i].toInt();
+            double normalized = qBound(0.0, static_cast<double>(val) / 100.0, 1.0);
+            if (qAbs(m_spectrumList[i].toDouble() - normalized) > 0.01) {
+                m_spectrumList[i] = normalized;
+                hasUpdate = true;
+            }
+        }
+
+        if (hasUpdate) {
+            emit spectrumChanged();
+        }
+    }
+}
+
+/**
+ * @brief Activa o desactiva la actualización periódica de la posición multimedia y CAVA.
+ *
+ * Utilizado para ahorrar recursos cuando el widget no está visible en la interfaz.
+ *
+ * @param active booleano que indica si se debe monitorizar activamente.
+ */
 void MediaController::setActive(bool active)
 {
     if (m_active == active) return;
@@ -424,6 +535,8 @@ void MediaController::setActive(bool active)
             m_posWatcher = nullptr;
         }
     }
+
+    updateCavaState();
 }
 
 /**

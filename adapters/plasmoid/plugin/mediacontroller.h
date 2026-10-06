@@ -73,6 +73,9 @@ class MediaController : public QObject
     /** @brief Indica si el reproductor soporta retroceder a la pista anterior. */
     Q_PROPERTY(bool canGoPrevious READ canGoPrevious NOTIFY mediaChanged)
 
+    /** @brief Lista de magnitudes de frecuencia (0.0 a 1.0) para las 31 barras del visualizador CAVA real. */
+    Q_PROPERTY(QVariantList spectrumList READ spectrumList NOTIFY spectrumChanged)
+
 public:
     /**
      * @brief Constructor principal. Suscribe escuchadores de eventos NameOwnerChanged en D-Bus.
@@ -156,6 +159,9 @@ public:
     /** @brief Establece si el widget está activo para optimizar consumo de CPU. */
     void setActive(bool active);
 
+    /** @return Lista de magnitudes de espectro de frecuencia (31 bandas). */
+    QVariantList spectrumList() const { return m_spectrumList; }
+
 signals:
     /** @brief Emitida cuando cambia la bandera de actividad del widget. */
     void activeChanged();
@@ -165,6 +171,9 @@ signals:
     
     /** @brief Emitida en cada avance de segundo de la barra de progreso. */
     void positionChanged();
+
+    /** @brief Emitida en cada frame de espectro procesado por CAVA. */
+    void spectrumChanged();
 
 private slots:
     /** @brief Maneja la aparición o cierre de servicios en el bus D-Bus. */
@@ -179,7 +188,13 @@ private slots:
     /** @brief Procesa la respuesta asíncrona de posición devuelta por D-Bus sin bloquear la GUI. */
     void onPositionReply(QDBusPendingCallWatcher *watcher);
 
+    /** @brief Lee las líneas enviadas por CAVA por la salida estándar. */
+    void readCavaOutput();
+
 private:
+    /** @brief Inicia o detiene el proceso CAVA según el estado de reproducción y visibilidad del widget. */
+    void updateCavaState();
+
     /** @brief Escanea todos los servicios 'org.mpris.MediaPlayer2.*' y conecta al que esté sonando o al primero encontrado. */
     void findActivePlayer();
     
@@ -207,6 +222,10 @@ private:
     qint64 m_length = 0;                       ///< Duración total en segundos.
     bool m_canGoNext = true;                   ///< Disponibilidad de pista siguiente.
     bool m_canGoPrevious = true;               ///< Disponibilidad de pista anterior.
+
+    QVariantList m_spectrumList;              ///< Espectro de 31 bandas devuelto por CAVA (o ceros si está pausado).
+    class QProcess *m_cavaProcess = nullptr;   ///< Subproceso administrador para CAVA.
+    QString m_cavaConfigPath;                 ///< Ruta al archivo temporal de configuración de CAVA.
 
     QTimer *m_positionTimer = nullptr;         ///< Temporizador de 1s para progreso y extrapolación.
     QTimer *m_discoveryTimer = nullptr;        ///< Temporizador para descubrimiento de reproductores cuando está activo.
