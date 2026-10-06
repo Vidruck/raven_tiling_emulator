@@ -232,9 +232,11 @@ impl TilingEngine {
                     }
                 }
 
-                // 5. Heurística por micro-dimensiones con clase no vacía (ej. widgets dedicados de Zuno)
+                // 5. Heurística por micro-dimensiones para micro-widgets dedicados (ej. Zuno Widget)
+                // NOTA: Se excluye la coincidencia genérica con "electron" para evitar que apps como VS Code, Discord o Spotify
+                // queden atrapadas en flotación al reportar geometrías preliminares reducidas durante el arranque en Wayland.
                 if !class_lower.is_empty()
-                    && (class_lower.contains("zuno") || class_lower.contains("electron") || class_lower.contains("widget"))
+                    && (class_lower.contains("zuno-widget") || class_lower.contains("raven-widget"))
                     && cloned.geometry.width > 0 && cloned.geometry.height > 0
                     && cloned.geometry.width < 380 && cloned.geometry.height < 320
                 {

@@ -266,8 +266,9 @@ impl KWinQuarantineManager {
             return true;
         }
 
-        // 3. Ventana de tamaño fijo rígido (min == max) o micro widgets
-        if win.min_w > 0 && win.min_h > 0 && win.w < 380 && win.h < 320 {
+        // 3. Micro-widgets dedicados explícitos con dimensiones muy reducidas (ej. Zuno Widget)
+        if (cls_lower.contains("zuno-widget") || cls_lower.contains("raven-widget"))
+            && win.min_w > 0 && win.min_h > 0 && win.w < 380 && win.h < 320 {
             return true;
         }
 
