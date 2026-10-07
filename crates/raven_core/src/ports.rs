@@ -22,3 +22,7 @@ pub trait NotificationPort: Send + Sync {
     /// Despacha una notificación OSD en tiempo real con reemplazo sincrónico si está disponible.
     fn notify_osd(&self, title: &str, body: &str);
 }
+
+// Re-exportar contratos de compositor en el módulo de puertos
+pub use crate::backend::{BackendError, CompositorBackend, CompositorEvent};
+
