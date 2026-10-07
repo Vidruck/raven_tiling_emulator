@@ -179,7 +179,8 @@ El proyecto prioriza la eficiencia extrema y el uso mínimo de recursos del sist
 | **v2.6** | Rust Nativo Asíncrono | ~4.3 MB | 1.4 MB | Continuo |
 | **v3.0** | Rust Nativo (Single-Trip IPC & 5 Layouts) | ~4.9 MB | 1.9 MB | Ultra-bajo (-90%) |
 | **v3.3** | Rust Nativo + C++/QML Hub (6 Layouts & D-Bus Push) | ~5.4 MB | 1.9 MB | Tiempo Real Reactivo |
-| **v4.1** | **Rust Nativo + Efecto C++ Nativo (Zero-Delay IPC)** | **~6.0 MB** | **2.0 MB** | **Cero Latencia Visual** |
+| **v4.1** | Rust Nativo + Efecto C++ Nativo (Zero-Delay IPC) | ~6.0 MB | 2.0 MB | Cero Latencia Visual |
+| **v4.5** | **Rust Nativo + Wayland Directo & Sandbox Lua (Hexagonal)** | **~2.7 - 5.7 MB** | **2.0 MB** | **Sub-milisegundo (< 20ms)** |
 
 ### 💾 Desglose de Almacenamiento e Instalación Local
 
