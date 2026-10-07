@@ -125,34 +125,21 @@ impl RavenControllerActor {
                             }
                         }
                         CompositorEvent::TopologyChanged(topology) => {
-                            info!("[WAYLAND] Topología actualizada recibida directamente de Wayland: {} salidas descubiertas", topology.output_nodes.len());
+                            info!("[WAYLAND] Topología actualizada recibida de Wayland: {} salidas descubiertas", topology.output_nodes.len());
                             let engine = self.controller.get_engine_mut();
-                            for node in &topology.output_nodes {
-                                let ws_prefix = format!("{}||", node.name);
-                                for (ws_id, rect) in engine.current_workspaces.iter_mut() {
-                                    if ws_id.starts_with(&ws_prefix) {
-                                        // Preservar la geometría de clientArea de KWin si ya tiene márgenes de panel
-                                        // Solo sobreescribir si las dimensiones cambiaron radicalmente (cambio de resolución física)
-                                        let is_panel_adjusted = rect.x >= node.rect.x
-                                            && rect.y >= node.rect.y
-                                            && (rect.x + rect.width <= node.rect.x + node.rect.width)
-                                            && (rect.y + rect.height <= node.rect.y + node.rect.height)
-                                            && rect.width > 0
-                                            && rect.height > 0;
-                                        if !is_panel_adjusted {
-                                            *rect = node.rect;
-                                        }
-                                    }
+                            let had_workspaces = !engine.current_workspaces.is_empty();
+
+                            // Solo registrar geometrías de salida física si KWin aún no ha reportado ningún workspace con clientArea
+                            if !had_workspaces {
+                                for node in &topology.output_nodes {
+                                    let default_ws = format!("{}||default", node.name);
+                                    engine.current_workspaces.entry(default_ws).or_insert(node.rect);
                                 }
-                                // Si no existía para default, asegurarla
-                                let default_ws = format!("{}||default", node.name);
-                                engine
-                                    .current_workspaces
-                                    .entry(default_ws)
-                                    .or_insert(node.rect);
                             }
                             self.current_topology = topology;
-                            let _ = self.controller.commit_layout();
+                            if !had_workspaces {
+                                let _ = self.controller.commit_layout();
+                            }
                         }
                         CompositorEvent::ReleaseQuarantine(window_id) => {
                             // Extraemos resource_class + resource_name y modificamos banderas en un
