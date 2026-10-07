@@ -48,24 +48,24 @@ pub fn calculate_global_topology(
     pip_size_ratio: f32,
     window_history: &[String],
 ) -> (HashMap<String, Rect>, Vec<String>) {
-    let mut global_layout = HashMap::new();
+    let mut global_layout = HashMap::with_capacity(windows.len());
     let mut global_evicted = Vec::new();
-    let mut windows_by_ws: HashMap<String, Vec<WindowNode>> = HashMap::new();
+    let mut windows_by_ws: HashMap<&str, Vec<&WindowNode>> = HashMap::with_capacity(workspaces.len().max(1));
 
-    // 1. Agrupar ventanas no flotantes (o PiP / Fullscreen) por workspace
+    // 1. Agrupar referencias de ventanas no flotantes (o PiP / Fullscreen) por workspace (zero-clone)
     for win in windows {
         if !win.is_floating || win.is_pip || win.is_fullscreen {
             windows_by_ws
-                .entry(win.workspace_id.clone())
+                .entry(win.workspace_id.as_str())
                 .or_default()
-                .push(win.clone());
+                .push(win);
         }
     }
 
     // 2. Procesar cada workspace con la estrategia elegida y superponer PiP / FullScreen
     for (ws_id, ws_windows) in windows_by_ws {
         let screen_rect_opt = workspaces
-            .get(&ws_id)
+            .get(ws_id)
             .copied()
             .or_else(|| {
                 let output_prefix = ws_id.split("||").next()?;
@@ -77,16 +77,16 @@ pub fn calculate_global_topology(
             .or_else(|| workspaces.values().next().copied());
 
         if let Some(screen_rect) = screen_rect_opt {
-            // Filtrar ventanas no-fullscreen, no-pip y no-minimizadas para el mosaico de fondo activo
-            let tiling_windows: Vec<WindowNode> = ws_windows
+            // Filtrar referencias no-fullscreen, no-pip y no-minimizadas para el mosaico de fondo activo
+            let tiling_windows: Vec<&WindowNode> = ws_windows
                 .iter()
                 .filter(|w| !w.is_fullscreen && !w.is_pip && !w.is_floating && !w.is_minimized)
-                .cloned()
+                .copied()
                 .collect();
 
             // Consultar layout específico del workspace o usar el global por defecto
             let current_layout_type = workspace_layouts
-                .get(&ws_id)
+                .get(ws_id)
                 .map(|s| s.as_str())
                 .unwrap_or(layout_type);
 
@@ -117,12 +117,13 @@ pub fn calculate_global_topology(
                     let remaining_wins: Vec<WindowNode> = tiling_windows
                         .into_iter()
                         .filter(|w| !evicted_ids.contains(&w.window_id))
+                        .cloned()
                         .collect();
 
                     (remaining_wins, evicted_ids)
                 } else {
-                    // Cuando no hay exceso por saturación, preservar el orden espacial tal como vino
-                    (tiling_windows, Vec::new())
+                    // Cuando no hay exceso por saturación, clonar solo las sobrevivientes finales hacia calculate()
+                    (tiling_windows.into_iter().cloned().collect(), Vec::new())
                 };
 
             let (ws_layout, ws_evicted) = strategy.calculate(

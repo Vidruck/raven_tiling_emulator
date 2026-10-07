@@ -266,7 +266,29 @@ impl KWinQuarantineManager {
             return true;
         }
 
-        // 3. Micro-widgets dedicados explícitos con dimensiones muy reducidas (ej. Zuno Widget)
+        // 3. Títulos comunes de diálogos nativos o ventanas de Electron/CSD no anidadas
+        if cap_lower.starts_with("open file")
+            || cap_lower.starts_with("save file")
+            || cap_lower.starts_with("abrir archivo")
+            || cap_lower.starts_with("guardar archivo")
+            || cap_lower.starts_with("select folder")
+            || cap_lower.starts_with("seleccionar carpeta")
+            || cap_lower == "preferences"
+            || cap_lower == "preferencias"
+            || cap_lower == "settings"
+            || cap_lower == "configuración"
+            || cap_lower.starts_with("about ")
+            || cap_lower.starts_with("acerca de ")
+            || cap_lower.starts_with("dialog")
+            || cap_lower.starts_with("diálogo")
+            || cap_lower.starts_with("confirm")
+            || cap_lower.starts_with("alert")
+            || cap_lower.starts_with("prompt")
+        {
+            return true;
+        }
+
+        // 4. Micro-widgets dedicados explícitos con dimensiones muy reducidas (ej. Zuno Widget)
         if (cls_lower.contains("zuno-widget") || cls_lower.contains("raven-widget"))
             && win.min_w > 0 && win.min_h > 0 && win.w < 380 && win.h < 320 {
             return true;

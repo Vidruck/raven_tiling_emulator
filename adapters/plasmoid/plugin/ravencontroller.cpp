@@ -16,6 +16,8 @@
 #include <QDBusMessage>
 #include <QDBusConnection>
 
+#include <QDBusPendingCallWatcher>
+
 /**
  * @brief Constructor de la clase RavenController.
  *
@@ -44,9 +46,9 @@ RavenController::RavenController(QObject *parent)
 }
 
 /**
- * @brief Consulta y actualiza el estado del motor de Tiling.
+ * @brief Consulta y actualiza el estado del motor de Tiling de forma asíncrona.
  *
- * Llama de forma síncrona a los métodos del demonio para actualizar si el tiling está activo,
+ * Llama de forma no bloqueante a los métodos del demonio para actualizar si el tiling está activo,
  * la cantidad de monitores y el estado de los escritorios virtuales.
  */
 void RavenController::refreshState()
@@ -55,44 +57,58 @@ void RavenController::refreshState()
         return;
     }
 
-    QDBusMessage msgTiling = m_dbusInterface->call(QStringLiteral("getTilingState"));
-    if (msgTiling.type() == QDBusMessage::ReplyMessage && !msgTiling.arguments().isEmpty()) {
-        bool state = msgTiling.arguments().first().toBool();
-        if (m_tilingEnabled != state) {
-            m_tilingEnabled = state;
-            Q_EMIT tilingEnabledChanged();
-        }
-    }
-
-    QDBusMessage msgMonitors = m_dbusInterface->call(QStringLiteral("getMonitorCount"));
-    if (msgMonitors.type() == QDBusMessage::ReplyMessage && !msgMonitors.arguments().isEmpty()) {
-        int count = msgMonitors.arguments().first().toInt();
-        if (m_monitorCount != count) {
-            m_monitorCount = count;
-            Q_EMIT monitorCountChanged();
-        }
-    }
-
-    QDBusMessage msgDesktops = m_dbusInterface->call(QStringLiteral("getDesktopStatus"));
-    if (msgDesktops.type() == QDBusMessage::ReplyMessage && !msgDesktops.arguments().isEmpty()) {
-        QString rawStatus = msgDesktops.arguments().first().toString().trimmed();
-        // Formato: "prev | Escritorio cur | next"
-        QStringList parts = rawStatus.split(QLatin1Char('|'));
-        if (parts.size() >= 3) {
-            int prev = parts[0].trimmed().toInt();
-            int next = parts[2].trimmed().toInt();
-            QString curStr = parts[1].trimmed();
-            int cur = curStr.split(QLatin1Char(' ')).last().toInt();
-
-            if (m_currentDesktop != cur || m_prevDesktop != prev || m_nextDesktop != next || m_desktopStatus != curStr) {
-                m_currentDesktop = cur > 0 ? cur : 1;
-                m_prevDesktop = prev > 0 ? prev : 1;
-                m_nextDesktop = next > 0 ? next : 1;
-                m_desktopStatus = curStr.isEmpty() ? QStringLiteral("Escritorio 1") : curStr;
-                Q_EMIT desktopStatusChanged();
+    QDBusPendingCall asyncTiling = m_dbusInterface->asyncCall(QStringLiteral("getTilingState"));
+    auto *watcherTiling = new QDBusPendingCallWatcher(asyncTiling, this);
+    connect(watcherTiling, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        QDBusPendingReply<bool> reply = *w;
+        if (!reply.isError()) {
+            bool state = reply.value();
+            if (m_tilingEnabled != state) {
+                m_tilingEnabled = state;
+                Q_EMIT tilingEnabledChanged();
             }
         }
-    }
+    });
+
+    QDBusPendingCall asyncMonitors = m_dbusInterface->asyncCall(QStringLiteral("getMonitorCount"));
+    auto *watcherMonitors = new QDBusPendingCallWatcher(asyncMonitors, this);
+    connect(watcherMonitors, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        QDBusPendingReply<int> reply = *w;
+        if (!reply.isError()) {
+            int count = reply.value();
+            if (m_monitorCount != count) {
+                m_monitorCount = count;
+                Q_EMIT monitorCountChanged();
+            }
+        }
+    });
+
+    QDBusPendingCall asyncDesktops = m_dbusInterface->asyncCall(QStringLiteral("getDesktopStatus"));
+    auto *watcherDesktops = new QDBusPendingCallWatcher(asyncDesktops, this);
+    connect(watcherDesktops, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        QDBusPendingReply<QString> reply = *w;
+        if (!reply.isError()) {
+            QString rawStatus = reply.value().trimmed();
+            QStringList parts = rawStatus.split(QLatin1Char('|'));
+            if (parts.size() >= 3) {
+                int prev = parts[0].trimmed().toInt();
+                int next = parts[2].trimmed().toInt();
+                QString curStr = parts[1].trimmed();
+                int cur = curStr.split(QLatin1Char(' ')).last().toInt();
+
+                if (m_currentDesktop != cur || m_prevDesktop != prev || m_nextDesktop != next || m_desktopStatus != curStr) {
+                    m_currentDesktop = cur > 0 ? cur : 1;
+                    m_prevDesktop = prev > 0 ? prev : 1;
+                    m_nextDesktop = next > 0 ? next : 1;
+                    m_desktopStatus = curStr.isEmpty() ? QStringLiteral("Escritorio 1") : curStr;
+                    Q_EMIT desktopStatusChanged();
+                }
+            }
+        }
+    });
 }
 
 /**
@@ -113,7 +129,7 @@ void RavenController::invokeKWinShortcut(const QString &shortcutName)
 }
 
 /**
- * @brief Envía una acción D-Bus sin parámetros al demonio de Raven.
+ * @brief Envía una acción D-Bus sin parámetros al demonio de Raven de forma no bloqueante.
  *
  * Si la interfaz directa no responde, recurre a la herramienta CLI `qdbus` como respaldo.
  *
@@ -122,20 +138,25 @@ void RavenController::invokeKWinShortcut(const QString &shortcutName)
 void RavenController::sendDbusAction(const QString &action)
 {
     if (m_dbusInterface && m_dbusInterface->isValid()) {
-        QDBusMessage reply = m_dbusInterface->call(action);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            QString cmds = reply.arguments().first().toString();
-            if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
-                QDBusConnection::sessionBus().send(
-                    QDBusMessage::createMethodCall(
-                        QStringLiteral("org.kde.raven.Daemon"),
-                        QStringLiteral("/Events"),
-                        QStringLiteral("org.kde.raven.Events"),
-                        QStringLiteral("tilingCommandsPending")
-                    ) << cmds
-                );
+        QDBusPendingCall asyncCall = m_dbusInterface->asyncCall(action);
+        auto *watcher = new QDBusPendingCallWatcher(asyncCall, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher *w) {
+            w->deleteLater();
+            QDBusPendingReply<QString> reply = *w;
+            if (!reply.isError()) {
+                QString cmds = reply.value();
+                if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
+                    QDBusConnection::sessionBus().send(
+                        QDBusMessage::createMethodCall(
+                            QStringLiteral("org.kde.raven.Daemon"),
+                            QStringLiteral("/Events"),
+                            QStringLiteral("org.kde.raven.Events"),
+                            QStringLiteral("tilingCommandsPending")
+                        ) << cmds
+                    );
+                }
             }
-        }
+        });
     } else {
         // Fallback vía qdbus CLI si la interfaz directa aún no responde
         QProcess::startDetached(QStringLiteral("qdbus"), {
@@ -147,7 +168,7 @@ void RavenController::sendDbusAction(const QString &action)
 }
 
 /**
- * @brief Envía una acción D-Bus con un argumento entero al demonio de Raven.
+ * @brief Envía una acción D-Bus con un argumento entero al demonio de Raven de forma no bloqueante.
  *
  * @param action Nombre de la acción o método a invocar.
  * @param arg Argumento de tipo entero que acompaña la acción.
@@ -155,20 +176,25 @@ void RavenController::sendDbusAction(const QString &action)
 void RavenController::sendDbusActionWithArg(const QString &action, int arg)
 {
     if (m_dbusInterface && m_dbusInterface->isValid()) {
-        QDBusMessage reply = m_dbusInterface->call(action, arg);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            QString cmds = reply.arguments().first().toString();
-            if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
-                QDBusConnection::sessionBus().send(
-                    QDBusMessage::createMethodCall(
-                        QStringLiteral("org.kde.raven.Daemon"),
-                        QStringLiteral("/Events"),
-                        QStringLiteral("org.kde.raven.Events"),
-                        QStringLiteral("tilingCommandsPending")
-                    ) << cmds
-                );
+        QDBusPendingCall asyncCall = m_dbusInterface->asyncCall(action, arg);
+        auto *watcher = new QDBusPendingCallWatcher(asyncCall, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher *w) {
+            w->deleteLater();
+            QDBusPendingReply<QString> reply = *w;
+            if (!reply.isError()) {
+                QString cmds = reply.value();
+                if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
+                    QDBusConnection::sessionBus().send(
+                        QDBusMessage::createMethodCall(
+                            QStringLiteral("org.kde.raven.Daemon"),
+                            QStringLiteral("/Events"),
+                            QStringLiteral("org.kde.raven.Events"),
+                            QStringLiteral("tilingCommandsPending")
+                        ) << cmds
+                    );
+                }
             }
-        }
+        });
     } else {
         QProcess::startDetached(QStringLiteral("qdbus"), {
             QStringLiteral("org.kde.raven.Daemon"),

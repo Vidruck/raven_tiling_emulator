@@ -83,6 +83,8 @@ pub fn default_quarantine() -> Vec<String> {
         "spotify".into(),
         "discord".into(),
         "slack".into(),
+        "teams".into(),
+        "teams-for-linux".into(),
         "steam".into(),
         "telegram".into(),
         "obsidian".into(),

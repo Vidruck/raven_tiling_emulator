@@ -12,14 +12,6 @@
 //@include "core/quarantine.js"
 //@include "core/focus.js"
 //@include "services/dbus_bridge.js"
-//@include "services/shortcuts.js"
-
-/**
- * @brief Registra los atajos de teclado globales en el gestor de accesos directos de KWin.
- */
-function initShortcuts() {
-  registerRavenShortcuts();
-}
 
 /**
  * @brief Inicializa el ciclo de vida del puente D-Bus y enlaza las señales del compositor KWin.
@@ -35,7 +27,16 @@ function initDBusBridge() {
   // 1. Inicializar pool de timers estáticos
   initTimerPool();
 
-  // 2. Enlazar ventanas existentes al puente (sin disparar syncs masivos)
+  // 2. Registrar atajos de teclado de KWin
+  try {
+    if (typeof registerRavenShortcuts === "function") {
+      registerRavenShortcuts();
+    }
+  } catch (eShortcuts) {
+    Logger.error("Main", "Error registrando atajos", eShortcuts);
+  }
+
+  // 3. Enlazar ventanas existentes al puente (sin disparar syncs masivos)
   var existingWindows = workspace.windowList();
   for (var i = 0; i < existingWindows.length; i++) {
     var w = existingWindows[i];
@@ -150,7 +151,6 @@ function initDBusBridge() {
 // Registro e inicialización de ciclo de vida en el motor de scripting de KWin
 try {
   Logger.info("Main", "Inicializando el puente de Raven Tiling Emulator v3.4");
-  initShortcuts();
   initDBusBridge();
   Logger.info("Main", "Puente inicializado exitosamente");
 } catch (e) {

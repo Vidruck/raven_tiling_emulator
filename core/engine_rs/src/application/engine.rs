@@ -213,6 +213,8 @@ impl TilingEngine {
                         || class_lower.contains("pinentry")
                         || class_lower.contains("zenity")
                         || class_lower.contains("kdialog")
+                        || class_lower.contains("portal")
+                        || class_lower.contains("desktopdialog")
                         || class_lower == "raven_gui"
                         || class_lower == "raven-gui"
                         || class_lower == "raven config"
@@ -223,7 +225,24 @@ impl TilingEngine {
                         || caption_lower.contains("zuno widget")
                         || caption_lower.contains("now playing widget")
                         || caption_lower.contains("raven control center")
-                        || caption_lower.contains("raven tiling emulator — control center");
+                        || caption_lower.contains("raven tiling emulator — control center")
+                        || caption_lower.starts_with("open file")
+                        || caption_lower.starts_with("save file")
+                        || caption_lower.starts_with("abrir archivo")
+                        || caption_lower.starts_with("guardar archivo")
+                        || caption_lower.starts_with("select folder")
+                        || caption_lower.starts_with("seleccionar carpeta")
+                        || caption_lower == "preferences"
+                        || caption_lower == "preferencias"
+                        || caption_lower == "settings"
+                        || caption_lower == "configuración"
+                        || caption_lower.starts_with("about ")
+                        || caption_lower.starts_with("acerca de ")
+                        || caption_lower.starts_with("dialog")
+                        || caption_lower.starts_with("diálogo")
+                        || caption_lower.starts_with("confirm")
+                        || caption_lower.starts_with("alert")
+                        || caption_lower.starts_with("prompt");
 
                     if is_known_float_tool {
                         cloned.is_floating = true;

@@ -13,12 +13,14 @@ pub mod effect;
 pub mod parser;
 pub mod quarantine;
 pub mod service;
+pub mod shortcuts;
 
 pub use commands::TilingCommand;
 pub use effect::{RavenEffectClient, WindowAnimation};
 pub use parser::{parse_payload, KWinPayload, KWinScreen, KWinTopology, KWinWindow};
 pub use quarantine::{KWinQuarantineManager, QuarantineCategory, StartupMode};
 pub use service::{actions_to_kwin_json, KWinBridgeMessage, KWinDbusService};
+pub use shortcuts::{register_global_shortcuts, ShortcutDefinition, RAVEN_SHORTCUTS};
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -101,7 +103,7 @@ impl KWinBackend {
             }
         });
 
-        let dbus_service = KWinDbusService { tx: bridge_tx };
+        let dbus_service = KWinDbusService { tx: bridge_tx.clone() };
 
         let conn = Builder::session()
             .map_err(|e| BackendError::ConnectionFailed(e.to_string()))?
@@ -118,7 +120,11 @@ impl KWinBackend {
             let mut guard = self.connection.write().await;
             *guard = Some(arc_conn.clone());
         }
-        self.effect_client.set_connection(arc_conn).await;
+        self.effect_client.set_connection(arc_conn.clone()).await;
+
+        // Registrar atajos globales nativos en el subsistema de KDE
+        register_global_shortcuts(arc_conn, bridge_tx).await;
+
         info!("[KWIN-BACKEND] Servicio org.kde.raven.Daemon registrado exitosamente como intermediario.");
 
         Ok(())

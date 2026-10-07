@@ -420,25 +420,37 @@ void MediaController::updateCavaState()
                 return;
             }
 
-            // Crear archivo temporal de configuración para CAVA si no existe
-            if (m_cavaConfigPath.isEmpty()) {
-                QString tempDir = QDir::tempPath();
-                m_cavaConfigPath = QStringLiteral("%1/raven_cava_config").arg(tempDir);
-                QFile cfgFile(m_cavaConfigPath);
-                if (cfgFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                    QTextStream out(&cfgFile);
-                    out << "[general]\n"
-                        << "bars = 31\n"
-                        << "framerate = 30\n"
-                        << "sensitivity = 100\n\n"
-                        << "[output]\n"
-                        << "method = raw\n"
-                        << "raw_target = /dev/stdout\n"
-                        << "data_format = ascii\n"
-                        << "ascii_max_range = 100\n"
-                        << "bar_delimiter = 59\n"; // carácter ';'
-                    cfgFile.close();
-                }
+            // Crear o refrescar archivo temporal de configuración para CAVA
+            QString tempDir = QDir::tempPath();
+            m_cavaConfigPath = QStringLiteral("%1/raven_cava_config").arg(tempDir);
+            QFile cfgFile(m_cavaConfigPath);
+            if (cfgFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+                QTextStream out(&cfgFile);
+                out << "[general]\n"
+                    << "bars = 31\n"
+                    << "framerate = 60\n"
+                    << "autosens = 1\n"
+                    << "sensitivity = 100\n"
+                    << "lower_cutoff_freq = 50\n"
+                    << "higher_cutoff_freq = 12000\n\n"
+                    << "[input]\n"
+                    << "method = pulse\n"
+                    << "source = auto\n\n"
+                    << "[output]\n"
+                    << "channels = mono\n"
+                    << "mono_option = average\n"
+                    << "method = raw\n"
+                    << "raw_target = /dev/stdout\n"
+                    << "data_format = ascii\n"
+                    << "ascii_max_range = 100\n"
+                    << "bar_delimiter = 59\n\n"
+                    << "[smoothing]\n"
+                    << "integral = 70\n"
+                    << "monstercat = 0\n"
+                    << "waves = 0\n"
+                    << "gravity = 100\n"
+                    << "noise_reduction = 0.1\n";
+                cfgFile.close();
             }
 
             m_cavaProcess = new QProcess(this);
@@ -475,27 +487,32 @@ void MediaController::readCavaOutput()
 {
     if (!m_cavaProcess) return;
 
+    QByteArray latestLine;
     while (m_cavaProcess->canReadLine()) {
         QByteArray line = m_cavaProcess->readLine().trimmed();
-        if (line.isEmpty()) continue;
-
-        QList<QByteArray> parts = line.split(';');
-        if (parts.isEmpty()) continue;
-
-        bool hasUpdate = false;
-        int count = qMin(parts.size(), m_spectrumList.size());
-        for (int i = 0; i < count; ++i) {
-            int val = parts[i].toInt();
-            double normalized = qBound(0.0, static_cast<double>(val) / 100.0, 1.0);
-            if (qAbs(m_spectrumList[i].toDouble() - normalized) > 0.01) {
-                m_spectrumList[i] = normalized;
-                hasUpdate = true;
-            }
+        if (!line.isEmpty()) {
+            latestLine = line;
         }
+    }
 
-        if (hasUpdate) {
-            emit spectrumChanged();
+    if (latestLine.isEmpty()) return;
+
+    QList<QByteArray> parts = latestLine.split(';');
+    if (parts.isEmpty()) return;
+
+    bool hasUpdate = false;
+    int count = qMin(parts.size(), m_spectrumList.size());
+    for (int i = 0; i < count; ++i) {
+        int val = parts[i].toInt();
+        double normalized = qBound(0.0, static_cast<double>(val) / 100.0, 1.0);
+        if (qAbs(m_spectrumList[i].toDouble() - normalized) > 0.002) {
+            m_spectrumList[i] = normalized;
+            hasUpdate = true;
         }
+    }
+
+    if (hasUpdate) {
+        emit spectrumChanged();
     }
 }
 

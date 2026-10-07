@@ -352,7 +352,7 @@ Rectangle {
                             height: media.isPlaying
                                 ? Math.max(3, Math.min(barSlot.height, barSlot.height * barSlot.effectiveEnergy))
                                 : 2
-                            Behavior on height { NumberAnimation { duration: 40; easing.type: Easing.OutQuad } }
+                            Behavior on height { NumberAnimation { duration: 25; easing.type: Easing.OutCubic } }
 
                             gradient: Gradient {
                                 GradientStop {

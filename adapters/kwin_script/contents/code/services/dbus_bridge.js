@@ -195,8 +195,16 @@ function applyCommands(commandsJson) {
         case "move":
         case "rectify_window":
           if (w.minimized || w.interactiveMove || w.interactiveResize || w.fullScreen) break;
-          if (w.maximized || (w.maximizeMode !== undefined && w.maximizeMode !== 0)) break;
+          if (w.maximized || (w.maximizeMode !== undefined && w.maximizeMode === 3)) break;
           if (w.transientChildren && w.transientChildren.length > 0) break;
+
+          // Si la ventana tiene maximización parcial (ej. Teams con MAXIMIZED_VERT),
+          // desmarcarla en KWin para que acepte libremente la nueva geometría
+          if (w.maximizeMode !== undefined && w.maximizeMode !== 0) {
+            try {
+              w.setMaximize(false, false);
+            } catch (eUnmax) {}
+          }
 
           const targetGeom = {
             x: Math.round(cmd.x),
@@ -415,7 +423,7 @@ function buildWindowState(w, safeId) {
     sb: false,
     iq: false,
     fs: Boolean(w.fullScreen),
-    max: Boolean(w.maximized || (w.maximizeMode !== undefined && w.maximizeMode !== 0)),
+    max: Boolean(w.maximized || (w.maximizeMode !== undefined && w.maximizeMode === 3)),
     sus: false,
     cls: w.resourceClass ? w.resourceClass.toString() : "",
     cls_name: w.resourceName ? w.resourceName.toString() : "",

@@ -16,11 +16,34 @@
 
 **Raven Tiling Emulator** es un gestor de ventanas dinámico en mosaico (Tiling Window Manager) de alto rendimiento diseñado específicamente para **KDE Plasma 6 (Wayland)**. 
 
-Con el lanzamiento de la **Versión 4.2**, Raven consolida su suite completa que fusiona el motor de composición en Rust con un **Lanzador de Aplicaciones y Centro de Mando Integrado** en el panel de Plasma: reloj digital monospaced y fecha localizada en tiempo real, control de sesión, monitorización de hardware en vivo, reproductor multimedia con ecualizador animado armónico, mediador predictivo de capacidad entre algoritmos ($C_{max}$), navegación espacial instantánea en sub-islas, buscador de aplicaciones y sidebar de selección rápida para los 6 algoritmos de distribución.
+Con el lanzamiento de la **Versión 4.5**, Raven da un salto sustancial en arquitectura, robustez y rendimiento: integra **cliente nativo para CAVA** en el visualizador espectral de audio del lanzador, **migra el registro y captura de atajos globales a Rust** mediante `org.kde.kglobalaccel`, reduce drásticamente el código del puente de KWin (*dumb bridge*), actualiza su stack asíncrono central (**Tokio 1.43, zbus 5.19, Serde 1.0**) y resuelve casos.
 
 ---
 
-## ⚡ Novedades Principales de la Versión 4.2
+## ⚡ Novedades Principales de la Versión 4.5
+
+### 🎹 Integración Nativa con CAVA en el Lanzador (Raven Hub)
+- **Visualizador Espectral Reactivo en Vivo**: Implementación de subproceso optimizado en C++ (`mediacontroller.cpp`) para interactuar con **CAVA** (*Console-based Audio Visualizer for ALSA/Pulse/PipeWire*).
+- **Procesamiento Eficiente por Ráfagas (Frame Batching)**: Se eliminó el micro-stuttering en el panel de Plasma al drenar tramas intermedias obsoletas y emitir actualizaciones espectrales (`spectrumChanged`) de forma sincronizada con el framerate de la interfaz.
+- **Configuración Automática y Control de Ciclo de Vida**: Generación dinámica de perfiles `/tmp/cava_raven_config` y apagado automático del analizador cuando el reproductor se pausa o el widget no está visible.
+
+### ⌨️ Migración de Atajos Globales a Rust Nativo (`raven_backend_kwin`)
+- **Desacoplamiento Completo de JavaScript**: El registro de combinaciones globales (`Meta+Space`, `Meta+J/K`, `Meta+F`, `Meta+X`, `Meta+Q`, `Meta+Shift+L`, etc.) se trasladó desde el script de KWin directamente al backend en Rust (`crates/raven_backend_kwin/src/shortcuts.rs`).
+- **Integración con `org.kde.kglobalaccel`**: Los atajos de Raven ahora se gestionan en el subsistema nativo de KDE Plasma, permitiendo verlos y editarlos en *Preferencias del Sistema ➡️ Accesos rápidos*.
+- **Latencia Cero y "Dumb Bridge"**: El script de KWin ya no procesa atajos de teclado ni crea callbacks en `QJSEngine`. Pasa a ser un puente puramente ejecutor que solo recibe las órdenes de movimiento y las aplica al compositor.
+
+### 📦 Actualización del Stack Base de Rust
+- **Tokio 1.43 & zbus 5.19**: Migración y optimización hacia las últimas versiones del ecosistema asíncrono y D-Bus en Rust, aprovechando mejoras de throughput en canales bounded `mpsc` y soporte no bloqueante con `QDBusPendingCallWatcher` en el frontend Qt.
+- **Serde 1.0**: Optimizaciones en la serialización/deserialización de payloads de topología y estado con asignaciones pre-dimensionadas.
+
+### 🛡️ Corrección de Errores Críticos y Filtrado Robusto
+- **Blindaje de Diálogos no Anidados (Electron / CSD)**: Resolución del bug donde diálogos y popups de aplicaciones Electron (VS Code, Discord, Spotify, Obsidian) sin puntero `transientFor` tomaban lugar de ventanas normales en el mosaico. Se añadieron filtros incondicionales por tipo (`dialog`/`utility`), tamaño fijo (`minSize == maxSize` / `resizeable: false`) y patrones de título.
+- **Alineación Geométrica en `DwindleBSPStrategy`**: Corrección del cálculo de offset horizontal en el panel inferior para configuraciones con barra lateral asimétrica.
+- **Optimización de Allocations en `calculate_global_topology`**: Reutilización de contenedores (`with_capacity`) y referencias prestadas `&WindowNode` (*zero-clone* en pasos intermedios).
+
+---
+
+## ⚡ Novedades de la Versión 4.2
 
 ### 🦀 Jerarquización del Crate `raven_backend_kwin` y Robustecimiento
 - **Reemplazo Arquitectónico**: Consolidación y jerarquización del crate `raven_backend_kwin`, asumiendo ahora responsabilidades críticas que antes delegaba al script de JavaScript. Esto robustece enormemente la infraestructura de Rust al centralizar la fuente de verdad.

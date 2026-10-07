@@ -249,19 +249,19 @@ function getWorkspaceId(window) {
 }
 
 const FLOATING_CLASSES_REGEX = /kcolorchooser|colorpicker|gcolor|eyedropper|spectacle|klipper|plasma\.clipboard|org\.kde\.kclock|org\.kde\.polkit|polkit|pinentry|zenity|kdialog|xdotool|portal|desktopdialog|plasmoidviewer|^raven_gui$|^raven-gui$|^raven config$/i;
-const FLOATING_CAPTION_REGEX = /color picker|selector de color|mini player|mini-player|miniplayer|zuno widget|now playing widget|pip|quick view|raven control center|raven tiling emulator — control center/i;
+const FLOATING_CAPTION_REGEX = /color picker|selector de color|mini player|mini-player|miniplayer|zuno widget|now playing widget|pip|quick view|raven control center|raven tiling emulator — control center|^open file|^save file|^abrir archivo|^guardar archivo|^select folder|^seleccionar carpeta|^preferences$|^preferencias$|^settings$|^configuración$|^about |^acerca de |^dialog$|^diálogo$|^confirm|^alert|^prompt/i;
 const PIP_CAPTION_REGEX = /picture[- ]?in[- ]?picture|imagen[- ]en[- ]imagen|pantalla en pantalla|reproductor en miniatura|incrustation|bild[- ]in[- ]bild|imagem em imagem|immagine nell'immagine|^pip$/i;
 
 function isManageable(w) {
   try {
     if (!w || w.deleted || !w.managed) return false;
-    if (w.popupWindow || w.tooltip || w.onScreenDisplay || w.notification || w.specialWindow || w.splash || w.transientFor != null) return false;
+    if (w.popupWindow || w.tooltip || w.onScreenDisplay || w.notification || w.specialWindow || w.splash) return false;
     if (w.desktopWindow || w.dock || w.skipTaskbar || w.skipPager) return false;
 
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     if (strClass.indexOf("spectacle") !== -1 && w.fullScreen) return false;
     if (!w.normalWindow && !w.dialog && !w.utility) return false;
-    if (w.transient || (w.dialog && w.transientFor != null)) return false;
+    if (w.transient || w.transientFor != null) return false;
     if (w.frameGeometry && (w.frameGeometry.width <= 0 || w.frameGeometry.height <= 0)) return false;
 
     return true;
@@ -274,9 +274,9 @@ function isFloating(w) {
   try {
     if (!w || w.deleted || w.__raven_dynamic_float) return true;
     if (w.specialWindow || w.modal || w.transient || w.transientFor != null) return true;
-    if (w.dialog && w.transientFor != null) return true;
+    if (w.dialog || w.utility) return true;
     if (w.fullScreen) return false;
-    if (w.maximizeMode !== 0) return true;
+    if (w.maximizeMode === 3) return true;
 
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
@@ -298,11 +298,13 @@ function isFloating(w) {
     if (isPip && !w.keepAbove) w.keepAbove = true;
     if (FLOATING_CLASSES_REGEX.test(strClass) || FLOATING_CAPTION_REGEX.test(strCap)) return true;
 
+    // Regla de dimensiones fijas (diálogos, asistentes o popups de Electron sin capacidad de redimensionamiento)
     const minS = w.minSize;
     const maxS = w.maxSize;
     if (minS && maxS && minS.width > 0 && minS.height > 0) {
       if (minS.width === maxS.width && minS.height === maxS.height) return true;
     }
+    if (w.resizeable === false) return true;
 
     if (strClass.indexOf("zuno-widget") !== -1 || strClass.indexOf("raven-widget") !== -1) {
       const fg = w.frameGeometry;
@@ -571,8 +573,16 @@ function applyCommands(commandsJson) {
         case "move":
         case "rectify_window":
           if (w.minimized || w.interactiveMove || w.interactiveResize || w.fullScreen) break;
-          if (w.maximized || (w.maximizeMode !== undefined && w.maximizeMode !== 0)) break;
+          if (w.maximized || (w.maximizeMode !== undefined && w.maximizeMode === 3)) break;
           if (w.transientChildren && w.transientChildren.length > 0) break;
+
+          // Si la ventana tiene maximización parcial (ej. Teams con MAXIMIZED_VERT),
+          // desmarcarla en KWin para que acepte libremente la nueva geometría
+          if (w.maximizeMode !== undefined && w.maximizeMode !== 0) {
+            try {
+              w.setMaximize(false, false);
+            } catch (eUnmax) {}
+          }
 
           const targetGeom = {
             x: Math.round(cmd.x),
@@ -791,7 +801,7 @@ function buildWindowState(w, safeId) {
     sb: false,
     iq: false,
     fs: Boolean(w.fullScreen),
-    max: Boolean(w.maximized || (w.maximizeMode !== undefined && w.maximizeMode !== 0)),
+    max: Boolean(w.maximized || (w.maximizeMode !== undefined && w.maximizeMode === 3)),
     sus: false,
     cls: w.resourceClass ? w.resourceClass.toString() : "",
     cls_name: w.resourceName ? w.resourceName.toString() : "",
@@ -901,13 +911,6 @@ function registerRavenShortcuts() {
 
 
 /**
- * @brief Registra los atajos de teclado globales en el gestor de accesos directos de KWin.
- */
-function initShortcuts() {
-  registerRavenShortcuts();
-}
-
-/**
  * @brief Inicializa el ciclo de vida del puente D-Bus y enlaza las señales del compositor KWin.
  *
  * Secuencia de arranque:
@@ -921,7 +924,16 @@ function initDBusBridge() {
   // 1. Inicializar pool de timers estáticos
   initTimerPool();
 
-  // 2. Enlazar ventanas existentes al puente (sin disparar syncs masivos)
+  // 2. Registrar atajos de teclado de KWin
+  try {
+    if (typeof registerRavenShortcuts === "function") {
+      registerRavenShortcuts();
+    }
+  } catch (eShortcuts) {
+    Logger.error("Main", "Error registrando atajos", eShortcuts);
+  }
+
+  // 3. Enlazar ventanas existentes al puente (sin disparar syncs masivos)
   var existingWindows = workspace.windowList();
   for (var i = 0; i < existingWindows.length; i++) {
     var w = existingWindows[i];
@@ -1036,7 +1048,6 @@ function initDBusBridge() {
 // Registro e inicialización de ciclo de vida en el motor de scripting de KWin
 try {
   Logger.info("Main", "Inicializando el puente de Raven Tiling Emulator v3.4");
-  initShortcuts();
   initDBusBridge();
   Logger.info("Main", "Puente inicializado exitosamente");
 } catch (e) {

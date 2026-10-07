@@ -269,7 +269,8 @@ impl LayoutStrategy for DwindleBSPStrategy {
                 let weights: Vec<Option<f32>> =
                     bottom_group.iter().map(|w| w.custom_w_ratio).collect();
                 let widths = distribute_weighted_sizes(center_width, &mins, &weights);
-                let mut current_x = container.x + sidebar_width;
+                let actual_left_w = if !left_group.is_empty() { sidebar_width } else { 0 };
+                let mut current_x = container.x + actual_left_w;
                 for (i, win) in bottom_group.iter().enumerate() {
                     let rect = Rect {
                         x: current_x,
