@@ -430,9 +430,10 @@ void MediaController::updateCavaState()
                     << "bars = 31\n"
                     << "framerate = 60\n"
                     << "autosens = 1\n"
-                    << "sensitivity = 100\n"
-                    << "lower_cutoff_freq = 50\n"
-                    << "higher_cutoff_freq = 12000\n\n"
+                    << "overshoot = 20\n"
+                    << "sensitivity = 240\n"
+                    << "lower_cutoff_freq = 40\n"
+                    << "higher_cutoff_freq = 14000\n\n"
                     << "[input]\n"
                     << "method = pulse\n"
                     << "source = auto\n\n"
@@ -445,11 +446,11 @@ void MediaController::updateCavaState()
                     << "ascii_max_range = 100\n"
                     << "bar_delimiter = 59\n\n"
                     << "[smoothing]\n"
-                    << "integral = 70\n"
-                    << "monstercat = 0\n"
+                    << "integral = 60\n"
+                    << "monstercat = 1\n"
                     << "waves = 0\n"
-                    << "gravity = 100\n"
-                    << "noise_reduction = 0.1\n";
+                    << "gravity = 140\n"
+                    << "noise_reduction = 0.05\n";
                 cfgFile.close();
             }
 

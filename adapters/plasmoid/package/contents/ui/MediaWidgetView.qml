@@ -331,9 +331,12 @@ Rectangle {
                         Layout.fillHeight: true
 
                         // Valor real entregado por CAVA (o fallback armónico si CAVA no está instalado)
-                        property real cavaVal: (media.spectrumList && media.spectrumList.length > index)
+                        property real rawCavaVal: (media.spectrumList && media.spectrumList.length > index)
                             ? Number(media.spectrumList[index])
                             : 0.0
+
+                        // Escalado logarítmico/reactivo: potencia las amplitudes bajas y medias para que las ondas alcancen altura visible
+                        property real cavaVal: Math.min(1.0, Math.pow(rawCavaVal, 0.72) * 1.35)
 
                         // Fallback sintético armónico cuando CAVA no esté instalado o no reporte stream
                         property real synthEnergy: {
@@ -348,7 +351,7 @@ Rectangle {
                             return Math.max(0.12, Math.min(1.0, composite + 0.15));
                         }
 
-                        property real effectiveEnergy: cavaVal > 0.001 ? cavaVal : synthEnergy
+                        property real effectiveEnergy: rawCavaVal > 0.001 ? cavaVal : synthEnergy
 
                         Rectangle {
                             id: eqBar
@@ -361,7 +364,7 @@ Rectangle {
                             height: media.isPlaying
                                 ? Math.max(3, Math.min(barSlot.height, barSlot.height * barSlot.effectiveEnergy))
                                 : 2
-                            Behavior on height { NumberAnimation { duration: 25; easing.type: Easing.OutCubic } }
+                            Behavior on height { NumberAnimation { duration: 20; easing.type: Easing.OutQuad } }
 
                             gradient: Gradient {
                                 GradientStop {
