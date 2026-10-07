@@ -1,7 +1,6 @@
 //! # Modelo de Actores de Concurrencia (`RavenControllerActor`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Implementa el patrón Actor sobre canales asíncronos Tokio (`mpsc` y `oneshot`)
@@ -307,6 +306,7 @@ impl RavenControllerActor {
                                 win.is_floating = true;
                             } else {
                                 self.controller.get_engine_mut().maximized_windows.remove(&win.window_id);
+                                win.is_maximized = false;
                             }
 
                             if self
@@ -316,6 +316,9 @@ impl RavenControllerActor {
                                 .contains(&win.window_id)
                             {
                                 win.is_floating = true;
+                            } else if !win.is_maximized && !win.is_pip {
+                                // Forzar re-evaluación a mosaico si no hay razón explícita para flotar
+                                win.is_floating = false;
                             }
                             
                             // Blindaje de Idempotencia: Solo agendar cuarentena si la ventana NO existe
@@ -391,7 +394,7 @@ impl RavenControllerActor {
                                 ws_id,
                                 win.output,
                                 win.desktops,
-                                win.f || is_dynamic_float || is_max,
+                                is_dynamic_float || is_max,
                                 win.m,
                                 win.p,
                                 Rect::new(win.x, win.y, win.w, win.h),
