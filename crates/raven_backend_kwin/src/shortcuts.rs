@@ -208,33 +208,67 @@ pub const RAVEN_SHORTCUTS: &[ShortcutDefinition] = &[
         action: "cycle_layout",
         payload: 0,
     },
+
+    // --- Redimensionamiento Fino 2D ---
+    ShortcutDefinition {
+        id: "RavenResizeWidthInc",
+        description: "Raven: Aumentar Ancho de Ventana",
+        default_key: "Meta+Alt+Right",
+        action: "resize_width_inc",
+        payload: 0,
+    },
+    ShortcutDefinition {
+        id: "RavenResizeWidthDec",
+        description: "Raven: Reducir Ancho de Ventana",
+        default_key: "Meta+Alt+Left",
+        action: "resize_width_dec",
+        payload: 0,
+    },
+    ShortcutDefinition {
+        id: "RavenResizeHeightInc",
+        description: "Raven: Aumentar Alto de Ventana",
+        default_key: "Meta+Alt+Down",
+        action: "resize_height_inc",
+        payload: 0,
+    },
+    ShortcutDefinition {
+        id: "RavenResizeHeightDec",
+        description: "Raven: Reducir Alto de Ventana",
+        default_key: "Meta+Alt+Up",
+        action: "resize_height_dec",
+        payload: 0,
+    },
 ];
 
-/// Registra los atajos globales en el subsistema `org.kde.kglobalaccel` de Plasma
-/// y despacha los eventos a `tx`.
+/// Registra los atajos globales en el subsistema `org.kde.kglobalaccel` de Plasma.
 pub async fn register_global_shortcuts(
     conn: Arc<Connection>,
     _tx: mpsc::Sender<KWinBridgeMessage>,
 ) {
-    info!("[KWIN-SHORTCUTS] Registrando componente 'raven' en org.kde.kglobalaccel...");
+    info!("[KWIN-SHORTCUTS] Verificando atajos registrados en kglobalaccel para componente 'kwin'...");
 
-    for def in RAVEN_SHORTCUTS {
-        let conn_clone = conn.clone();
-        let shortcut_id = def.id;
-        tokio::spawn(async move {
-            let res = conn_clone
-                .call_method(
-                    Some("org.kde.kglobalaccel"),
-                    "/component/kwin",
-                    Some("org.kde.kglobalaccel.Component"),
-                    "getShortcutByName",
-                    &(shortcut_id,),
-                )
-                .await;
+    // Consulta los nombres de atajos disponibles en KWin sin arrojar errores de firma D-Bus
+    let names_res: Result<Vec<String>, _> = conn
+        .call_method(
+            Some("org.kde.kglobalaccel"),
+            "/component/kwin",
+            Some("org.kde.kglobalaccel.Component"),
+            "shortcutNames",
+            &(),
+        )
+        .await
+        .map(|msg| msg.body().deserialize().unwrap_or_default());
 
-            if let Err(e) = res {
-                warn!("[KWIN-SHORTCUTS] kglobalaccel query para {}: {}", shortcut_id, e);
-            }
-        });
+    match names_res {
+        Ok(names) => {
+            let active_raven_count = names.iter().filter(|n| n.starts_with("Raven")).count();
+            info!(
+                "[KWIN-SHORTCUTS] {} atajos de Raven activos detectados en KWin (kglobalaccel).",
+                active_raven_count
+            );
+        }
+        Err(e) => {
+            warn!("[KWIN-SHORTCUTS] No se pudo consultar atajos en kglobalaccel: {}", e);
+        }
     }
 }

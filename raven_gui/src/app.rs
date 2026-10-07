@@ -96,20 +96,28 @@ impl eframe::App for RavenGuiApp {
         visuals.panel_fill = self.kde_palette.window_bg;
         visuals.widgets.noninteractive.bg_fill = self.kde_palette.window_bg;
         visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0_f32, primary_text);
+        visuals.widgets.noninteractive.corner_radius = egui::CornerRadius::same(8);
+
         visuals.widgets.inactive.bg_fill = self.kde_palette.button_bg;
         visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0_f32, self.kde_palette.button_fg);
+        visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(8);
+
         visuals.widgets.hovered.bg_fill = self.kde_palette.selection_bg;
         visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0_f32, self.kde_palette.selection_fg);
+        visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(8);
+
         visuals.widgets.active.bg_fill = self.kde_palette.selection_bg;
+        visuals.widgets.active.corner_radius = egui::CornerRadius::same(8);
+
         // En egui, `RichText::strong()` y los encabezados usan `visuals.strong_text_color()`,
         // el cual retorna `visuals.widgets.active.text_color()`. Debe ser el color de texto de ventana (`window_fg`),
         // no el color de selección (`selection_fg`, típicamente blanco), para evitar que los títulos queden blancos sobre fondo claro.
         let strong_color = self.kde_palette.window_fg;
         visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0_f32, strong_color);
+        visuals.widgets.open.corner_radius = egui::CornerRadius::same(8);
         visuals.override_text_color = Some(primary_text);
         visuals.selection.bg_fill = self.kde_palette.selection_bg;
         visuals.selection.stroke = egui::Stroke::new(1.0_f32, self.kde_palette.selection_fg);
-        // visuals.window_rounding removed
         ctx.set_visuals(visuals);
 
         let accent = self.kde_palette.selection_bg;
@@ -125,7 +133,7 @@ impl eframe::App for RavenGuiApp {
                     .fill(self.kde_palette.window_bg)
                     .inner_margin(egui::Margin::same(12))
                     .outer_margin(egui::Margin::same(8))
-                    .corner_radius(16.0)
+                    .corner_radius(12.0)
                     .stroke(egui::Stroke::NONE)
             )
             .show(ui, |ui| {
@@ -173,9 +181,9 @@ impl eframe::App for RavenGuiApp {
                     let response = ui.interact(btn_rect.1, ui.id().with(label), egui::Sense::click());
 
                     if response.hovered() && !is_selected {
-                        ui.painter().rect_filled(btn_rect.1, 12.0, self.kde_palette.button_bg);
+                        ui.painter().rect_filled(btn_rect.1, 8.0, self.kde_palette.button_bg);
                     } else {
-                        ui.painter().rect_filled(btn_rect.1, 12.0, bg_color);
+                        ui.painter().rect_filled(btn_rect.1, 8.0, bg_color);
                     }
 
                     ui.painter().text(
@@ -206,8 +214,8 @@ impl eframe::App for RavenGuiApp {
                         self.kde_palette.button_bg
                     };
                     
-                    // Más redondeado (21.0 es la mitad de la altura, haciéndolo tipo píldora)
-                    ui.painter().rect_filled(btn_rect.1, 21.0, bg_color);
+                    // Redondeo elegante de 8.0
+                    ui.painter().rect_filled(btn_rect.1, 8.0, bg_color);
                     
                     let text_color = if response.hovered() {
                         egui::Color32::WHITE

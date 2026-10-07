@@ -689,11 +689,14 @@ void MediaController::refresh()
  */
 void MediaController::play()
 {
-    if (m_currentService.isEmpty()) return;
+    if (m_currentService.isEmpty()) {
+        findActivePlayer();
+        if (m_currentService.isEmpty()) return;
+    }
     QDBusInterface playerIface(m_currentService, QStringLiteral("/org/mpris/MediaPlayer2"),
                               QStringLiteral("org.mpris.MediaPlayer2.Player"),
                               QDBusConnection::sessionBus());
-    playerIface.call(QStringLiteral("Play"));
+    playerIface.call(QDBus::NoBlock, QStringLiteral("Play"));
 }
 
 /**
@@ -701,11 +704,14 @@ void MediaController::play()
  */
 void MediaController::pause()
 {
-    if (m_currentService.isEmpty()) return;
+    if (m_currentService.isEmpty()) {
+        findActivePlayer();
+        if (m_currentService.isEmpty()) return;
+    }
     QDBusInterface playerIface(m_currentService, QStringLiteral("/org/mpris/MediaPlayer2"),
                               QStringLiteral("org.mpris.MediaPlayer2.Player"),
                               QDBusConnection::sessionBus());
-    playerIface.call(QStringLiteral("Pause"));
+    playerIface.call(QDBus::NoBlock, QStringLiteral("Pause"));
 }
 
 /**
@@ -720,7 +726,7 @@ void MediaController::playPause()
     QDBusInterface playerIface(m_currentService, QStringLiteral("/org/mpris/MediaPlayer2"),
                               QStringLiteral("org.mpris.MediaPlayer2.Player"),
                               QDBusConnection::sessionBus());
-    playerIface.call(QStringLiteral("PlayPause"));
+    playerIface.call(QDBus::NoBlock, QStringLiteral("PlayPause"));
 }
 
 /**
@@ -728,11 +734,14 @@ void MediaController::playPause()
  */
 void MediaController::next()
 {
-    if (m_currentService.isEmpty()) return;
+    if (m_currentService.isEmpty()) {
+        findActivePlayer();
+        if (m_currentService.isEmpty()) return;
+    }
     QDBusInterface playerIface(m_currentService, QStringLiteral("/org/mpris/MediaPlayer2"),
                               QStringLiteral("org.mpris.MediaPlayer2.Player"),
                               QDBusConnection::sessionBus());
-    playerIface.call(QStringLiteral("Next"));
+    playerIface.call(QDBus::NoBlock, QStringLiteral("Next"));
 }
 
 /**
@@ -740,11 +749,14 @@ void MediaController::next()
  */
 void MediaController::previous()
 {
-    if (m_currentService.isEmpty()) return;
+    if (m_currentService.isEmpty()) {
+        findActivePlayer();
+        if (m_currentService.isEmpty()) return;
+    }
     QDBusInterface playerIface(m_currentService, QStringLiteral("/org/mpris/MediaPlayer2"),
                               QStringLiteral("org.mpris.MediaPlayer2.Player"),
                               QDBusConnection::sessionBus());
-    playerIface.call(QStringLiteral("Previous"));
+    playerIface.call(QDBus::NoBlock, QStringLiteral("Previous"));
 }
 
 /**
@@ -752,11 +764,14 @@ void MediaController::previous()
  */
 void MediaController::stop()
 {
-    if (m_currentService.isEmpty()) return;
+    if (m_currentService.isEmpty()) {
+        findActivePlayer();
+        if (m_currentService.isEmpty()) return;
+    }
     QDBusInterface playerIface(m_currentService, QStringLiteral("/org/mpris/MediaPlayer2"),
                               QStringLiteral("org.mpris.MediaPlayer2.Player"),
                               QDBusConnection::sessionBus());
-    playerIface.call(QStringLiteral("Stop"));
+    playerIface.call(QDBus::NoBlock, QStringLiteral("Stop"));
 }
 
 /**

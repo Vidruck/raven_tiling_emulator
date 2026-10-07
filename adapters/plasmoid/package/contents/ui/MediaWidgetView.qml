@@ -190,6 +190,9 @@ Rectangle {
                             id: prevMa
                             anchors.fill: parent
                             hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton
+                            preventStealing: true
                             onClicked: media.previous()
                         }
                         ToolTip.visible: prevMa.containsMouse
@@ -210,6 +213,9 @@ Rectangle {
                             id: playMa
                             anchors.fill: parent
                             hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton
+                            preventStealing: true
                             onClicked: media.playPause()
                         }
                         ToolTip.visible: playMa.containsMouse
@@ -230,6 +236,9 @@ Rectangle {
                             id: nextMa
                             anchors.fill: parent
                             hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton
+                            preventStealing: true
                             onClicked: media.next()
                         }
                         ToolTip.visible: nextMa.containsMouse

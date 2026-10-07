@@ -347,6 +347,7 @@ function processNewWindow(w) {
 
   bindWindow(w);
   syncWindowDelta(w);
+  requestStateSync();
 }
 
 /**
@@ -386,13 +387,13 @@ function highlightWindow(w) {
 var _debounceTimer = null;
 
 /**
- * @brief Solicita una sincronización global de estado agrupando eventos en 40ms.
+ * @brief Solicita una sincronización global de estado agrupando eventos en 20ms.
  */
 function requestStateSync() {
   try {
     if (!_debounceTimer) {
       _debounceTimer = new QTimer();
-      _debounceTimer.interval = 40;
+      _debounceTimer.interval = 20;
       _debounceTimer.singleShot = true;
       _debounceTimer.timeout.connect(syncState);
     }

@@ -364,6 +364,30 @@ impl KWinDbusService {
         self.dispatch_shortcut(&emitter, "cycle_layout", 0).await
     }
 
+    /// Incrementa el ancho de la ventana activa.
+    #[zbus(name = "resize_width_inc")]
+    async fn resize_width_inc(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "resize_width_inc", 0).await
+    }
+
+    /// Reduce el ancho de la ventana activa.
+    #[zbus(name = "resize_width_dec")]
+    async fn resize_width_dec(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "resize_width_dec", 0).await
+    }
+
+    /// Incrementa el alto de la ventana activa.
+    #[zbus(name = "resize_height_inc")]
+    async fn resize_height_inc(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "resize_height_inc", 0).await
+    }
+
+    /// Reduce el alto de la ventana activa.
+    #[zbus(name = "resize_height_dec")]
+    async fn resize_height_dec(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        self.dispatch_shortcut(&emitter, "resize_height_dec", 0).await
+    }
+
     /// Asigna directamente el algoritmo de mosaico para el área de trabajo activa.
     #[zbus(name = "setLayoutForCurrentWorkspace")]
     async fn set_layout_for_current_workspace(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>, layout_name: String) -> String {

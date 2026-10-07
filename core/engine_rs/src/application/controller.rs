@@ -606,6 +606,15 @@ impl RavenController {
                             .current_workspaces
                             .get(&ws_id)
                             .copied()
+                            .or_else(|| {
+                                let out_name = ws_id.split("||").next().unwrap_or("");
+                                topology
+                                    .output_nodes
+                                    .iter()
+                                    .find(|n| n.name == out_name)
+                                    .map(|n| n.rect)
+                            })
+                            .filter(|r| r.width > 0 && r.height > 0)
                             .unwrap_or_else(|| Rect::new(0, 0, 1920, 1080));
                         let float_w = ((ws_rect.width as f32 * 0.60).round() as i32)
                             .max(640)

@@ -9,9 +9,14 @@
 //! de recompilar el motor en Rust, brindando flexibilidad absoluta al usuario.
 
 use super::strategy::LayoutStrategy;
-use mlua::{Lua, LuaOptions, StdLib, Table};
+use mlua::{HookTriggers, Lua, LuaOptions, StdLib, Table};
 use raven_core::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
+
+/// Límite máximo de memoria asignada a una instancia de Lua (4 MB).
+const LUA_MEMORY_LIMIT_BYTES: usize = 4 * 1024 * 1024;
+/// Límite máximo de instrucciones ejecutadas para evitar bucles infinitos (DoS).
+const LUA_MAX_INSTRUCTIONS: u32 = 100_000;
 
 /// Estrategia de partición espacial que delega la matemática a un script Lua externo.
 pub struct LuaLayoutStrategy {
@@ -27,10 +32,47 @@ impl LuaLayoutStrategy {
         Self { name, script }
     }
 
+    /// Crea un entorno de Lua estrictamente sandboxeado con límites de memoria y ejecución.
+    fn create_sandboxed_lua() -> Result<Lua, String> {
+        let lua = Lua::new_with(
+            StdLib::MATH | StdLib::TABLE | StdLib::STRING,
+            LuaOptions::default(),
+        )
+        .map_err(|e| format!("Error inicializando runtime de Lua: {}", e))?;
+
+        // 1. Límite de memoria asignada
+        if let Err(e) = lua.set_memory_limit(LUA_MEMORY_LIMIT_BYTES) {
+            tracing::warn!("No se pudo configurar límite de memoria en Lua: {}", e);
+        }
+
+        // 2. Hook de límite de instrucciones para evitar bloqueos por bucles infinitos
+        use std::sync::atomic::{AtomicU32, Ordering};
+        let instruction_count = std::sync::Arc::new(AtomicU32::new(0));
+        let count_clone = instruction_count.clone();
+        let hook_res = lua.set_hook(
+            HookTriggers::default().every_nth_instruction(1_000),
+            move |_lua, _debug| {
+                let current = count_clone.fetch_add(1_000, Ordering::Relaxed);
+                if current > LUA_MAX_INSTRUCTIONS {
+                    Err(mlua::Error::RuntimeError(
+                        "Límite de ejecución excedido (posible bucle infinito o algoritmo no convergente)".to_string(),
+                    ))
+                } else {
+                    Ok(mlua::VmState::Continue)
+                }
+            },
+        );
+
+        if let Err(e) = hook_res {
+            tracing::warn!("No se pudo configurar el hook de instrucciones de Lua: {}", e);
+        }
+
+        Ok(lua)
+    }
+
     /// Valida la sintaxis de un script Lua y confirma que evalúa a una función ejecutable.
     pub fn validate_script(script: &str) -> Result<(), String> {
-        let lua = Lua::new_with(StdLib::MATH | StdLib::TABLE | StdLib::STRING, LuaOptions::default())
-            .map_err(|e| format!("Error inicializando runtime de Lua: {}", e))?;
+        let lua = Self::create_sandboxed_lua()?;
         let chunk = lua.load(script);
         let func: mlua::Function = chunk
             .eval()
@@ -58,8 +100,8 @@ impl LayoutStrategy for LuaLayoutStrategy {
         }
 
         // Sandbox de Seguridad: Solo cargamos librerías seguras (Math, Table, String).
-        // Se excluyen deliberadamente 'io', 'os' y 'package' para evitar accesos al sistema.
-        let lua = match Lua::new_with(StdLib::MATH | StdLib::TABLE | StdLib::STRING, LuaOptions::default()) {
+        // Se excluyen 'io', 'os', 'package', 'debug' y se aplican límites estrictos.
+        let lua = match Self::create_sandboxed_lua() {
             Ok(l) => l,
             Err(e) => {
                 tracing::error!("LuaLayout: No se pudo crear sandbox de Lua: {}", e);
@@ -107,12 +149,10 @@ impl LayoutStrategy for LuaLayoutStrategy {
             let is_act = active_window_id.as_deref() == Some(&w.window_id);
             let _ = w_info.set("is_active", is_act);
 
-            // Permite tanto indexar como string directo en scripts legados
-            // o como tabla enriquecida
             let _ = wins_tbl.set(i + 1, w_info);
         }
 
-        // Cargar el script seguro
+        // Cargar y compilar el script seguro
         let chunk = lua.load(&self.script);
 
         // Evaluar el script: debe retornar una función
@@ -133,7 +173,7 @@ impl LayoutStrategy for LuaLayoutStrategy {
             }
         };
 
-        // Parsear resultado: un mapa de id_ventana -> {x, y, w, h}
+        // Parsear y sanitizar resultado: mapa de id_ventana -> {x, y, w, h}
         for (win_id, rect_tbl) in result_tbl.pairs::<String, Table>().flatten() {
             if let (Ok(x), Ok(y), Ok(w), Ok(h)) = (
                 rect_tbl.get::<f64>("x"),
@@ -141,10 +181,18 @@ impl LayoutStrategy for LuaLayoutStrategy {
                 rect_tbl.get::<f64>("w"),
                 rect_tbl.get::<f64>("h"),
             ) {
-                layout_map.insert(
-                    win_id,
-                    Rect::new(x as i32, y as i32, w as i32, h as i32),
-                );
+                // Validación estricta de geometrías numéricas (evitar NaN, infinitos y tamaños negativos)
+                if x.is_finite() && y.is_finite() && w.is_finite() && h.is_finite() {
+                    let safe_w = (w.round() as i32).max(10);
+                    let safe_h = (h.round() as i32).max(10);
+                    let safe_x = x.round() as i32;
+                    let safe_y = y.round() as i32;
+
+                    layout_map.insert(
+                        win_id,
+                        Rect::new(safe_x, safe_y, safe_w, safe_h),
+                    );
+                }
             }
         }
 
@@ -183,7 +231,6 @@ mod tests {
 
     #[test]
     fn test_lua_layout_sandboxing_blocks_os_and_io() {
-        // Intentar invocar os.execute o io.open debe fallar en el sandbox
         let malicious_script = r#"
             return function(screen, windows, config)
                 if os ~= nil then
@@ -196,8 +243,52 @@ mod tests {
         let node = mock_window("win_1");
         let screen = Rect::new(0, 0, 1920, 1080);
         let (map, _) = strat.calculate(&[node], screen, 1, 0.5, 10, None);
-        // Debe ejecutarse sin error (al no existir `os`, la condición es nil) y no romper el motor
         assert!(map.is_empty());
+    }
+
+    #[test]
+    fn test_lua_layout_infinite_loop_prevention() {
+        let infinite_loop_script = r#"
+            return function(screen, windows, config)
+                local x = 0
+                while true do
+                    x = x + 1
+                end
+                return {}
+            end
+        "#;
+        let strat = LuaLayoutStrategy::new("infinite_loop".to_string(), infinite_loop_script.to_string());
+        let node = mock_window("win_1");
+        let screen = Rect::new(0, 0, 1920, 1080);
+        // Debe abortar con seguridad y no congelar el hilo ni entrar en bucle infinito
+        let (map, evicted) = strat.calculate(&[node], screen, 1, 0.5, 10, None);
+        assert!(map.is_empty());
+        assert_eq!(evicted.len(), 0);
+    }
+
+    #[test]
+    fn test_lua_layout_sanitizes_nan_and_negative_dimensions() {
+        let crazy_script = r#"
+            return function(screen, windows, config)
+                local res = {}
+                res["w_nan"] = { x = 0/0, y = 10, w = 100, h = 100 }
+                res["w_neg"] = { x = 10, y = 20, w = -50, h = -10 }
+                return res
+            end
+        "#;
+        let strat = LuaLayoutStrategy::new("crazy".to_string(), crazy_script.to_string());
+        let node1 = mock_window("w_nan");
+        let node2 = mock_window("w_neg");
+        let screen = Rect::new(0, 0, 1920, 1080);
+        let (map, _) = strat.calculate(&[node1, node2], screen, 1, 0.5, 10, None);
+
+        // NaN debe ser descartado
+        assert!(!map.contains_key("w_nan"));
+        // Medidas negativas deben ser saneadas a un mínimo seguro (>= 10)
+        if let Some(r) = map.get("w_neg") {
+            assert!(r.width >= 10);
+            assert!(r.height >= 10);
+        }
     }
 
     #[test]
@@ -230,3 +321,4 @@ mod tests {
         assert_eq!(r.height, 1080 - 24);
     }
 }
+

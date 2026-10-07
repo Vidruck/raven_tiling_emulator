@@ -122,27 +122,39 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, 
                 }
             });
 
-            ui.add_space(8.0);
-            // 📖 Manual interactivo y plantilla para desarrolladores
-            ui.collapsing("📖 Manual y Plantilla de Algoritmos Lua", |ui| {
-                ui.label(
-                    egui::RichText::new(
-                        "Raven ejecuta layouts Lua en un entorno seguro (sandbox sin acceso a red ni disco). \
-                        El script debe retornar una función pura que reciba (screen, windows, config) y devuelva una tabla asociativa con la geometría de cada ventana:"
-                    )
-                    .size(11.0)
-                    .weak()
-                );
-                ui.add_space(4.0);
-                ui.label(
-                    egui::RichText::new("• screen: { x, y, w, h }\n• windows: lista de { id, min_w, min_h, class, is_active }\n• config: { gaps, master_ratio, nmaster, active_id }")
-                        .size(10.5)
-                        .monospace()
-                        .color(accent)
-                );
-                ui.add_space(6.0);
+            ui.add_space(10.0);
+            // 📖 Manual interactivo y plantilla para desarrolladores con diseño amplio y espacioso
+            egui::Frame::new()
+                .fill(egui::Color32::from_black_alpha(25))
+                .corner_radius(8.0)
+                .inner_margin(egui::Margin::same(10))
+                .show(ui, |ui| {
+                    ui.collapsing(egui::RichText::new("📖 Manual y Plantilla de Algoritmos Lua").strong().size(12.5), |ui| {
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new(
+                                "Raven ejecuta layouts Lua en un entorno estrictamente seguro y aislado (sandbox sin acceso a disco, red ni procesos). \
+                                Cuenta con límite de memoria (4 MB) y detector automático de bucles infinitos para evitar cualquier congelamiento."
+                            )
+                            .size(11.0)
+                            .weak()
+                        );
+                        ui.add_space(6.0);
+                        ui.label(
+                            egui::RichText::new("Variables inyectadas a la función de layout:")
+                                .strong()
+                                .size(11.0)
+                        );
+                        ui.add_space(2.0);
+                        ui.label(
+                            egui::RichText::new("• screen:  { x, y, w, h }\n• windows: { [1] = { id, min_w, min_h, class, is_active }, ... }\n• config:  { gaps, master_ratio, nmaster, active_id }")
+                                .size(11.0)
+                                .monospace()
+                                .color(accent)
+                        );
+                        ui.add_space(8.0);
 
-                let template_code = r#"return function(screen, windows, config)
+                        let template_code = r#"return function(screen, windows, config)
     local layout = {}
     local n = #windows
     if n == 0 then return layout end
@@ -180,26 +192,28 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32, 
     return layout
 end"#;
 
-                ui.label(egui::RichText::new("Plantilla de referencia:").strong().size(11.0));
-                ui.add_space(2.0);
-                egui::ScrollArea::vertical()
-                    .max_height(140.0)
-                    .show(ui, |ui| {
-                        ui.add(
-                            egui::TextEdit::multiline(&mut template_code.to_string())
-                                .font(egui::TextStyle::Monospace)
-                                .desired_rows(10)
-                                .lock_focus(true)
-                                .interactive(false)
-                        );
-                    });
+                        ui.label(egui::RichText::new("Plantilla base de referencia:").strong().size(11.5));
+                        ui.add_space(4.0);
+                        egui::ScrollArea::vertical()
+                            .max_height(220.0)
+                            .show(ui, |ui| {
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut template_code.to_string())
+                                        .font(egui::TextStyle::Monospace)
+                                        .desired_rows(14)
+                                        .desired_width(f32::INFINITY)
+                                        .lock_focus(true)
+                                        .interactive(false)
+                                );
+                            });
 
-                ui.add_space(4.0);
-                if ui.button("📋 Copiar Plantilla al Portapapeles").clicked() {
-                    ui.ctx().copy_text(template_code.to_string());
-                }
-                ui.add_space(4.0);
-            });
+                        ui.add_space(8.0);
+                        if ui.button("📋 Copiar Plantilla al Portapapeles").clicked() {
+                            ui.ctx().copy_text(template_code.to_string());
+                        }
+                        ui.add_space(4.0);
+                    });
+                });
 
             ui.add_space(10.0);
             ui.group(|ui| {
