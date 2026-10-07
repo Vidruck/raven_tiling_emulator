@@ -1,7 +1,6 @@
 //! # Algoritmo de Columnas Equitativas (`DivisorStrategy`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Implementa una partición horizontal donde la pantalla se divide en $N$ columnas

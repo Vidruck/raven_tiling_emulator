@@ -1,7 +1,6 @@
 //! # Orquestador de Topología Global, Mediador de Capacidad y Soporte PiP
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Coordina la distribución espacial de ventanas a través de múltiples monitores físicos

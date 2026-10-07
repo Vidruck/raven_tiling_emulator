@@ -1,7 +1,6 @@
 //! # Comandos Serializables para KWin (`commands`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 4.0  
 //! **Licencia:** GPL-3.0  
 //!
 //! Define la estructura JSON de comandos que consume el actuador en KWin (`TilingCommand`).

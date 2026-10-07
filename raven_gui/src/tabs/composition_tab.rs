@@ -1,7 +1,6 @@
 //! # Pestaña de Reglas de Ventana y Cuarentena CSD (`composition_tab.rs`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Administra la creación interactiva de reglas de exclusión por clase WM (`WindowRule`),

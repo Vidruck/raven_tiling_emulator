@@ -1,7 +1,6 @@
 //! # Estrategia de Layout Scriptable (Lua)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)
-//! **Versión:** 4.0
 //! **Licencia:** GPL-3.0
 //!
 //! Ejecuta algoritmos de layout definidos por el usuario en Lua mediante una máquina virtual

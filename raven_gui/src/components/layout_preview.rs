@@ -1,7 +1,6 @@
 //! # Previsualización Gráfica Vectorial 2D (`layout_preview.rs`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Renderiza sobre un canvas vectorial interactivo de `egui` la partición matemática en tiempo real

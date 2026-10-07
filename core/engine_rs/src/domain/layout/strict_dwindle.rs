@@ -1,7 +1,6 @@
 //! # Algoritmo de Espiral Recursiva Clásica (`StrictDwindleStrategy`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Implementa la división binaria áurea en espiral secuencial estricta (estilo Fibonacci/Bspwm).

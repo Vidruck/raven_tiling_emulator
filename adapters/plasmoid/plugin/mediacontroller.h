@@ -2,7 +2,7 @@
  * @file mediacontroller.h
  * @brief Controlador multimedia compatible con la especificación MPRIS2 para KDE Plasma 6.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @license GPL-3.0
  */
 
 #ifndef MEDIACONTROLLER_H

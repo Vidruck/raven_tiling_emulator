@@ -1,7 +1,6 @@
 //! # Backend KWin para Raven Tiling (`raven_backend_kwin`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 4.0  
 //! **Licencia:** GPL-3.0  
 //!
 //! Este crate implementa la integración nativa y comunicación asíncrona con el compositor

@@ -1,7 +1,6 @@
 //! # Centro de Control Gráfico de Raven (`raven_gui`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Interfaz nativa desarrollada en Rust usando `egui` y `eframe`. Proporciona un

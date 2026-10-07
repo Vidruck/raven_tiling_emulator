@@ -2,7 +2,7 @@
  * @file ravencontroller.h
  * @brief Interfaz de enlace C++/Qt para el control del motor Raven Tiling vía D-Bus.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @license GPL-3.0
  */
 
 #pragma once

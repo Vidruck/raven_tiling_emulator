@@ -1,7 +1,6 @@
 //! # Administrador de Cuarentena y Filtrado KWin (`quarantine`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 4.1  
 //! **Licencia:** GPL-3.0  
 //!
 //! Implementa la lógica de filtrado de ventanas gestionables/flotantes,

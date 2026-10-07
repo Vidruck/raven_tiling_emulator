@@ -1,7 +1,6 @@
 //! # Pestaña de Guía de Atajos de Teclado (`shortcuts_tab.rs`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Presenta el catálogo visual interactivo de atajos de teclado globales de KWin

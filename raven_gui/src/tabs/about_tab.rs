@@ -1,7 +1,6 @@
 //! # Pestaña de Información, Autoría y Licencia (`about_tab.rs`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Presenta los créditos oficiales, enlaces al repositorio GitHub, información del desarrollador y términos de licencia GPL-3.0.

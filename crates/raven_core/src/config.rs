@@ -1,7 +1,6 @@
 //! # Configuración Persistente y Reglas de Dominio
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Administra la serialización y deserialización del archivo de configuración `~/.config/raven/raven.json`,

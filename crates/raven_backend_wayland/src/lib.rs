@@ -1,7 +1,6 @@
 //! # Backend Wayland Nativo para Raven Tiling (`raven_backend_wayland`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)
-//! **Versión:** 4.0.0
 //! **Licencia:** GPL-3.0
 //!
 //! Este crate implementa la conexión directa al socket Wayland del compositor

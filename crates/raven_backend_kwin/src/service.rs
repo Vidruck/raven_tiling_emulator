@@ -1,7 +1,6 @@
 //! # Servicio D-Bus para KWin (`service`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 4.0  
 //! **Licencia:** GPL-3.0  
 //!
 //! Implementa la interfaz D-Bus `org.kde.raven.Events` que comunica con el script KWin

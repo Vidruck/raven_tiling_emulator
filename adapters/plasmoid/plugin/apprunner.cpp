@@ -2,7 +2,6 @@
  * @file apprunner.cpp
  * @brief Implementación del indexador y lanzador de aplicaciones del sistema XDG.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
  * @license GPL-3.0
  */
 

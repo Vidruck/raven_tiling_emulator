@@ -1,7 +1,6 @@
 //! # Algoritmo Insignia: Dwindle BSP Adaptativo (*Raven Tiling Core*)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Implementa la arquitectura de partición espacial insignia de Raven:

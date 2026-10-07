@@ -2,7 +2,6 @@
  * @file mediacontroller.cpp
  * @brief Implementación del controlador multimedia MPRIS2 para KDE Plasma.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
  * @license GPL-3.0
  */
 

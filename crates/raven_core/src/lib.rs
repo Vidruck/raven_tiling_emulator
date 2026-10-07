@@ -1,7 +1,6 @@
 //! # Raven Core (`raven_core`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Biblioteca fundamental y núcleo de tipos de datos puros compartidos para el ecosistema

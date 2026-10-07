@@ -1,7 +1,6 @@
 //! # Utilidades Geométricas y Distribución Ponderada
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Provee funciones auxiliares de bajo nivel para la aplicación simétrica de márgenes

@@ -1,7 +1,6 @@
 //! # Capa de Infraestructura D-Bus (Reexportada desde `raven_backend_kwin`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 4.0  
 //! **Licencia:** GPL-3.0  
 //!
 //! Este módulo reexporta los servicios, comandos y parsers nativos desde el crate

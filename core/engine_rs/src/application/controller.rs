@@ -1,7 +1,6 @@
 //! # Controlador de Aplicación y Mitigador de Inestabilidad (`RavenController`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Orquesta las mutaciones de estado, transiciones de layout, navegación de foco,

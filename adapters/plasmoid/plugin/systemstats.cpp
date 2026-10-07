@@ -2,7 +2,6 @@
  * @file systemstats.cpp
  * @brief Implementación del monitor del sistema y sincronizador del tema visual.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
  * @license GPL-3.0
  */
 

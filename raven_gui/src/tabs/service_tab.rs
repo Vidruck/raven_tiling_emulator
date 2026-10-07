@@ -1,7 +1,6 @@
 //! # Pestaña de Gestión del Servicio Systemd (`service_tab.rs`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Proporciona controles interactivos para iniciar, detener, reiniciar y consultar

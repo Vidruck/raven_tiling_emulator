@@ -1,7 +1,6 @@
 //! # Estrategias de Layout y Fábrica Polimórfica
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Define el contrato (`trait`) [`LayoutStrategy`] que gobierna todos los algoritmos

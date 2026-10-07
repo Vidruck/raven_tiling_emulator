@@ -1,7 +1,6 @@
 //! # Serialización y Deserialización de Payloads KWin (`parser`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 4.0  
 //! **Licencia:** GPL-3.0  
 //!
 //! Estructuras de datos para parsear las llamadas de sincronización emitidas por el script de KWin.

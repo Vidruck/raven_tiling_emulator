@@ -2,7 +2,6 @@
  * @file ravencontroller.cpp
  * @brief Implementación de la interfaz de enlace C++/Qt para el control del motor Raven Tiling.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
  * @license GPL-3.0
  */
 
@@ -158,7 +157,6 @@ void RavenController::sendDbusAction(const QString &action)
             }
         });
     } else {
-        // Fallback vía qdbus CLI si la interfaz directa aún no responde
         QProcess::startDetached(QStringLiteral("qdbus"), {
             QStringLiteral("org.kde.raven.Daemon"),
             QStringLiteral("/Events"),
@@ -252,7 +250,6 @@ void RavenController::setLayout(const QString &layoutName)
         if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
             QString cmds = reply.arguments().first().toString();
             if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
-                // Notificar directamente al servicio de KWin como reaseguro en tiempo real
                 QDBusConnection::sessionBus().send(
                     QDBusMessage::createMethodCall(
                         QStringLiteral("org.kde.raven.Daemon"),

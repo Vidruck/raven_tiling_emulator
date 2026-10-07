@@ -1,7 +1,6 @@
 //! # Modelos y Estructuras de Datos de la GUI (`models.rs`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Define las enumeraciones de navegación (`NavTab`), definiciones de presets y catálogo de atajos.

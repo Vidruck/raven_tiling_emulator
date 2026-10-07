@@ -1,7 +1,6 @@
 //! # Algoritmo de Espiral Recursiva Invertida (`InvertedStrictDwindleStrategy`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Implementa una partición espiral espejada geométricamente: la ventana principal

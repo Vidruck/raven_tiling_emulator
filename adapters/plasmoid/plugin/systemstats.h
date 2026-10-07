@@ -2,7 +2,7 @@
  * @file systemstats.h
  * @brief Monitor del sistema y sincronizador del tema visual para KDE Plasma 6.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @license GPL-3.0
  */
 
 #ifndef SYSTEMSTATS_H

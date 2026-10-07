@@ -1,7 +1,6 @@
 //! # Abstracción de Puertos y Eventos de Compositor (`backend`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 4.0  
 //! **Licencia:** GPL-3.0  
 //!
 //! Este módulo define los contratos universales (`traits`) y tipos de datos

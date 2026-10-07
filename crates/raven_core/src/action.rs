@@ -1,7 +1,6 @@
 //! # Catálogo de Acciones de Dominio (`RavenAction`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Este módulo define las acciones atómicas e intenciones geométricas emitidas por el motor

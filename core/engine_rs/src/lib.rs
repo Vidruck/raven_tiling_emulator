@@ -1,7 +1,6 @@
 //! # Raven Engine (`raven_engine`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Motor central y demonio de alto rendimiento para el emulador de mosaico Raven.

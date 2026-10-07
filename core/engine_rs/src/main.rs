@@ -1,7 +1,6 @@
 //! # Demonio Principal de Raven Tiling (`raven_engine`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Punto de entrada del binario del demonio Rust. Inicializa la configuración,

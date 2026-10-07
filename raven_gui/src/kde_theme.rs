@@ -1,7 +1,6 @@
 //! # Sincronización del Esquema de Colores de KDE Plasma (`KdePalette`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Lee y parsea directamente el archivo `~/.config/kdeglobals` para sincronizar

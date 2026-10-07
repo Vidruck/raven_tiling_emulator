@@ -1,7 +1,6 @@
 //! # Geometría y Estructuras de Datos Espaciales
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Este submódulo define las estructuras de datos fundamentales utilizadas por el motor

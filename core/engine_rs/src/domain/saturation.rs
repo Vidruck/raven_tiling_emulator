@@ -1,7 +1,6 @@
 //! # Motor de Composición Predictiva — Detección y Mitigación de Saturación
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Modela matemáticamente el umbral crítico de capacidad de pantalla ($C_{max}$)

@@ -2,7 +2,7 @@
  * @file apprunner.h
  * @brief Indexador y lanzador de aplicaciones del sistema XDG para Raven Hub.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @license GPL-3.0
  */
 
 #ifndef APPRUNNER_H

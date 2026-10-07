@@ -19,6 +19,13 @@
 Q_LOGGING_CATEGORY(RAVEN_EFFECT, "raven.effect", QtInfoMsg)
 
 
+/**
+ * @brief Constructor de la clase RavenEffect.
+ * 
+ * Inicializa el adaptador D-Bus y registra el servicio y objeto en el bus de sesión
+ * para permitir la comunicación remota (IPC). También conecta las señales del
+ * compositor de KWin para la gestión de ventanas si está disponible.
+ */
 RavenEffect::RavenEffect()
     : m_dbusAdaptor(new RavenEffectAdaptor(this))
 {
@@ -39,6 +46,12 @@ RavenEffect::RavenEffect()
     }
 }
 
+/**
+ * @brief Destructor de la clase RavenEffect.
+ * 
+ * Se encarga de desconectar las señales de KWin y dar de baja el servicio
+ * y el objeto D-Bus registrados durante la inicialización.
+ */
 RavenEffect::~RavenEffect()
 {
     if (KWin::effects) {
@@ -50,16 +63,37 @@ RavenEffect::~RavenEffect()
     dbus.unregisterService(QStringLiteral("org.kde.kwin.RavenEffect"));
 }
 
+/**
+ * @brief Verifica si el efecto está soportado por el compositor actual.
+ * 
+ * @return true si el compositor está activo y soporta efectos; false en caso contrario.
+ */
 bool RavenEffect::supported()
 {
     return KWin::effects && KWin::effects->compositingType() != KWin::NoCompositing;
 }
 
+/**
+ * @brief Comprueba si el efecto tiene alguna animación en progreso.
+ * 
+ * @return true si existe al menos una animación activa; false de lo contrario.
+ */
 bool RavenEffect::isActive() const
 {
     return !m_activeAnimations.isEmpty();
 }
 
+/**
+ * @brief Maneja el evento de finalización de una animación de KWin.
+ * 
+ * Este método es llamado por el compositor (KWin) cuando una animación termina.
+ * Se utiliza para purgar las animaciones que han concluido del registro interno
+ * y liberar memoria.
+ * 
+ * @param w Puntero a la ventana cuyo atributo terminó de animarse.
+ * @param a Atributo que estaba siendo animado.
+ * @param meta Metadatos asociados a la animación.
+ */
 void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
 {
     Q_UNUSED(a);
@@ -78,6 +112,15 @@ void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
     }
 }
 
+/**
+ * @brief Slot que se ejecuta cuando se añade una nueva ventana al compositor.
+ * 
+ * Ignora ventanas de sistema (paneles, notificaciones, etc.) y lanza una
+ * animación reactiva (gelatina / zoom-in) indicando el "nacimiento" de la ventana.
+ * Además, notifica al motor backend a través de D-Bus.
+ * 
+ * @param w Puntero a la nueva ventana añadida.
+ */
 void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
 {
     if (!w) {
@@ -96,7 +139,7 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
 
     qCInfo(RAVEN_EFFECT) << "Ventana detectada en compositing, iniciando nacimiento reactivo:" << windowId;
 
-    // 1. Iniciar animación de nacimiento nativa instantáneamente (140ms reactivo y ágil)
+    // Iniciar animación de nacimiento nativa
     animateWindowBirth(windowId, 140);
 
     // 2. Emitir señal D-Bus hacia Raven Backend
@@ -105,6 +148,14 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
     }
 }
 
+/**
+ * @brief Slot que se ejecuta cuando una ventana es cerrada.
+ * 
+ * Cancela inmediatamente cualquier animación activa que pertenezca
+ * a la ventana que está siendo destruida para evitar fallos de memoria (segmentation faults).
+ * 
+ * @param w Puntero a la ventana que se cierra.
+ */
 void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
 {
     if (!w) {
@@ -124,6 +175,16 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
 }
 
 
+/**
+ * @brief Busca una ventana activa (EffectWindow) por su identificador.
+ * 
+ * Realiza una búsqueda segura en la pila (stack) de ventanas del compositor.
+ * Intenta coincidir utilizando el puntero en formato hexadecimal (0x...),
+ * el valor decimal o el identificador interno de la ventana (internal ID).
+ * 
+ * @param windowId Cadena de texto con el identificador de la ventana a buscar.
+ * @return KWin::EffectWindow* Puntero a la ventana encontrada, o nullptr si no existe.
+ */
 KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
 {
     if (!KWin::effects) {
@@ -153,6 +214,15 @@ KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
     return nullptr;
 }
 
+/**
+ * @brief Convierte un nombre de curva de aceleración en un objeto QEasingCurve nativo.
+ * 
+ * Transforma identificadores en formato cadena (ej. "EaseOutBack" o "Jelly")
+ * a la representación nativa de curva de suavizado (easing curve) de Qt.
+ * 
+ * @param easingName Nombre descriptivo de la curva.
+ * @return QEasingCurve Objeto con la curva de aceleración solicitada.
+ */
 QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
 {
     if (easingName == QLatin1String("EaseOutExpo")) {
@@ -162,7 +232,7 @@ QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
     } else if (easingName == QLatin1String("EaseOutBack")) {
         return QEasingCurve(QEasingCurve::OutBack);
     } else if (easingName == QLatin1String("EaseOutElastic") || easingName == QLatin1String("Jelly")) {
-        // Curva elástica amortiguada tipo gelatina súper reactiva
+        // Curva elástica amortiguada
         QEasingCurve elastic(QEasingCurve::OutElastic);
         elastic.setPeriod(0.25);
         elastic.setAmplitude(1.05);
@@ -172,10 +242,22 @@ QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
     } else if (easingName == QLatin1String("Linear")) {
         return QEasingCurve(QEasingCurve::Linear);
     }
-    // Efecto súper ágil por defecto (OutCubic / OutBack controlado)
+    // Efecto por defecto
     return QEasingCurve(QEasingCurve::OutCubic);
 }
 
+/**
+ * @brief Interpola de forma animada la geometría (tamaño y posición) de una ventana.
+ * 
+ * Lanza una animación nativa usando el gestor de efectos para mover y escalar la ventana
+ * desde su rectángulo de origen al de destino usando una curva específica.
+ * 
+ * @param windowId Identificador interno de la ventana.
+ * @param startRect Rectángulo inicial (x, y, ancho, alto).
+ * @param targetRect Rectángulo objetivo.
+ * @param durationMs Duración de la transición en milisegundos.
+ * @param easingName Nombre de la curva de suavizado (easing curve) a utilizar.
+ */
 void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &startRect, const QRectF &targetRect,
                                         int durationMs, const QString &easingName)
 {
@@ -186,7 +268,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
 
     cancelWindowAnimation(windowId);
 
-    // Duración hiper-reactiva (120ms - 150ms) para dar tiempo de respuesta instantáneo al compositor sin rasgados
+    // Ajustar duración por defecto si el valor no es válido
     if (durationMs <= 0 || durationMs > 300) {
         durationMs = 130;
     }
@@ -210,7 +292,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
         m_activeAnimations[windowId].append(posAnim);
     }
 
-    // 2. Animación de estiramiento / redimensionamiento dinámico elástico (Scale)
+    // 2. Animación de escala
     // Se interpola la escala desde (startW / targetW, startH / targetH) hacia (1.0, 1.0)
     if (targetRect.width() > 0.0 && targetRect.height() > 0.0 &&
         startRect.width() > 0.0 && startRect.height() > 0.0) {
@@ -235,6 +317,15 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
     }
 }
 
+/**
+ * @brief Procesa un bloque (batch) de animaciones de geometría a partir de JSON.
+ * 
+ * Lee un texto en formato JSON que describe múltiples transiciones y lanza 
+ * las animaciones de manera simultánea para todas las ventanas indicadas.
+ * Útil para los cambios de disposición (layouts) del gestor de ventanas en mosaico (tiling).
+ * 
+ * @param jsonPayload Cadena JSON con el arreglo (array) de objetos de animación.
+ */
 void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
 {
     if (jsonPayload.isEmpty() || jsonPayload == QLatin1String("[]") || jsonPayload == QLatin1String("{}")) {
@@ -271,6 +362,15 @@ void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
     }
 }
 
+/**
+ * @brief Realiza la animación inicial de nacimiento (aparición) de una ventana.
+ * 
+ * Ejecuta una interpolación doble combinando el escalado desde un tamaño menor 
+ * hacia el tamaño natural (1.0), junto con una transición de opacidad (fade in).
+ * 
+ * @param windowId Identificador de la ventana.
+ * @param durationMs Duración de la animación de nacimiento en milisegundos.
+ */
 void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
 {
     KWin::EffectWindow *w = findWindowById(windowId);
@@ -281,16 +381,16 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
     cancelWindowAnimation(windowId);
 
     if (durationMs <= 0) {
-        durationMs = 250; // Efecto rápido y profesional
+        durationMs = 250;
     }
 
-    QEasingCurve curve(QEasingCurve::OutElastic); // Curva gelatina (rápida)
-    QEasingCurve opacityCurve(QEasingCurve::OutCubic); // Fade suave
+    QEasingCurve curve(QEasingCurve::OutElastic);
+    QEasingCurve opacityCurve(QEasingCurve::OutCubic);
 
     uint metaCenter = 0;
     setMetaData(SourceAnchor, Anchor::Horizontal | Anchor::Vertical, metaCenter);
 
-    // Animación de escala (Zoom-in desde 0.85 a 1.0 para que sea ágil y tipo gelatina)
+    // Animación de escala desde 0.85 a 1.0
     quint64 scaleAnim = animate(w,
                                 KWin::AnimationEffect::Scale,
                                 metaCenter,
@@ -305,7 +405,7 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
     quint64 opacityAnim = animate(w,
                                   KWin::AnimationEffect::Opacity,
                                   metaOpacity,
-                                  std::chrono::milliseconds(static_cast<int>(durationMs * 0.7)), // Fade un poco más rápido que el rebote
+                                  std::chrono::milliseconds(static_cast<int>(durationMs * 0.7)),
                                   KWin::FPx2(1.0, 1.0),
                                   opacityCurve,
                                   0,
@@ -315,6 +415,14 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
     if (opacityAnim != 0) m_activeAnimations[windowId].append(opacityAnim);
 }
 
+/**
+ * @brief Cancela inmediatamente todas las animaciones activas asociadas a una ventana.
+ * 
+ * Útil cuando se requiere interrumpir el efecto visual debido a un cerrado
+ * súbito de la ventana u otra acción que vuelva obsoleta la animación.
+ * 
+ * @param windowId Identificador de la ventana.
+ */
 void RavenEffect::cancelWindowAnimation(const QString &windowId)
 {
     if (m_activeAnimations.contains(windowId)) {

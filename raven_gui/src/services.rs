@@ -1,7 +1,6 @@
 //! # Capa de Servicios y Persistencia del Sistema (`services.rs`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Controla el ciclo de vida del servicio `raven.service` vía `systemctl --user`,

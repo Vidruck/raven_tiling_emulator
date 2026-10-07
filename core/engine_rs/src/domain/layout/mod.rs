@@ -1,4 +1,4 @@
-//! # Algoritmos de Layout - Versión 3.0
+//! # Algoritmos de Layout
 //!
 //! Submódulo orquestador para el cálculo de la disposición de las ventanas en mosaico (tiling).
 //! Coordina las estrategias de espacio binario (BSP), algoritmos individuales, topología global

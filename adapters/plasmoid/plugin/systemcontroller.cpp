@@ -2,7 +2,6 @@
  * @file systemcontroller.cpp
  * @brief Implementación del controlador de acciones de gestión de energía y sesión.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
  * @license GPL-3.0
  */
 
@@ -29,7 +28,6 @@ SystemController::SystemController(QObject *parent)
  */
 void SystemController::lock()
 {
-    // Intentar usar la interfaz de screensaver de freedesktop (estándar en Plasma y otros entornos de escritorio)
     QDBusMessage msg = QDBusMessage::createMethodCall(
         QStringLiteral("org.freedesktop.ScreenSaver"),
         QStringLiteral("/ScreenSaver"),

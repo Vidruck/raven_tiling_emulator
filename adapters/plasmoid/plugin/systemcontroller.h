@@ -2,7 +2,7 @@
  * @file systemcontroller.h
  * @brief Controlador de acciones de gestión de energía y sesión de usuario para KDE Plasma 6.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @license GPL-3.0
  */
 
 #ifndef SYSTEMCONTROLLER_H

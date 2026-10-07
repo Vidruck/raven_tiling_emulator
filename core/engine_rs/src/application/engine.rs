@@ -1,7 +1,6 @@
 //! # Núcleo del Motor de Mosaico (`TilingEngine`)
 //!
 //! **Autor:** Alejandro González Hernández (Vidruck)  
-//! **Versión:** 3.4  
 //! **Licencia:** GPL-3.0  
 //!
 //! Mantiene el estado en memoria de ventanas gestionadas, geometrías de pantalla,
