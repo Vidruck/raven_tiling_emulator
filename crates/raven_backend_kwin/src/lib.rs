@@ -17,7 +17,7 @@ pub mod shortcuts;
 
 pub use commands::TilingCommand;
 pub use effect::{RavenEffectClient, WindowAnimation};
-pub use parser::{parse_payload, KWinPayload, KWinScreen, KWinTopology, KWinWindow};
+pub use parser::{parse_payload, parse_window_delta, KWinPayload, KWinScreen, KWinTopology, KWinWindow};
 pub use quarantine::{KWinQuarantineManager, QuarantineCategory, StartupMode};
 pub use service::{actions_to_kwin_json, KWinBridgeMessage, KWinDbusService};
 pub use shortcuts::{register_global_shortcuts, ShortcutDefinition, RAVEN_SHORTCUTS};

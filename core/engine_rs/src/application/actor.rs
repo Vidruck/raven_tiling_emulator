@@ -14,8 +14,8 @@ use tracing::info;
 
 use crate::application::controller::RavenController;
 use crate::application::quarantine::QuarantineManager;
-use crate::domain::geometry::{Rect, Topology, WindowNode};
-use raven_backend_kwin::{parse_payload, service::KWinBridgeMessage, KWinWindow};
+use crate::domain::geometry::Topology;
+use raven_backend_kwin::{parse_payload, parse_window_delta, service::KWinBridgeMessage};
 use raven_core::backend::{CompositorBackend, CompositorEvent};
 use raven_core::ports::NotificationPort;
 
@@ -360,52 +360,20 @@ impl RavenControllerActor {
                     }
                     KWinBridgeMessage::SyncWindowDelta { delta_json, reply } => {
                         let mut commands = Vec::new();
-                        if let Ok(win) = serde_json::from_str::<KWinWindow>(&delta_json) {
-                            let ws_id = if !win.ws.is_empty() {
-                                win.ws
+                        if let Ok(mut win_node) = parse_window_delta(&delta_json) {
+                            let is_max = win_node.is_maximized;
+                            if is_max {
+                                self.controller.get_engine_mut().maximized_windows.insert(win_node.window_id.clone());
                             } else {
-                                let out_name = if !win.output.is_empty() {
-                                    win.output.as_str()
-                                } else {
-                                    "default"
-                                };
-                                let desk_name = win
-                                    .desktops
-                                    .first()
-                                    .map(|d| d.as_str())
-                                    .unwrap_or("default_desk");
-                                format!("{}||{}", out_name, desk_name)
-                            };
-
-                            let is_max = win.max;
-                            if win.max {
-                                self.controller.get_engine_mut().maximized_windows.insert(win.id.clone());
-                            } else {
-                                self.controller.get_engine_mut().maximized_windows.remove(&win.id);
+                                self.controller.get_engine_mut().maximized_windows.remove(&win_node.window_id);
                             }
 
                             let is_dynamic_float = self
                                 .controller
                                 .get_engine()
                                 .dynamic_floating_windows
-                                .contains(&win.id);
-                            let mut win_node = WindowNode::new(
-                                win.id,
-                                ws_id,
-                                win.output,
-                                win.desktops,
-                                is_dynamic_float || is_max,
-                                win.m,
-                                win.p,
-                                Rect::new(win.x, win.y, win.w, win.h),
-                                win.min_w,
-                                win.min_h,
-                                win.sb,
-                                win.iq,
-                                win.fs,
-                            )
-                            .with_maximized(is_max)
-                            .with_class_and_caption(win.cls, win.cls_name, win.sus, win.cap);
+                                .contains(&win_node.window_id);
+                            win_node.is_floating = is_dynamic_float || is_max;
 
                             let already_released = self
                                 .controller

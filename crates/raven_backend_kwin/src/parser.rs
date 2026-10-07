@@ -176,3 +176,40 @@ pub fn parse_payload(
 
     Ok((workspaces, windows, topology))
 }
+
+/// Parsea el delta JSON de una única ventana convirtiéndolo en un `WindowNode` de `raven_core`.
+pub fn parse_window_delta(delta_str: &str) -> Result<WindowNode, serde_json::Error> {
+    let win: KWinWindow = serde_json::from_str(delta_str)?;
+    let ws_id = if !win.ws.is_empty() {
+        win.ws
+    } else {
+        let out_name = if !win.output.is_empty() {
+            win.output.as_str()
+        } else {
+            "default"
+        };
+        let desk_name = win.desktops.first().map(|d| d.as_str()).unwrap_or("default_desk");
+        format!("{}||{}", out_name, desk_name)
+    };
+
+    Ok(
+        WindowNode::new(
+            win.id,
+            ws_id,
+            win.output,
+            win.desktops,
+            win.f,
+            win.m,
+            win.p,
+            Rect::new(win.x, win.y, win.w, win.h),
+            win.min_w,
+            win.min_h,
+            win.sb,
+            win.iq,
+            win.fs,
+        )
+        .with_maximized(win.max)
+        .with_class_and_caption(win.cls, win.cls_name, win.sus, win.cap),
+    )
+}
+
