@@ -94,16 +94,13 @@ impl FlapGuard {
             }
         }
 
-        let is_jumping = match tracker.last_rect {
-            Some(old_r) => {
-                let dx = (old_r.x - win.geometry.x).abs();
-                let dy = (old_r.y - win.geometry.y).abs();
-                let dw = (old_r.width - win.geometry.width).abs();
-                let dh = (old_r.height - win.geometry.height).abs();
-                dx > 10 || dy > 10 || dw > 10 || dh > 10
-            }
-            None => false,
-        };
+        let is_jumping = tracker.last_rect.map_or(false, |old_r| {
+            let dx = (old_r.x - win.geometry.x).abs();
+            let dy = (old_r.y - win.geometry.y).abs();
+            let dw = (old_r.width - win.geometry.width).abs();
+            let dh = (old_r.height - win.geometry.height).abs();
+            dx > 10 || dy > 10 || dw > 10 || dh > 10
+        });
 
         tracker.last_rect = Some(win.geometry);
 

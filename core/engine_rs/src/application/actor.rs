@@ -194,8 +194,7 @@ impl RavenControllerActor {
                                 // --- Fase 2: Agendar verificación de rectificación solo si no está minimizada ---
                                 if !is_min {
                                     self.quarantine_manager
-                                        .schedule_rectification(window_id.clone(), &resource_class, &resource_name)
-                                        .await;
+                                        .schedule_rectification(window_id.clone(), &resource_class, &resource_name);
                                 }
                             }
                         }

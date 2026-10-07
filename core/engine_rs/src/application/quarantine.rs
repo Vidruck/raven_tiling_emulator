@@ -259,7 +259,7 @@ impl QuarantineManager {
     /// * `window_id`      – Identificador de la ventana a verificar.
     /// * `resource_class` – Segunda parte de WM_CLASS (para determinar la política de demora).
     /// * `resource_name`  – Nombre del ejecutable (primera parte WM_CLASS).
-    pub async fn schedule_rectification(&self, window_id: String, resource_class: &str, resource_name: &str) {
+    pub fn schedule_rectification(&self, window_id: String, resource_class: &str, resource_name: &str) {
         let policy = QuarantinePolicy::from_class(resource_class, resource_name);
         let delay = policy.rectification_delay();
         let target_id = window_id;

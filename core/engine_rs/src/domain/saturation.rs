@@ -9,7 +9,7 @@
 //! controlando los estados `Fluid`, `PreSaturation`, `Saturated` y `Overloaded`.
 
 /// Estado de saturación de la composición en pantalla.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SaturationState {
     /// N < Cmax: El algoritmo BSP/Foveal opera con ratios libres.
     Fluid,
@@ -22,7 +22,7 @@ pub enum SaturationState {
 }
 
 /// Resultado del cálculo de capacidad de pantalla.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScreenCapacity {
     /// Número máximo de ventanas estables que caben en pantalla (Cmax).
     pub cmax: usize,

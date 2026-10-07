@@ -12,6 +12,7 @@ use std::error::Error;
 use tracing::info;
 
 use raven_backend_kwin::KWinBackend;
+use raven_core::backend::CompositorBackend;
 use raven_core::config::RavenConfig;
 use raven_engine::application::controller::RavenController;
 use raven_engine::application::engine::TilingEngine;
@@ -64,7 +65,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    use raven_core::backend::CompositorBackend;
     if let Err(e) = wayland_backend.start_listener(wl_tx).await {
         tracing::warn!(
             "⚠️ No se pudo inicializar listener Wayland nativo: {}. Se continuará con KWin.",
