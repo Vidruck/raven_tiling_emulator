@@ -601,37 +601,20 @@ impl RavenController {
                             .get(&wid)
                             .map(|w| w.workspace_id.clone())
                             .unwrap_or_else(|| "default||default_desk".to_string());
-                        let ws_rect = self
-                            .engine
-                            .current_workspaces
-                            .get(&ws_id)
-                            .copied()
-                            .or_else(|| {
-                                let out_name = ws_id.split("||").next().unwrap_or("");
-                                topology
-                                    .output_nodes
-                                    .iter()
-                                    .find(|n| n.name == out_name)
-                                    .map(|n| n.rect)
-                            })
-                            .filter(|r| r.width > 0 && r.height > 0)
-                            .unwrap_or_else(|| Rect::new(0, 0, 1920, 1080));
-                        let float_w = ((ws_rect.width as f32 * 0.60).round() as i32)
-                            .max(640)
-                            .min(ws_rect.width - 40);
-                        let float_h = ((ws_rect.height as f32 * 0.60).round() as i32)
-                            .max(480)
-                            .min(ws_rect.height - 40);
-                        let float_x = ws_rect.x + (ws_rect.width - float_w) / 2;
-                        let float_y = ws_rect.y + (ws_rect.height - float_h) / 2;
+                        let ws_rect = self.engine.current_workspaces.get(&ws_id).copied();
+                        let float_rect = crate::application::services::floating_service::calculate_dynamic_floating_rect(
+                            ws_rect,
+                            &ws_id,
+                            topology,
+                        );
 
                         if let Some(win) = self.engine.current_windows.get_mut(&wid) {
                             win.is_floating = true;
-                            win.geometry = Rect::new(float_x, float_y, float_w, float_h);
+                            win.geometry = float_rect;
                         }
                         info!(
                             "[CONTROLLER] Ventana {} añadida a la pila flotante dinámica (Quick Peek, {}x{})",
-                            wid, float_w, float_h
+                            wid, float_rect.width, float_rect.height
                         );
                         commands.push(RavenAction::SetFloating {
                             window_id: wid.clone(),
@@ -640,10 +623,10 @@ impl RavenController {
                         });
                         commands.push(RavenAction::MoveWindow {
                             window_id: wid,
-                            x: float_x,
-                            y: float_y,
-                            width: float_w,
-                            height: float_h,
+                            x: float_rect.x,
+                            y: float_rect.y,
+                            width: float_rect.width,
+                            height: float_rect.height,
                         });
                         self.send_osd_notification("Ventana", "Modo: Flotante (Quick Peek)");
                     }
@@ -663,29 +646,21 @@ impl RavenController {
                     let mut offset = 0;
                     for win in windows.iter() {
                         if !win.is_minimized && !win.is_floating {
-                            let ws_rect = self
-                                .engine
-                                .current_workspaces
-                                .get(&win.workspace_id)
-                                .copied()
-                                .unwrap_or_else(|| Rect::new(0, 0, 1920, 1080));
-                            let float_w = ((ws_rect.width as f32 * 0.60).round() as i32)
-                                .max(640)
-                                .min(ws_rect.width - 40);
-                            let float_h = ((ws_rect.height as f32 * 0.60).round() as i32)
-                                .max(480)
-                                .min(ws_rect.height - 40);
-                            let base_x = ws_rect.x + (ws_rect.width - float_w) / 2;
-                            let base_y = ws_rect.y + (ws_rect.height - float_h) / 2;
-                            let float_x = base_x + offset;
-                            let float_y = base_y + offset;
+                            let ws_rect = self.engine.current_workspaces.get(&win.workspace_id).copied();
+                            let base_rect = crate::application::services::floating_service::calculate_dynamic_floating_rect(
+                                ws_rect,
+                                &win.workspace_id,
+                                topology,
+                            );
+                            let float_x = base_rect.x + offset;
+                            let float_y = base_rect.y + offset;
 
                             commands.push(RavenAction::MoveWindow {
                                 window_id: win.window_id.clone(),
                                 x: float_x,
                                 y: float_y,
-                                width: float_w,
-                                height: float_h,
+                                width: base_rect.width,
+                                height: base_rect.height,
                             });
                             offset = (offset + 24) % 120;
                         }

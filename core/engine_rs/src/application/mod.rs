@@ -10,3 +10,5 @@ pub mod controller;
 pub mod engine;
 /// Módulo para la administración de cuarentena y estabilización de ventanas.
 pub mod quarantine;
+/// Servicios especializados de aplicación.
+pub mod services;
