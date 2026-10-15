@@ -47,6 +47,11 @@ MediaController::MediaController(QObject *parent)
     m_positionTimer->setInterval(1000);
     connect(m_positionTimer, &QTimer::timeout, this, &MediaController::updatePosition);
 
+    m_cavaStopTimer = new QTimer(this);
+    m_cavaStopTimer->setSingleShot(true);
+    m_cavaStopTimer->setInterval(4000);
+    connect(m_cavaStopTimer, &QTimer::timeout, this, &MediaController::stopCavaProcess);
+
     m_discoveryTimer = new QTimer(this);
     m_discoveryTimer->setInterval(3000);
     connect(m_discoveryTimer, &QTimer::timeout, this, [this]() {
@@ -190,6 +195,10 @@ void MediaController::connectToPlayer(const QString &service)
                        QStringLiteral("org.freedesktop.DBus.Properties"),
                        QStringLiteral("PropertiesChanged"),
                        this, SLOT(onPropertiesChanged(QString,QVariantMap,QStringList)));
+        bus.disconnect(m_currentService, QStringLiteral("/org/mpris/MediaPlayer2"),
+                       QStringLiteral("org.mpris.MediaPlayer2.Player"),
+                       QStringLiteral("Seeked"),
+                       this, SLOT(onSeeked(qint64)));
     }
 
     m_currentService = service;
@@ -257,6 +266,11 @@ void MediaController::connectToPlayer(const QString &service)
                 QStringLiteral("org.freedesktop.DBus.Properties"),
                 QStringLiteral("PropertiesChanged"),
                 this, SLOT(onPropertiesChanged(QString,QVariantMap,QStringList)));
+
+    bus.connect(service, QStringLiteral("/org/mpris/MediaPlayer2"),
+                QStringLiteral("org.mpris.MediaPlayer2.Player"),
+                QStringLiteral("Seeked"),
+                this, SLOT(onSeeked(qint64)));
 
     refresh();
 }
@@ -352,8 +366,13 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
     bool isDifferentTrack = false;
     if (!newTrackUrl.isEmpty() && !m_trackUrl.isEmpty()) {
         isDifferentTrack = (newTrackUrl != m_trackUrl);
-    } else if (!newTrackId.isEmpty() && !m_trackId.isEmpty() && newTrackId != QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack")) {
+    } else if (!newTrackId.isEmpty() && !m_trackId.isEmpty()
+               && newTrackId != QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack")
+               && !newTrackId.contains(QLatin1String("firefox"))
+               && !newTrackId.contains(QLatin1String("chromium"))) {
         isDifferentTrack = (newTrackId != m_trackId);
+    } else if (!newTitle.isEmpty() && !m_trackTitle.isEmpty()) {
+        isDifferentTrack = (newTitle != m_trackTitle);
     }
 
     if (isDifferentTrack) {
@@ -411,12 +430,23 @@ void MediaController::updateCavaState()
     bool shouldRun = m_active && isPlaying();
 
     if (shouldRun) {
+        // Si había un temporizador de apagado pendiente, cancelarlo de inmediato
+        if (m_cavaStopTimer && m_cavaStopTimer->isActive()) {
+            m_cavaStopTimer->stop();
+        }
+
         if (!m_cavaProcess) {
             // Verificar si cava existe en el sistema
             QString cavaExe = QStandardPaths::findExecutable(QStringLiteral("cava"));
             if (cavaExe.isEmpty()) {
                 // Si CAVA no está instalado, m_cavaProcess permanece nulo y la UI usará fallback
                 return;
+            }
+
+            // Preferir el backend nativo de pipewire si existe en el sistema para cero interrupción de audio
+            QString inputMethod = QStringLiteral("pulse");
+            if (!QStandardPaths::findExecutable(QStringLiteral("pipewire")).isEmpty()) {
+                inputMethod = QStringLiteral("pipewire");
             }
 
             // Crear o refrescar archivo temporal de configuración para CAVA
@@ -434,7 +464,7 @@ void MediaController::updateCavaState()
                     << "lower_cutoff_freq = 40\n"
                     << "higher_cutoff_freq = 14000\n\n"
                     << "[input]\n"
-                    << "method = pulse\n"
+                    << "method = " << inputMethod << "\n"
                     << "source = auto\n\n"
                     << "[output]\n"
                     << "channels = mono\n"
@@ -461,12 +491,16 @@ void MediaController::updateCavaState()
             m_cavaProcess->start();
         }
     } else {
+        // En vez de matar CAVA abruptamente en cada cierre/apertura o debounce,
+        // iniciamos un temporizador de gracia de 4 segundos. Si el usuario reabre el panel
+        // o reanuda antes, CAVA continúa en caliente sin re-engancharse al subsistema de audio.
         if (m_cavaProcess) {
-            m_cavaProcess->kill();
-            m_cavaProcess->deleteLater();
-            m_cavaProcess = nullptr;
+            if (m_cavaStopTimer && !m_cavaStopTimer->isActive()) {
+                m_cavaStopTimer->start();
+            }
         }
-        // Resetear barras a cero
+
+        // Resetear barras a cero suavemente en la UI
         bool changed = false;
         for (int i = 0; i < m_spectrumList.size(); ++i) {
             if (m_spectrumList[i].toDouble() != 0.0) {
@@ -477,6 +511,21 @@ void MediaController::updateCavaState()
         if (changed) {
             emit spectrumChanged();
         }
+    }
+}
+
+/**
+ * @brief Detiene el subproceso CAVA de manera limpia una vez expirado el tiempo de gracia.
+ */
+void MediaController::stopCavaProcess()
+{
+    if (m_cavaProcess) {
+        m_cavaProcess->terminate();
+        if (!m_cavaProcess->waitForFinished(100)) {
+            m_cavaProcess->kill();
+        }
+        m_cavaProcess->deleteLater();
+        m_cavaProcess = nullptr;
     }
 }
 
@@ -620,14 +669,37 @@ void MediaController::onPositionReply(QDBusPendingCallWatcher *watcher)
 
         if (posMicro >= 0) {
             qint64 realPos = posMicro / 1000000;
-            // Solo sincronizamos si hay un desvío apreciable de más de 2 segundos o al reanudar/arrancar
-            if (qAbs(m_position - realPos) > 2 || (m_position == 0 && realPos > 0)) {
-                m_position = realPos;
-                emit positionChanged();
+
+            // En reproductores web / navegadores (como YouTube en Zen/Firefox/Chromium),
+            // la propiedad 'Position' puede retornar 0 de forma espuria o no estar implementada.
+            // Si el reproductor está en estado 'Playing' y localmente ya hemos avanzado más allá de 0,
+            // ignoramos una lectura de 0 para no reiniciar el contador en bucle.
+            bool isSpuriousZero = (realPos == 0 && isPlaying() && m_position > 2);
+
+            if (!isSpuriousZero) {
+                // Solo sincronizamos si hay un desvío apreciable de más de 2 segundos o al reanudar/arrancar
+                if (qAbs(m_position - realPos) > 2 || (m_position == 0 && realPos > 0)) {
+                    m_position = realPos;
+                    emit positionChanged();
+                }
             }
         }
     }
     watcher->deleteLater();
+}
+
+/**
+ * @brief Procesa el evento de salto manual en la pista (Seeked) emitido por el reproductor.
+ */
+void MediaController::onSeeked(qint64 positionMicroseconds)
+{
+    if (positionMicroseconds >= 0) {
+        qint64 newPos = positionMicroseconds / 1000000;
+        if (m_position != newPos) {
+            m_position = newPos;
+            emit positionChanged();
+        }
+    }
 }
 
 /**
@@ -782,6 +854,10 @@ void MediaController::stop()
 void MediaController::setPosition(qint64 positionSec)
 {
     if (m_currentService.isEmpty() || m_trackId.isEmpty()) return;
+
+    m_position = positionSec;
+    emit positionChanged();
+
     QDBusInterface playerIface(m_currentService, QStringLiteral("/org/mpris/MediaPlayer2"),
                               QStringLiteral("org.mpris.MediaPlayer2.Player"),
                               QDBusConnection::sessionBus());

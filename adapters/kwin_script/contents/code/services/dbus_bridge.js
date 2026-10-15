@@ -213,15 +213,6 @@ function applyCommands(commandsJson) {
             height: Math.round(cmd.height),
           };
 
-          const curFg = w.frameGeometry;
-          if (cmd.action === "move" && curFg &&
-              Math.round(curFg.x) === targetGeom.x &&
-              Math.round(curFg.y) === targetGeom.y &&
-              Math.round(curFg.width) === targetGeom.width &&
-              Math.round(curFg.height) === targetGeom.height) {
-            break;
-          }
-
           w.__raven_mutating = true;
           w.frameGeometry = targetGeom;
 
@@ -313,10 +304,6 @@ function applyCommands(commandsJson) {
             }, 40);
           })(w);
           break;
-
-        case "release_quarantine":
-        case "request_feedback":
-          break;
       }
     }
   } catch (e) {
@@ -345,8 +332,7 @@ function bindWindow(w) {
     if (w.captionChanged !== undefined) {
       w.captionChanged.connect(function () {
         if (w && !w.deleted && !w.__raven_mutating) {
-          const cap = w.caption ? w.caption.toString().toLowerCase() : "";
-          if (PIP_CAPTION_REGEX.test(cap) || FLOATING_CAPTION_REGEX.test(cap)) requestStateSync();
+          syncWindowDelta(w);
         }
       });
     }
@@ -411,20 +397,17 @@ function buildWindowState(w, safeId) {
     id: safeId,
     desktops: deskIds,
     output: output ? output.name : "default",
-    f: isFloating(w),
+    f: isWindowNativeFloating(w),
     m: Boolean(w.minimized),
-    p: false,
+    p: Boolean(w.keepAbove),
     x: geom.x,
     y: geom.y,
     w: geom.w,
     h: geom.h,
     min_w: w.minSize ? Math.round(w.minSize.width) : 0,
     min_h: w.minSize ? Math.round(w.minSize.height) : 0,
-    sb: false,
-    iq: false,
     fs: Boolean(w.fullScreen),
     max: Boolean(w.maximized || (w.maximizeMode !== undefined && w.maximizeMode === 3)),
-    sus: false,
     cls: w.resourceClass ? w.resourceClass.toString() : "",
     cls_name: w.resourceName ? w.resourceName.toString() : "",
     cap: w.caption ? w.caption.toString() : "",

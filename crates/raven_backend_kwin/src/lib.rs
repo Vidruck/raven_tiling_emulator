@@ -232,6 +232,18 @@ impl CompositorBackend for KWinBackend {
                         let _ = event_tx.send(CompositorEvent::WindowClosed(window_id)).await;
                         let _ = reply.send(Vec::new());
                     }
+                    KWinBridgeMessage::GetTopologyState { reply } => {
+                        let _ = reply.send(String::from("{}"));
+                    }
+                    KWinBridgeMessage::SetLayoutForWorkspace { reply, .. } => {
+                        let _ = reply.send(Vec::new());
+                    }
+                    KWinBridgeMessage::GetLayoutForWorkspace { reply, .. } => {
+                        let _ = reply.send(String::from("raven"));
+                    }
+                    KWinBridgeMessage::GetCurrentLayout { reply } => {
+                        let _ = reply.send(String::from("raven"));
+                    }
                     KWinBridgeMessage::BridgeReady => {}
                 }
             }

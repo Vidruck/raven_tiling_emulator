@@ -8,10 +8,10 @@
 /// Categorías principales del panel de navegación lateral (NavigationRail).
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum NavTab {
-    /// Pestaña 1: Selección de algoritmos y presets de mosaico.
-    Layouts,
-    /// Pestaña 2: Composición, geometría (Gaps/Ratio), modo PiP, reglas y cuarentenas.
-    CompositionPip,
+    /// Pestaña 1: Composición unificada, pantallas Wayland, algoritmos, presets y PiP.
+    Composition,
+    /// Pestaña 2: Reglas de ventanas, exclusión de aplicaciones y cuarentena CSD.
+    WindowRules,
     /// Pestaña 3: Visor de atajos globales de teclado integrados en KDE.
     ShortcutsGuide,
     /// Pestaña 4: Control del servicio systemd y arranque automático.

@@ -114,22 +114,6 @@ function initDBusBridge() {
     } catch (e) { }
 
     try {
-      callDBus(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
-        "getWindowRules",
-        function (res) {
-          try {
-            if (res) {
-              _window_rules = JSON.parse(res);
-            }
-          } catch (e) { }
-        }
-      );
-    } catch (e) { }
-
-    try {
       registerDBusSignal(
         "org.kde.raven.Daemon",
         "/Events",

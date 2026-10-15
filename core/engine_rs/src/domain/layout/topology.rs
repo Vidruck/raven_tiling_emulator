@@ -83,9 +83,14 @@ pub fn calculate_global_topology(
                 .copied()
                 .collect();
 
-            // Consultar layout específico del workspace o usar el global por defecto
+            // Consultar layout específico del workspace:
+            // 1. Coincidencia exacta de workspace ("Output||DesktopUuid")
+            // 2. Coincidencia por pantalla física ("Output")
+            // 3. Algoritmo global por defecto (`layout_type`)
+            let output_name = ws_id.split("||").next().unwrap_or(ws_id);
             let current_layout_type = workspace_layouts
                 .get(ws_id)
+                .or_else(|| workspace_layouts.get(output_name))
                 .map(|s| s.as_str())
                 .unwrap_or(layout_type);
 

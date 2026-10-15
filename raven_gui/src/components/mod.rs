@@ -4,3 +4,4 @@
 //! **Licencia:** GPL-3.0  
 
 pub mod layout_preview;
+pub mod monitor_canvas;

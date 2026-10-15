@@ -222,16 +222,18 @@ impl KWinQuarantineManager {
             return false;
         }
 
-        // Ignorar ventanas flotantes conocidas o utilidades fijas
-        if cls_lower.contains("kcolorchooser")
-            || cls_lower.contains("colorpicker")
-            || cls_lower.contains("klipper")
-            || cls_lower.contains("polkit")
-            || cls_lower.contains("pinentry")
-            || cls_lower.contains("kdialog")
-            || cls_lower.contains("raven_gui")
-            || cls_lower.contains("raven-gui")
-        {
+        // Ignorar ventanas y diálogos flotantes del sistema o herramientas utilitarias
+        let ignored_classes = [
+            "kcolorchooser", "colorpicker", "gcolor", "eyedropper",
+            "klipper", "plasma.clipboard", "org.kde.klipper", "org.kde.plasma.clipboard",
+            "org.kde.kclock", "org.kde.polkit", "polkit", "pinentry", "zenity", "kdialog",
+            "xdotool", "portal", "desktopdialog", "plasmoidviewer", "raven_gui", "raven-gui", "raven config",
+            "spectacle", "org.kde.spectacle", "flameshot", "ksnip",
+            "sun-awt-x11-xframepeer", "sun-awt-x11-xdialogpeer", "sun-awt-x11-xwindowpeer",
+            "jetbrains-toolbox", "android-studio-splash", "splash",
+        ];
+
+        if ignored_classes.iter().any(|&c| cls_lower == c || cls_lower.contains(c)) {
             return false;
         }
 
@@ -245,11 +247,12 @@ impl KWinQuarantineManager {
         }
 
         let cls_lower = win.cls.to_lowercase();
+        let name_lower = win.cls_name.to_lowercase();
         let cap_lower = win.cap.to_lowercase();
 
-        // 1. Reglas de usuario
+        // 1. Reglas personalizadas de usuario
         for rule in rules {
-            if !rule.class.is_empty() && cls_lower.contains(&rule.class.to_lowercase())
+            if !rule.class.is_empty() && (cls_lower.contains(&rule.class.to_lowercase()) || name_lower.contains(&rule.class.to_lowercase()))
                 && (rule.action == "float" || rule.pip) {
                     return true;
                 }
@@ -265,31 +268,50 @@ impl KWinQuarantineManager {
             return true;
         }
 
-        // 3. Títulos comunes de diálogos nativos o ventanas de Electron/CSD no anidadas
-        if cap_lower.starts_with("open file")
-            || cap_lower.starts_with("save file")
-            || cap_lower.starts_with("abrir archivo")
-            || cap_lower.starts_with("guardar archivo")
-            || cap_lower.starts_with("select folder")
-            || cap_lower.starts_with("seleccionar carpeta")
-            || cap_lower == "preferences"
-            || cap_lower == "preferencias"
-            || cap_lower == "settings"
-            || cap_lower == "configuración"
-            || cap_lower.starts_with("about ")
-            || cap_lower.starts_with("acerca de ")
-            || cap_lower.starts_with("dialog")
-            || cap_lower.starts_with("diálogo")
-            || cap_lower.starts_with("confirm")
-            || cap_lower.starts_with("alert")
-            || cap_lower.starts_with("prompt")
-        {
+        // 3. Clases nativas flotantes y herramientas del sistema / IDEs (JetBrains, Android Studio, Java AWT/Swing)
+        let floating_classes = [
+            "kcolorchooser", "colorpicker", "gcolor", "eyedropper",
+            "spectacle", "org.kde.spectacle", "flameshot", "ksnip", "screenkey",
+            "klipper", "plasma.clipboard", "org.kde.klipper", "org.kde.plasma.clipboard",
+            "org.kde.kclock", "org.kde.polkit", "polkit", "pinentry", "zenity", "kdialog",
+            "xdotool", "portal", "desktopdialog", "plasmoidviewer",
+            "raven_gui", "raven-gui", "raven config",
+            "sun-awt-x11-xdialogpeer", "sun-awt-x11-xwindowpeer",
+            "jetbrains-toolbox",
+        ];
+        if floating_classes.iter().any(|&c| cls_lower == c || cls_lower.contains(c) || name_lower == c || name_lower.contains(c)) {
             return true;
         }
 
-        // 4. Micro-widgets dedicados explícitos con dimensiones muy reducidas (ej. Zuno Widget)
+        // 4. Títulos comunes de diálogos nativos, portapapeles, selectores y ventanas auxiliares
+        let floating_captions = [
+            "clipboard", "portapapeles", "clipboard history", "historial del portapapeles",
+            "borrar historial", "clear history", "delete history",
+            "color picker", "selector de color", "mini player", "mini-player",
+            "miniplayer", "zuno widget", "now playing widget", "quick view",
+            "raven control center", "open file", "save file", "abrir archivo",
+            "guardar archivo", "select folder", "seleccionar carpeta", "browse", "examinar",
+            "preferences", "preferencias", "settings", "configuración", "opciones",
+            "about ", "acerca de ", "dialog", "diálogo", "confirm", "confirmar",
+            "alert", "alerta", "prompt", "aviso",
+            // Diálogos y ventanas auxiliares de JetBrains / Android Studio / Java IDEs
+            "splash", "welcome to", "find in files", "search everywhere", "buscar en todas partes",
+            "git branches", "branches", "commit changes", "push commits", "merge",
+            "project structure", "run/debug configurations", "tip of the day",
+            "win32/win64 assistant", "emulator", "device manager", "logcat filter",
+        ];
+        if floating_captions.iter().any(|&c| cap_lower == c || cap_lower.starts_with(c) || cap_lower.contains(c)) {
+            return true;
+        }
+
+        // 5. Ventanas con dimensiones fijas (min_size == max_size) o widgets pequeños
         if (cls_lower.contains("zuno-widget") || cls_lower.contains("raven-widget"))
             && win.min_w > 0 && win.min_h > 0 && win.w < 380 && win.h < 320 {
+            return true;
+        }
+
+        // 6. Ventana anónima sin clase ni título que tiene dimensiones idénticas min/max
+        if win.min_w > 0 && win.min_h > 0 && win.min_w == win.w && win.min_h == win.h && win.w < 600 && win.h < 500 {
             return true;
         }
 

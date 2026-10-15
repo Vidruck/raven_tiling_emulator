@@ -94,7 +94,7 @@ impl FlapGuard {
             }
         }
 
-        let is_jumping = tracker.last_rect.map_or(false, |old_r| {
+        let is_jumping = tracker.last_rect.is_some_and(|old_r| {
             let dx = (old_r.x - win.geometry.x).abs();
             let dy = (old_r.y - win.geometry.y).abs();
             let dw = (old_r.width - win.geometry.width).abs();

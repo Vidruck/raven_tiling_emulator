@@ -188,12 +188,18 @@ private slots:
     /** @brief Procesa la respuesta asíncrona de posición devuelta por D-Bus sin bloquear la GUI. */
     void onPositionReply(QDBusPendingCallWatcher *watcher);
 
+    /** @brief Procesa el evento de salto manual en la pista (Seeked). */
+    void onSeeked(qint64 positionMicroseconds);
+
     /** @brief Lee las líneas enviadas por CAVA por la salida estándar. */
     void readCavaOutput();
 
 private:
     /** @brief Inicia o detiene el proceso CAVA según el estado de reproducción y visibilidad del widget. */
     void updateCavaState();
+
+    /** @brief Detiene el subproceso CAVA de manera limpia. */
+    void stopCavaProcess();
 
     /** @brief Escanea todos los servicios 'org.mpris.MediaPlayer2.*' y conecta al que esté sonando o al primero encontrado. */
     void findActivePlayer();
@@ -226,10 +232,12 @@ private:
     QVariantList m_spectrumList;              ///< Espectro de 31 bandas devuelto por CAVA (o ceros si está pausado).
     class QProcess *m_cavaProcess = nullptr;   ///< Subproceso administrador para CAVA.
     QString m_cavaConfigPath;                 ///< Ruta al archivo temporal de configuración de CAVA.
+    QTimer *m_cavaStopTimer = nullptr;         ///< Temporizador de gracia antes de apagar CAVA para evitar glitches en apertura/cierre.
 
     QTimer *m_positionTimer = nullptr;         ///< Temporizador de 1s para progreso y extrapolación.
     QTimer *m_discoveryTimer = nullptr;        ///< Temporizador para descubrimiento de reproductores cuando está activo.
     QDBusPendingCallWatcher *m_posWatcher = nullptr; ///< Observador de llamada asíncrona a D-Bus.
+    bool m_userInteracting = false;            ///< Bandera para ignorar consultas obsoletas de posición mientras el usuario salta en la barra.
 };
 
 #endif // MEDIACONTROLLER_H

@@ -108,6 +108,20 @@ void RavenController::refreshState()
             }
         }
     });
+
+    QDBusPendingCall asyncLayout = m_dbusInterface->asyncCall(QStringLiteral("getCurrentLayout"));
+    auto *watcherLayout = new QDBusPendingCallWatcher(asyncLayout, this);
+    connect(watcherLayout, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+        w->deleteLater();
+        QDBusPendingReply<QString> reply = *w;
+        if (!reply.isError()) {
+            QString layout = reply.value().trimmed();
+            if (!layout.isEmpty() && m_currentLayout != layout) {
+                m_currentLayout = layout;
+                Q_EMIT currentLayoutChanged();
+            }
+        }
+    });
 }
 
 /**
@@ -137,25 +151,7 @@ void RavenController::invokeKWinShortcut(const QString &shortcutName)
 void RavenController::sendDbusAction(const QString &action)
 {
     if (m_dbusInterface && m_dbusInterface->isValid()) {
-        QDBusPendingCall asyncCall = m_dbusInterface->asyncCall(action);
-        auto *watcher = new QDBusPendingCallWatcher(asyncCall, this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher *w) {
-            w->deleteLater();
-            QDBusPendingReply<QString> reply = *w;
-            if (!reply.isError()) {
-                QString cmds = reply.value();
-                if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
-                    QDBusConnection::sessionBus().send(
-                        QDBusMessage::createMethodCall(
-                            QStringLiteral("org.kde.raven.Daemon"),
-                            QStringLiteral("/Events"),
-                            QStringLiteral("org.kde.raven.Events"),
-                            QStringLiteral("tilingCommandsPending")
-                        ) << cmds
-                    );
-                }
-            }
-        });
+        m_dbusInterface->call(QDBus::NoBlock, action);
     } else {
         QProcess::startDetached(QStringLiteral("qdbus"), {
             QStringLiteral("org.kde.raven.Daemon"),
@@ -174,25 +170,7 @@ void RavenController::sendDbusAction(const QString &action)
 void RavenController::sendDbusActionWithArg(const QString &action, int arg)
 {
     if (m_dbusInterface && m_dbusInterface->isValid()) {
-        QDBusPendingCall asyncCall = m_dbusInterface->asyncCall(action, arg);
-        auto *watcher = new QDBusPendingCallWatcher(asyncCall, this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher *w) {
-            w->deleteLater();
-            QDBusPendingReply<QString> reply = *w;
-            if (!reply.isError()) {
-                QString cmds = reply.value();
-                if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
-                    QDBusConnection::sessionBus().send(
-                        QDBusMessage::createMethodCall(
-                            QStringLiteral("org.kde.raven.Daemon"),
-                            QStringLiteral("/Events"),
-                            QStringLiteral("org.kde.raven.Events"),
-                            QStringLiteral("tilingCommandsPending")
-                        ) << cmds
-                    );
-                }
-            }
-        });
+        m_dbusInterface->call(QDBus::NoBlock, action, arg);
     } else {
         QProcess::startDetached(QStringLiteral("qdbus"), {
             QStringLiteral("org.kde.raven.Daemon"),
@@ -236,7 +214,7 @@ void RavenController::cycleLayout()
 /**
  * @brief Establece un esquema de disposición específico para el espacio de trabajo actual.
  *
- * @param layoutName Nombre de la disposición (ej. "Master", "Grid", "Floating").
+ * @param layoutName Nombre de la disposición (ej. "tall", "monocle", "raven").
  */
 void RavenController::setLayout(const QString &layoutName)
 {
@@ -246,20 +224,7 @@ void RavenController::setLayout(const QString &layoutName)
     }
     
     if (m_dbusInterface && m_dbusInterface->isValid()) {
-        QDBusMessage reply = m_dbusInterface->call(QStringLiteral("setLayoutForCurrentWorkspace"), layoutName);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            QString cmds = reply.arguments().first().toString();
-            if (!cmds.isEmpty() && cmds != QStringLiteral("[]")) {
-                QDBusConnection::sessionBus().send(
-                    QDBusMessage::createMethodCall(
-                        QStringLiteral("org.kde.raven.Daemon"),
-                        QStringLiteral("/Events"),
-                        QStringLiteral("org.kde.raven.Events"),
-                        QStringLiteral("tilingCommandsPending")
-                    ) << cmds
-                );
-            }
-        }
+        m_dbusInterface->call(QDBus::NoBlock, QStringLiteral("setLayoutForCurrentWorkspace"), layoutName);
     } else {
         QProcess::startDetached(QStringLiteral("qdbus"), {
             QStringLiteral("org.kde.raven.Daemon"),

@@ -26,6 +26,7 @@ pub struct RavenGuiApp {
     pub status_msg: String,
     pub kde_palette: KdePalette,
     pub active_tab: NavTab,
+    pub composition_tab_state: tabs::layouts_tab::CompositionTabState,
     pub _watcher: Option<notify::RecommendedWatcher>,
     pub rx_theme: Option<Receiver<notify::Result<notify::Event>>>,
     pub title_toggled: bool,
@@ -62,7 +63,8 @@ impl RavenGuiApp {
             service_mgr: ServiceManager::new(config_path),
             status_msg: String::new(),
             kde_palette,
-            active_tab: NavTab::Layouts,
+            active_tab: NavTab::Composition,
+            composition_tab_state: tabs::layouts_tab::CompositionTabState::default(),
             _watcher: watcher,
             rx_theme: Some(rx),
             title_toggled: false,
@@ -154,8 +156,8 @@ impl eframe::App for RavenGuiApp {
                 ui.add_space(10.0);
 
                 let nav_items = [
-                    (NavTab::Layouts, "🎨 Composición"),
-                    (NavTab::CompositionPip, "🛡️ Reglas para Apps"),
+                    (NavTab::Composition, "🎨 Composición & Pantallas"),
+                    (NavTab::WindowRules, "🛡️ Reglas para Apps"),
                     (NavTab::ShortcutsGuide, "⌨️ Manual de Atajos"),
                     (NavTab::EngineService, "⚙️ Estado del Servicio"),
                     (NavTab::About, "ℹ️ Acerca de"),
@@ -262,8 +264,15 @@ impl eframe::App for RavenGuiApp {
                 ui.set_height(ui.available_height()); // Fuerza a ocupar toda la altura
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     match self.active_tab {
-                        NavTab::Layouts => tabs::layouts_tab::show(&mut self.config, ui, accent, &self.kde_palette),
-                        NavTab::CompositionPip => tabs::composition_tab::show(&mut self.config, ui, accent),
+                        NavTab::Composition => tabs::layouts_tab::show(
+                            &mut self.config,
+                            ui,
+                            accent,
+                            &self.kde_palette,
+                            &mut self.service_mgr,
+                            &mut self.composition_tab_state,
+                        ),
+                        NavTab::WindowRules => tabs::composition_tab::show(&mut self.config, ui, accent),
                         NavTab::EngineService => {
                             tabs::service_tab::show(
                                 &mut self.config,

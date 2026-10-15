@@ -207,19 +207,36 @@ impl TilingEngine {
                         || class_lower.contains("gcolor")
                         || class_lower.contains("eyedropper")
                         || class_lower.contains("spectacle")
+                        || class_lower.contains("flameshot")
+                        || class_lower.contains("ksnip")
+                        || class_lower.contains("screenkey")
                         || class_lower.contains("klipper")
+                        || class_lower.contains("plasma.clipboard")
+                        || class_lower == "clipboard"
                         || class_lower.contains("polkit")
                         || class_lower.contains("pinentry")
                         || class_lower.contains("zenity")
                         || class_lower.contains("kdialog")
                         || class_lower.contains("portal")
                         || class_lower.contains("desktopdialog")
+                        || class_lower.contains("plasmoidviewer")
                         || class_lower == "raven_gui"
                         || class_lower == "raven-gui"
                         || class_lower == "raven config"
+                        || class_lower.contains("sun-awt-x11-xdialogpeer")
+                        || class_lower.contains("sun-awt-x11-xwindowpeer")
+                        || class_lower.contains("jetbrains-toolbox")
+                        || caption_lower == "clipboard"
+                        || caption_lower == "portapapeles"
+                        || caption_lower.contains("clipboard history")
+                        || caption_lower.contains("historial del portapapeles")
+                        || caption_lower.contains("borrar historial")
+                        || caption_lower.contains("clear history")
+                        || caption_lower.contains("delete history")
                         || caption_lower.contains("color picker")
                         || caption_lower.contains("selector de color")
                         || caption_lower.contains("mini player")
+                        || caption_lower.contains("mini-player")
                         || caption_lower.contains("miniplayer")
                         || caption_lower.contains("zuno widget")
                         || caption_lower.contains("now playing widget")
@@ -231,17 +248,43 @@ impl TilingEngine {
                         || caption_lower.starts_with("guardar archivo")
                         || caption_lower.starts_with("select folder")
                         || caption_lower.starts_with("seleccionar carpeta")
+                        || caption_lower == "browse"
+                        || caption_lower.starts_with("browse ")
+                        || caption_lower.starts_with("browse...")
+                        || caption_lower == "examinar"
+                        || caption_lower.starts_with("examinar ")
+                        || caption_lower.starts_with("examinar...")
                         || caption_lower == "preferences"
                         || caption_lower == "preferencias"
                         || caption_lower == "settings"
                         || caption_lower == "configuración"
+                        || caption_lower == "opciones"
                         || caption_lower.starts_with("about ")
                         || caption_lower.starts_with("acerca de ")
-                        || caption_lower.starts_with("dialog")
-                        || caption_lower.starts_with("diálogo")
-                        || caption_lower.starts_with("confirm")
-                        || caption_lower.starts_with("alert")
-                        || caption_lower.starts_with("prompt");
+                        || caption_lower == "dialog"
+                        || caption_lower.starts_with("dialog ")
+                        || caption_lower.starts_with("dialog:")
+                        || caption_lower == "diálogo"
+                        || caption_lower.starts_with("diálogo ")
+                        || caption_lower.starts_with("diálogo:")
+                        || caption_lower.starts_with("confirm ")
+                        || caption_lower.starts_with("confirmar ")
+                        || caption_lower.starts_with("alert ")
+                        || caption_lower.starts_with("alerta ")
+                        || caption_lower.starts_with("prompt ")
+                        || caption_lower.starts_with("aviso ")
+                        || caption_lower.contains("splash")
+                        || caption_lower.starts_with("welcome to ")
+                        || caption_lower.contains("find in files")
+                        || caption_lower.contains("search everywhere")
+                        || caption_lower.contains("buscar en todas partes")
+                        || caption_lower.contains("git branches")
+                        || caption_lower.contains("commit changes")
+                        || caption_lower.contains("push commits")
+                        || caption_lower.contains("project structure")
+                        || caption_lower.contains("run/debug configurations")
+                        || caption_lower.contains("tip of the day")
+                        || caption_lower.contains("device manager");
 
                     if is_known_float_tool {
                         cloned.is_floating = true;

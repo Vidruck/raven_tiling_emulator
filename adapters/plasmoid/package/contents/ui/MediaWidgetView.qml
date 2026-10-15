@@ -351,7 +351,14 @@ Rectangle {
                             return Math.max(0.12, Math.min(1.0, composite + 0.15));
                         }
 
-                        property real effectiveEnergy: rawCavaVal > 0.001 ? cavaVal : synthEnergy
+                        // Interpolación suave y mezcla reactiva: CAVA real con fallback armónico
+                        property real effectiveEnergy: {
+                            if (!media.isPlaying) return 0.05;
+                            if (rawCavaVal > 0.005) {
+                                return cavaVal;
+                            }
+                            return synthEnergy;
+                        }
 
                         Rectangle {
                             id: eqBar
@@ -364,7 +371,7 @@ Rectangle {
                             height: media.isPlaying
                                 ? Math.max(3, Math.min(barSlot.height, barSlot.height * barSlot.effectiveEnergy))
                                 : 2
-                            Behavior on height { NumberAnimation { duration: 20; easing.type: Easing.OutQuad } }
+                            Behavior on height { NumberAnimation { duration: 40; easing.type: Easing.OutQuad } }
 
                             gradient: Gradient {
                                 GradientStop {

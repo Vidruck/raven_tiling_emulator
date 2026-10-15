@@ -6,6 +6,7 @@
 
 pub mod divisor;
 pub mod dwindle_bsp;
+pub mod floating;
 pub mod inverted_strict_dwindle;
 pub mod lua_layout;
 pub mod monocle;
@@ -19,6 +20,7 @@ pub use lua_layout::LuaLayoutStrategy;
 
 pub use divisor::DivisorStrategy;
 pub use dwindle_bsp::DwindleBSPStrategy;
+pub use floating::FloatingStrategy;
 pub use inverted_strict_dwindle::InvertedStrictDwindleStrategy;
 pub use monocle::MonocleStrategy;
 pub use strategy::{get_strategy, LayoutStrategy};

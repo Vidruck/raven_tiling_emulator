@@ -63,6 +63,21 @@ pub enum KWinBridgeMessage {
         layout_name: String,
         reply: oneshot::Sender<Vec<RavenAction>>,
     },
+    GetCurrentLayout {
+        reply: oneshot::Sender<String>,
+    },
+    GetTopologyState {
+        reply: oneshot::Sender<String>,
+    },
+    SetLayoutForWorkspace {
+        workspace_id: String,
+        layout_name: String,
+        reply: oneshot::Sender<Vec<RavenAction>>,
+    },
+    GetLayoutForWorkspace {
+        workspace_id: String,
+        reply: oneshot::Sender<String>,
+    },
 }
 
 /// Convierte una lista de acciones de Raven en la representación JSON de `TilingCommand` esperada por KWin.
@@ -410,6 +425,17 @@ impl KWinDbusService {
         response
     }
 
+    /// Retorna el algoritmo de mosaico activo en el escritorio/monitor actual.
+    #[zbus(name = "getCurrentLayout")]
+    async fn get_current_layout(&self) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self.tx.send(KWinBridgeMessage::GetCurrentLayout { reply: reply_tx }).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("raven"))
+        } else {
+            String::from("raven")
+        }
+    }
+
     #[zbus(name = "getTilingState")]
     async fn get_tiling_state(&self) -> bool {
         let (reply_tx, reply_rx) = oneshot::channel();
@@ -461,6 +487,63 @@ impl KWinDbusService {
             reply_rx.await.unwrap_or_else(|_| String::from("[]"))
         } else {
             String::from("[]")
+        }
+    }
+
+    /// Retorna la topología completa actual (monitores con geometría y escritorios virtuales) en formato JSON.
+    #[zbus(name = "getTopologyState")]
+    async fn get_topology_state(&self) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self.tx.send(KWinBridgeMessage::GetTopologyState { reply: reply_tx }).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("{}"))
+        } else {
+            String::from("{}")
+        }
+    }
+
+    /// Asigna directamente el algoritmo de mosaico para un workspace o monitor específico (`Output||Desktop` u `Output`).
+    #[zbus(name = "setLayoutForWorkspace")]
+    async fn set_layout_for_workspace(
+        &self,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+        workspace_id: String,
+        layout_name: String,
+    ) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = KWinBridgeMessage::SetLayoutForWorkspace {
+            workspace_id,
+            layout_name,
+            reply: reply_tx,
+        };
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let response = actions_to_kwin_json(actions);
+        if response != "[]" {
+            let _ = Self::tiling_commands_pending(&emitter, &response).await;
+        }
+        response
+    }
+
+    /// Obtiene el algoritmo de mosaico actualmente configurado para un workspace o monitor.
+    #[zbus(name = "getLayoutForWorkspace")]
+    async fn get_layout_for_workspace(&self, workspace_id: String) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self
+            .tx
+            .send(KWinBridgeMessage::GetLayoutForWorkspace {
+                workspace_id,
+                reply: reply_tx,
+            })
+            .await
+            .is_ok()
+        {
+            reply_rx.await.unwrap_or_else(|_| String::from("raven"))
+        } else {
+            String::from("raven")
         }
     }
 }

@@ -10,8 +10,8 @@ use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
 use super::{
-    DivisorStrategy, DwindleBSPStrategy, InvertedStrictDwindleStrategy, LuaLayoutStrategy,
-    MonocleStrategy, StrictDwindleStrategy, TallStrategy,
+    DivisorStrategy, DwindleBSPStrategy, FloatingStrategy, InvertedStrictDwindleStrategy,
+    LuaLayoutStrategy, MonocleStrategy, StrictDwindleStrategy, TallStrategy,
 };
 
 /// Rasgo común para todos los algoritmos de distribución de ventanas.
@@ -42,7 +42,7 @@ pub trait LayoutStrategy: Send + Sync {
 /// Fábrica para la instanciación dinámica de algoritmos de distribución según su nombre.
 ///
 /// # Parámetros
-/// - `layout_type`: Nombre de la estrategia (`"tall"`, `"monocle"`, `"strict_dwindle"`, `"inverted_strict_dwindle"`, `"divisor"`, `"raven"`).
+/// - `layout_type`: Nombre de la estrategia (`"tall"`, `"monocle"`, `"strict_dwindle"`, `"inverted_strict_dwindle"`, `"divisor"`, `"raven"`, `"floating"`, `"none"`).
 ///
 /// # Retorno
 /// Un puntero inteligente `Box<dyn LayoutStrategy>` listo para ser invocado.
@@ -54,6 +54,7 @@ pub fn get_strategy(layout_type: &str) -> Box<dyn LayoutStrategy> {
         "inverted_strict_dwindle" => Box::new(InvertedStrictDwindleStrategy),
         "divisor" => Box::new(DivisorStrategy),
         "raven" => Box::new(DwindleBSPStrategy),
+        "floating" | "none" => Box::new(FloatingStrategy),
         _ => {
             // [EXTENSIÓN LUA]: Si el nombre del layout no coincide con ninguno compilado nativamente,
             // el motor asume que es un script de usuario y busca un archivo `.lua` homónimo en la configuración.

@@ -37,9 +37,11 @@ Con el lanzamiento de la **Versión 4.5**, Raven da un salto sustancial en arqui
 - **Serde 1.0**: Optimizaciones en la serialización/deserialización de payloads de topología y estado con asignaciones pre-dimensionadas.
 
 ### 🛡️ Corrección de Errores Críticos y Filtrado Robusto
-- **Blindaje de Diálogos no Anidados (Electron / CSD)**: Resolución del bug donde diálogos y popups de aplicaciones Electron (VS Code, Discord, Spotify, Obsidian) sin puntero `transientFor` tomaban lugar de ventanas normales en el mosaico. Se añadieron filtros incondicionales por tipo (`dialog`/`utility`), tamaño fijo (`minSize == maxSize` / `resizeable: false`) y patrones de título.
-- **Alineación Geométrica en `DwindleBSPStrategy`**: Corrección del cálculo de offset horizontal en el panel inferior para configuraciones con barra lateral asimétrica.
-- **Optimización de Allocations en `calculate_global_topology`**: Reutilización de contenedores (`with_capacity`) y referencias prestadas `&WindowNode` (*zero-clone* en pasos intermedios).
+### 🖥️ Visualizador de Pantallas Wayland y Gestión Multialgoritmo
+- **Canvas Vectorial Interactivo de Pantallas (`MonitorCanvas`)**: Nuevo componente gráfico en `raven_gui` que detecta y dibuja la geometría espacial real, resolución y escala física de los monitores conectados según los ve Wayland/KWin (estilo *KDE Display Configuration*).
+- **Asignación Independiente de Algoritmos por Monitor**: Posibilidad de seleccionar un monitor individualmente y asignarle su propio esquema de mosaico (ej. *Raven Base* en la pantalla principal y *Monocle* o *Clásico* en secundarias).
+- **Matriz de Escritorios Virtuales**: Configuración granular de algoritmos para combinaciones `Output||Desktop`.
+- **Estrategia Flotante Desacoplada (`FloatingStrategy`)**: Algoritmo nativo de coste $O(1)$ (`"floating"` o `"none"`) que desactiva el mosaico en monitores o escritorios específicos, permitiendo que KWin gestione libremente las ventanas en ese espacio sin emitir comandos destructivos ni afectar al resto de pantallas activas.
 
 ---
 
@@ -85,7 +87,7 @@ Con el lanzamiento de la **Versión 4.5**, Raven da un salto sustancial en arqui
 
 ## 📐 Algoritmos de Distribución Espacial (Layouts)
 
-El motor geométrico se organiza en submódulos especializados dentro de `domain/layout/`, ofreciendo desacoplamiento total y 6 algoritmos seleccionables:
+El motor geométrico se organiza en submódulos especializados dentro de `domain/layout/`, ofreciendo desacoplamiento total y 7 algoritmos seleccionables:
 
 | Algoritmo | Identificador | Descripción y Caso de Uso |
 | :--- | :--- | :--- |
@@ -95,6 +97,7 @@ El motor geométrico se organiza en submódulos especializados dentro de `domain
 | **Flujo Avanzado** | `"strict_dwindle"` | División fractal en espiral binaria simétrica secuencial. |
 | **Flujo Avanzado (Invertido)** | `"inverted_strict_dwindle"` | División fractal en espiral binaria simétrica secuencial con orden de acomodo invertido. |
 | **Divisor** | `"divisor"` | Reparto equitativo proporcional en $N$ columnas verticales. |
+| **Flotante (Libre)** | `"floating"` / `"none"` | Suspensión local de mosaico en $O(1)$ permitiendo ventanas flotantes sin interferencia en ese monitor. |
 
 ---
 
@@ -151,13 +154,15 @@ Para la futura versión **v5.0.0**, Raven expandirá la integración inicial de 
 
 ## 🎨 Centro de Control Nativo (`raven_gui`)
 - **Interfaz Modular en egui/eframe**: Aplicación gráfica ligera, dividida en pestañas especializadas para una configuración integral:
-  - **Composición**: Configuración de algoritmos de mosaico, márgenes (gaps), proporciones (`ratio`, `nmaster`) y escalabilidad dinámica de ventanas PiP.
-  - **Layouts**: Selector de algoritmos con previsualización geométrica y configuración granular de parámetros.
-  - **Servicio**: Control directo del demonio nativo systemd (encendido, apagado, autoinicio) y visualizador de logs en tiempo real.
-  - **Atajos**: Referencia visual e interactiva de todos los atajos de teclado globales.
+  - **Composición**: Configuración de algoritmos globales de mosaico, scripts Lua personalizados, márgenes (gaps) y proporciones (`ratio`, `nmaster`).
+  - **Pantallas**: Visualizador vectorial interactivo de monitores Wayland a escala física real y matriz de asignación de algoritmos por monitor o escritorio virtual.
+  - **Reglas para Apps**: Exclusiones de mosaico, forzado de modo flotante, anclaje permanente a Picture-in-Picture (PiP) y gestión de clases en lista de cuarentena.
+  - **Manual de Atajos**: Referencia visual e interactiva de todos los atajos de teclado globales integrados en KDE Plasma.
+  - **Estado del Servicio**: Control directo del demonio nativo systemd (encendido, apagado, reinicio, autoinicio) y visualizador de logs en tiempo real.
+  - **Acerca de**: Créditos, licencia GPL-3.0 e información del proyecto.
 - **Previsualizador Avanzado en Vivo**: Renderiza espacialmente la distribución del layout seleccionado en tiempo real, ilustrando la estructura fractal hasta la 7ma ventana.
 - **Posicionamiento PiP de 8 Puntos**: Configura las ventanas Picture-in-Picture a través de un lienzo interactivo con anclaje expandido: esquinas y puntos cardinales.
-- **Sincronización de Paleta KDE y Efecto Glass**: Lee dinámicamente `~/.config/kdeglobals` adaptando la estética a cualquier tema del sistema.
+- **Sincronización de Paleta KDE y Efecto Glass**: Lee dinámicamente `~/.config/kdeglobals` adaptando la estética a cualquier tema del sistema (Dark/Light) con translucidez adaptativa.
 
 ### 🦊 Erradicación del Desacomodo Nativo en Navegadores Gecko
 - **Protocolo de Doble Confirmación**: Elimina definitivamente los parpadeos, traslapes y saltos geométricos causados por la inicialización asíncrona de marcos CSD/SSD en navegadores basados en Gecko (Firefox, Zen, Floorp, LibreWolf).

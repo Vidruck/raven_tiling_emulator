@@ -216,12 +216,16 @@ impl RavenControllerActor {
                                     info!("[SOSPECHA-ACTIVA] Ventana '{}' está minimizada. Rectificación omitida.", window_id);
                                 }
                                 Some(win) => {
-                                    let is_suspicious = win.is_suspicious || win.resource_class.is_empty();
+                                    let cat = raven_backend_kwin::QuarantineCategory::from_window(&win.resource_class, &win.resource_name);
+                                    let is_heavy_or_browser = matches!(cat, raven_backend_kwin::QuarantineCategory::Browser | raven_backend_kwin::QuarantineCategory::Heavy);
+                                    let is_suspicious = win.is_suspicious || win.resource_class.trim().is_empty() || is_heavy_or_browser;
+
                                     if is_suspicious {
-                                        // ALTA SOSPECHA: re-calcular layout completo como RectifyWindow
+                                        // ALTA SOSPECHA: ventana anónima, CSD o categoría pesada/navegador
+                                        // → rectificación incondicional de todo el espacio de trabajo para asegurar convergencia total
                                         tracing::warn!(
-                                            "[SOSPECHA-ACTIVA] Ventana SOSPECHOSA '{}' → rectificación incondicional de workspace completo.",
-                                            window_id
+                                            "[SOSPECHA-ACTIVA] Ventana SOSPECHOSA/CSD '{}' (cls='{}', exe='{}', cat={:?}) → rectificación forzada de workspace completo.",
+                                            window_id, win.resource_class, win.resource_name, cat
                                         );
                                         if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(None) {
                                             if !rectify_cmds.is_empty() {
@@ -547,13 +551,14 @@ impl RavenControllerActor {
                                 Some(format!("{}||{}", out, desk))
                             });
 
-                        self.controller.get_engine_mut().config.layout_type = layout_name.clone();
                         if let Some(ws_id) = current_ws {
                             self.controller
                                 .get_engine_mut()
                                 .config
                                 .workspace_layouts
                                 .insert(ws_id, layout_name.clone());
+                        } else {
+                            self.controller.get_engine_mut().config.layout_type = layout_name.clone();
                         }
 
                         if let Err(e) = self.controller.get_engine().config.save() {
@@ -566,6 +571,7 @@ impl RavenControllerActor {
                             "strict_dwindle" => "Strict Dwindle (Espiral)",
                             "inverted_strict_dwindle" => "Inverted Dwindle (Espiral Invertida)",
                             "divisor" => "Divisor (Cuadrícula)",
+                            "floating" | "none" => "Flotante (Libre)",
                             _ => "Raven BSP (Foveal)",
                         };
                         self.notifier.notify_osd(
@@ -578,6 +584,95 @@ impl RavenControllerActor {
                             commands = cmds;
                         }
                         let _ = reply.send(commands);
+                    }
+                    KWinBridgeMessage::GetCurrentLayout { reply } => {
+                        let current_ws = self
+                            .active_window_id
+                            .as_ref()
+                            .and_then(|wid| {
+                                self.controller
+                                    .get_engine()
+                                    .current_windows
+                                    .get(wid)
+                                    .map(|w| w.workspace_id.clone())
+                            })
+                            .or_else(|| {
+                                self.controller
+                                    .get_engine()
+                                    .current_windows
+                                    .values()
+                                    .next()
+                                    .map(|w| w.workspace_id.clone())
+                            })
+                            .or_else(|| {
+                                let out = self
+                                    .current_topology
+                                    .outputs
+                                    .first()
+                                    .map(|s| s.as_str())
+                                    .unwrap_or("default");
+                                let desk = if !self.current_topology.current_desktop.is_empty() {
+                                    self.current_topology.current_desktop.as_str()
+                                } else {
+                                    "default_desk"
+                                };
+                                Some(format!("{}||{}", out, desk))
+                            });
+
+                        let config = self.controller.get_config();
+                        let layout = current_ws
+                            .as_ref()
+                            .and_then(|ws_id| {
+                                config.workspace_layouts.get(ws_id).or_else(|| {
+                                    let out = ws_id.split("||").next().unwrap_or(ws_id);
+                                    config.workspace_layouts.get(out)
+                                })
+                            })
+                            .cloned()
+                            .unwrap_or_else(|| config.layout_type.clone());
+
+                        let _ = reply.send(layout);
+                    }
+                    KWinBridgeMessage::GetTopologyState { reply } => {
+                        let res = serde_json::to_string(&self.current_topology)
+                            .unwrap_or_else(|_| String::from("{}"));
+                        let _ = reply.send(res);
+                    }
+                    KWinBridgeMessage::SetLayoutForWorkspace {
+                        workspace_id,
+                        layout_name,
+                        reply,
+                    } => {
+                        self.controller
+                            .get_engine_mut()
+                            .config
+                            .workspace_layouts
+                            .insert(workspace_id.clone(), layout_name.clone());
+
+                        if let Err(e) = self.controller.get_engine().config.save() {
+                            tracing::warn!(
+                                "[ACTOR] Error al persistir workspace_layouts en config: {}",
+                                e
+                            );
+                        }
+
+                        let mut commands = Vec::new();
+                        if let Ok(cmds) = self.controller.commit_layout() {
+                            commands = cmds;
+                        }
+                        let _ = reply.send(commands);
+                    }
+                    KWinBridgeMessage::GetLayoutForWorkspace {
+                        workspace_id,
+                        reply,
+                    } => {
+                        let config = self.controller.get_config();
+                        let layout = config
+                            .workspace_layouts
+                            .get(&workspace_id)
+                            .cloned()
+                            .unwrap_or_else(|| config.layout_type.clone());
+                        let _ = reply.send(layout);
                     }
                     KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height } => {
                         // Auditoría de geometría aplicada: comparar con target calculado
