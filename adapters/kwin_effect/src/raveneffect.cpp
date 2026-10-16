@@ -1,9 +1,8 @@
-/*
- * raveneffect.cpp
+/* raveneffect.cpp
  *
  * Autor: Alejandro González Hernández (Vidruck)
  * Licencia: GPL-3.0
- * 
+ *
  * Descripción: Implementación del efecto nativo de KWin para Raven Tiling Emulator.
  */
 
@@ -32,7 +31,7 @@ Q_LOGGING_CATEGORY(RAVEN_EFFECT, "raven.effect", QtInfoMsg)
 
 /**
  * @brief Constructor de la clase RavenEffect.
- * 
+ *
  * Inicializa el adaptador D-Bus y registra el servicio y objeto en el bus de sesión
  * para permitir la comunicación remota (IPC). También conecta las señales del
  * compositor de KWin para la gestión de ventanas y cambios de foco.
@@ -70,7 +69,7 @@ RavenEffect::RavenEffect()
 
 /**
  * @brief Destructor de la clase RavenEffect.
- * 
+ *
  * Se encarga de desconectar las señales de KWin y dar de baja el servicio
  * y el objeto D-Bus registrados durante la inicialización.
  */
@@ -96,7 +95,7 @@ RavenEffect::~RavenEffect()
 
 /**
  * @brief Verifica si el efecto está soportado por el compositor actual.
- * 
+ *
  * @return true si el compositor está activo y soporta efectos; false en caso contrario.
  */
 bool RavenEffect::supported()
@@ -106,7 +105,7 @@ bool RavenEffect::supported()
 
 /**
  * @brief Comprueba si el efecto tiene alguna animación en progreso.
- * 
+ *
  * @return true si existe al menos una animación activa; false de lo contrario.
  */
 bool RavenEffect::isActive() const
@@ -116,11 +115,11 @@ bool RavenEffect::isActive() const
 
 /**
  * @brief Maneja el evento de finalización de una animación de KWin.
- * 
+ *
  * Este método es llamado por el compositor (KWin) cuando una animación termina.
  * Se utiliza para purgar las animaciones que han concluido del registro interno
  * y liberar memoria.
- * 
+ *
  * @param w Puntero a la ventana cuyo atributo terminó de animarse.
  * @param a Atributo que estaba siendo animado.
  * @param meta Metadatos asociados a la animación.
@@ -156,11 +155,11 @@ void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
 
 /**
  * @brief Slot que se ejecuta cuando se añade una nueva ventana al compositor.
- * 
+ *
  * Ignora ventanas de sistema (paneles, notificaciones, etc.) y lanza una
  * animación reactiva (gelatina / zoom-in) indicando el "nacimiento" de la ventana.
  * Además, notifica al motor backend a través de D-Bus.
- * 
+ *
  * @param w Puntero a la nueva ventana añadida.
  */
 void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
@@ -195,10 +194,10 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
 
 /**
  * @brief Slot que se ejecuta cuando una ventana es cerrada.
- * 
+ *
  * Cancela inmediatamente cualquier animación activa que pertenezca
  * a la ventana que está siendo destruida para evitar fallos de memoria (segmentation faults).
- * 
+ *
  * @param w Puntero a la ventana que se cierra.
  */
 void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
@@ -226,14 +225,13 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
     cancelWindowAnimation(decId);
 }
 
-
 /**
  * @brief Busca una ventana activa (EffectWindow) por su identificador.
- * 
+ *
  * Realiza una búsqueda segura en la pila (stack) de ventanas del compositor.
  * Intenta coincidir utilizando el puntero en formato hexadecimal (0x...),
  * el valor decimal o el identificador interno de la ventana (internal ID).
- * 
+ *
  * @param windowId Cadena de texto con el identificador de la ventana a buscar.
  * @return KWin::EffectWindow* Puntero a la ventana encontrada, o nullptr si no existe.
  */
@@ -243,7 +241,6 @@ KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
         return nullptr;
     }
 
-    // 1. Optimización rápida: Si el ID es un puntero en formato hexadecimal o decimal
     bool isPtrParsed = false;
     quintptr ptrVal = 0;
     if (windowId.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
@@ -255,7 +252,7 @@ KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
     const auto windows = KWin::effects->stackingOrder();
     for (auto *win : windows) {
         if (!win) continue;
-        
+
         if (isPtrParsed && reinterpret_cast<quintptr>(win) == ptrVal) {
             return win;
         }
@@ -270,10 +267,10 @@ KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
 
 /**
  * @brief Convierte un nombre de curva de aceleración en un objeto QEasingCurve nativo.
- * 
+ *
  * Transforma identificadores en formato cadena (ej. "EaseOutBack" o "Jelly")
  * a la representación nativa de curva de suavizado (easing curve) de Qt.
- * 
+ *
  * @param easingName Nombre descriptivo de la curva.
  * @return QEasingCurve Objeto con la curva de aceleración solicitada.
  */
@@ -285,8 +282,8 @@ QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
         return QEasingCurve(QEasingCurve::OutCubic);
     } else if (easingName == QLatin1String("EaseOutBack")) {
         return QEasingCurve(QEasingCurve::OutBack);
-    } else if (easingName == QLatin1String("EaseOutElastic") || easingName == QLatin1String("Jelly")) {
-        // Curva elástica amortiguada
+    } else if (easingName == QLatin1String("EaseOutElastic") ||
+        easingName == QLatin1String("Jelly")) {
         QEasingCurve elastic(QEasingCurve::OutElastic);
         elastic.setPeriod(0.25);
         elastic.setAmplitude(1.05);
@@ -296,16 +293,15 @@ QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
     } else if (easingName == QLatin1String("Linear")) {
         return QEasingCurve(QEasingCurve::Linear);
     }
-    // Efecto por defecto
     return QEasingCurve(QEasingCurve::OutCubic);
 }
 
 /**
  * @brief Interpola de forma animada la geometría (tamaño y posición) de una ventana.
- * 
+ *
  * Lanza una animación nativa usando el gestor de efectos para mover y escalar la ventana
  * desde su rectángulo de origen al de destino usando una curva específica.
- * 
+ *
  * @param windowId Identificador interno de la ventana.
  * @param startRect Rectángulo inicial (x, y, ancho, alto).
  * @param targetRect Rectángulo objetivo.
@@ -373,16 +369,18 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
 
 /**
  * @brief Procesa un bloque (batch) de animaciones de geometría a partir de JSON.
- * 
- * Lee un texto en formato JSON que describe múltiples transiciones y lanza 
+ *
+ * Lee un texto en formato JSON que describe múltiples transiciones y lanza
  * las animaciones de manera simultánea para todas las ventanas indicadas.
  * Útil para los cambios de disposición (layouts) del gestor de ventanas en mosaico (tiling).
- * 
+ *
  * @param jsonPayload Cadena JSON con el arreglo (array) de objetos de animación.
  */
 void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
 {
-    if (jsonPayload.isEmpty() || jsonPayload == QLatin1String("[]") || jsonPayload == QLatin1String("{}")) {
+    if (jsonPayload.isEmpty()
+        || jsonPayload == QLatin1String("[]")
+        || jsonPayload == QLatin1String("{}")) {
         return;
     }
 
@@ -418,10 +416,10 @@ void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
 
 /**
  * @brief Realiza la animación inicial de nacimiento (aparición) de una ventana.
- * 
- * Ejecuta una interpolación doble combinando el escalado desde un tamaño menor 
+ *
+ * Ejecuta una interpolación doble combinando el escalado desde un tamaño menor
  * hacia el tamaño natural (1.0), junto con una transición de opacidad (fade in).
- * 
+ *
  * @param windowId Identificador de la ventana.
  * @param durationMs Duración de la animación de nacimiento en milisegundos.
  */
@@ -471,10 +469,10 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
 
 /**
  * @brief Cancela inmediatamente todas las animaciones activas asociadas a una ventana.
- * 
+ *
  * Útil cuando se requiere interrumpir el efecto visual debido a un cerrado
  * súbito de la ventana u otra acción que vuelva obsoleta la animación.
- * 
+ *
  * @param windowId Identificador de la ventana.
  */
 void RavenEffect::cancelWindowAnimation(const QString &windowId)
@@ -534,7 +532,11 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
-    if (w->isDeleted() || w->isMinimized() || w->isHidden() || !w->isVisible() || w->isFullScreen()) {
+    if (w->isDeleted()
+        || w->isMinimized()
+        || w->isHidden()
+        || !w->isVisible()
+        || w->isFullScreen()) {
         return false;
     }
 
@@ -556,12 +558,23 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
     // Filtrar explícitamente cualquier elemento que no sea una ventana de aplicación real:
     // Pantalla de bloqueo / inicio de sesión (isLockScreen), fondos de escritorio, docks, barras de tareas,
     // notificaciones, popups, tooltips, comboboxes, iconos DND, input methods, contornos internos, etc.
-    if (w->isLockScreen() || w->isDesktop() || w->isDock() || w->isNotification() ||
-        w->isCriticalNotification() || w->isTooltip() || w->isAppletPopup() ||
-        w->isOnScreenDisplay() || w->isComboBox() || w->isDNDIcon() ||
-        w->isDropdownMenu() || w->isPopupMenu() || w->isOutline() ||
-        w->isInputMethod() || w->isSpecialWindow() || w->isSplash() ||
-        !w->isManaged()) {
+    if (w->isLockScreen()
+        || w->isDesktop()
+        || w->isDock()
+        || w->isNotification()
+        || w->isCriticalNotification()
+        || w->isTooltip()
+        || w->isAppletPopup()
+        || w->isOnScreenDisplay()
+        || w->isComboBox()
+        || w->isDNDIcon()
+        || w->isDropdownMenu()
+        || w->isPopupMenu()
+        || w->isOutline()
+        || w->isInputMethod()
+        || w->isSpecialWindow()
+        || w->isSplash()
+        || !w->isManaged()) {
         return false;
     }
 
@@ -578,51 +591,65 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
     const QString role = w->windowRole().toLower();
     const QString cap = w->caption().toLower();
 
-    if (cls.contains(QStringLiteral("spectacle")) ||
-        cls.contains(QStringLiteral("flameshot")) ||
-        cls.contains(QStringLiteral("ksnip")) ||
-        cls.contains(QStringLiteral("plasma-welcome")) ||
-        cls.contains(QStringLiteral("plasma.welcome")) ||
-        cls.contains(QStringLiteral("welcome")) ||
-        cls.contains(QStringLiteral("plasmashell")) ||
-        cls.contains(QStringLiteral("kscreenlocker")) ||
-        cls.contains(QStringLiteral("screenlocker")) ||
-        cls.contains(QStringLiteral("lockscreen")) ||
-        cls.contains(QStringLiteral("plasmalogin")) ||
-        cls.contains(QStringLiteral("sddm")) ||
-        cls.contains(QStringLiteral("polkit")) ||
-        cls.contains(QStringLiteral("desktopdialog")) ||
-        role.contains(QStringLiteral("spectacle")) ||
-        role.contains(QStringLiteral("welcome")) ||
-        role.contains(QStringLiteral("lockscreen")) ||
-        role.contains(QStringLiteral("login")) ||
-        cap.contains(QStringLiteral("centro de bienvenida")) ||
-        cap.contains(QStringLiteral("welcome center")) ||
-        cap.contains(QStringLiteral("bienvenida de plasma")) ||
-        cap.contains(QStringLiteral("bienvenida")) ||
-        cap.contains(QStringLiteral("inicio de sesión")) ||
-        cap.contains(QStringLiteral("pantalla de inicio de sesión")) ||
-        cap.contains(QStringLiteral("login screen")) ||
-        cap.contains(QStringLiteral("bloqueo de pantalla")) ||
-        cap.contains(QStringLiteral("screen lock")) ||
-        false) {
+    if (cls.contains(QStringLiteral("spectacle"))
+        || cls.contains(QStringLiteral("flameshot"))
+        || cls.contains(QStringLiteral("ksnip"))
+        || cls.contains(QStringLiteral("plasma-welcome"))
+        || cls.contains(QStringLiteral("plasma.welcome"))
+        || cls.contains(QStringLiteral("welcome"))
+        || cls.contains(QStringLiteral("plasmashell"))
+        || cls.contains(QStringLiteral("kscreenlocker"))
+        || cls.contains(QStringLiteral("screenlocker"))
+        || cls.contains(QStringLiteral("lockscreen"))
+        || cls.contains(QStringLiteral("plasmalogin"))
+        || cls.contains(QStringLiteral("sddm"))
+        || cls.contains(QStringLiteral("polkit"))
+        || cls.contains(QStringLiteral("desktopdialog"))
+        || role.contains(QStringLiteral("spectacle"))
+        || role.contains(QStringLiteral("welcome"))
+        || role.contains(QStringLiteral("lockscreen"))
+        || role.contains(QStringLiteral("login"))
+        || cap.contains(QStringLiteral("centro de bienvenida"))
+        || cap.contains(QStringLiteral("welcome center"))
+        || cap.contains(QStringLiteral("bienvenida de plasma"))
+        || cap.contains(QStringLiteral("bienvenida"))
+        || cap.contains(QStringLiteral("inicio de sesión"))
+        || cap.contains(QStringLiteral("pantalla de inicio de sesión"))
+        || cap.contains(QStringLiteral("login screen"))
+        || cap.contains(QStringLiteral("bloqueo de pantalla"))
+        || cap.contains(QStringLiteral("screen lock"))
+        || false) {
         return false;
     }
 
     // Lista de exclusión ampliada de componentes de sesión/shell de KDE (clase o nombre de escritorio)
     static const QStringList kSystemClasses = {
-        QStringLiteral("ksplash"), QStringLiteral("ksplashqml"), QStringLiteral("ksmserver"),
-        QStringLiteral("kscreenlocker"), QStringLiteral("kscreenlocker_greet"),
-        QStringLiteral("plasma-lockscreen"), QStringLiteral("plasmalogin"), QStringLiteral("sddm"),
-        QStringLiteral("systemsettings"),
-        QStringLiteral("org.kde.plasma.welcome"), QStringLiteral("org.kde.plasmashell"),
-        QStringLiteral("krunner"), QStringLiteral("org.kde.krunner"),
-        QStringLiteral("kwin_wayland"), QStringLiteral("kwin_x11"), QStringLiteral("xwaylandvideobridge"),
-        QStringLiteral("plasma-interactiveconsole"), QStringLiteral("org.kde.polkit-kde-authentication-agent"),
-        QStringLiteral("polkit-kde-authentication-agent"), QStringLiteral("ksshaskpass"),
-        QStringLiteral("kded"), QStringLiteral("org.kde.kdeconnect"), QStringLiteral("greeter"),
-        QStringLiteral("org.kde.plasma.emojier"), QStringLiteral("org.kde.kscreen.osd"),
-        QStringLiteral("org.kde.spectacle"), QStringLiteral("org.kde.plasma-welcome")
+        QStringLiteral("ksplash"),
+        QStringLiteral("ksplashqml"),
+        QStringLiteral("ksmserver"),
+        QStringLiteral("kscreenlocker"),
+        QStringLiteral("kscreenlocker_greet"),
+        QStringLiteral("plasma-lockscreen"),
+        QStringLiteral("plasmalogin"),
+        QStringLiteral("sddm"),
+        QStringLiteral("org.kde.plasma.welcome"),
+        QStringLiteral("org.kde.plasmashell"),
+        QStringLiteral("krunner"),
+        QStringLiteral("org.kde.krunner"),
+        QStringLiteral("kwin_wayland"),
+        QStringLiteral("kwin_x11"),
+        QStringLiteral("xwaylandvideobridge"),
+        QStringLiteral("plasma-interactiveconsole"),
+        QStringLiteral("org.kde.polkit-kde-authentication-agent"),
+        QStringLiteral("polkit-kde-authentication-agent"),
+        QStringLiteral("ksshaskpass"),
+        QStringLiteral("kded"),
+        QStringLiteral("org.kde.kdeconnect"),
+        QStringLiteral("greeter"),
+        QStringLiteral("org.kde.plasma.emojier"),
+        QStringLiteral("org.kde.kscreen.osd"),
+        QStringLiteral("org.kde.spectacle"),
+         QStringLiteral("org.kde.plasma-welcome")
     };
     for (const QString &sc : kSystemClasses) {
         if (cls.contains(sc) || role.contains(sc)) {
@@ -738,11 +765,13 @@ bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin
 {
     bool ret = KWin::AnimationEffect::paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 
-    if (!m_bordersEnabled || !shouldDrawBorder(w)) {
+    if (!m_bordersEnabled ||
+        !shouldDrawBorder(w)) {
         return ret;
     }
 
-    if (!KWin::effects || !KWin::ShaderManager::instance()) {
+    if (!KWin::effects ||
+        !KWin::ShaderManager::instance()) {
         return ret;
     }
 
