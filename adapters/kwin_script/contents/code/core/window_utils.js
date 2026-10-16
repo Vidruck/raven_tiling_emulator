@@ -24,17 +24,26 @@ function isManageable(w) {
     const strCap = w.caption ? w.caption.toString().toLowerCase() : "";
 
     // Filtrar herramientas específicas del sistema solicitadas por el usuario
-    if (strClass.indexOf("spectacle") !== -1 || strName.indexOf("spectacle") !== -1) return false;
+    if (strClass.indexOf("spectacle") !== -1 || strName.indexOf("spectacle") !== -1 ||
+        strClass.indexOf("flameshot") !== -1 || strName.indexOf("flameshot") !== -1 ||
+        strClass.indexOf("ksnip") !== -1 || strName.indexOf("ksnip") !== -1) return false;
+
     if (strClass.indexOf("plasma-welcome") !== -1 || strClass.indexOf("plasma.welcome") !== -1 ||
+        strClass.indexOf("welcome") !== -1 || strName.indexOf("welcome") !== -1 ||
         strName.indexOf("plasma-welcome") !== -1 || strCap.indexOf("centro de bienvenida") !== -1 ||
-        strCap.indexOf("welcome center") !== -1 || strCap.indexOf("bienvenida de plasma") !== -1) {
+        strCap.indexOf("welcome center") !== -1 || strCap.indexOf("bienvenida de plasma") !== -1 ||
+        strCap.indexOf("bienvenida") !== -1) {
       return false;
     }
+
     if (strClass.indexOf("plasmashell") !== -1 || strClass.indexOf("systemsettings") !== -1 ||
         strClass.indexOf("kscreenlocker") !== -1 || strClass.indexOf("screenlocker") !== -1 ||
         strClass.indexOf("lockscreen") !== -1 || strClass.indexOf("plasmalogin") !== -1 ||
         strClass.indexOf("sddm") !== -1 || strClass.indexOf("kcm_") !== -1 ||
-        strCap.indexOf("inicio de sesión") !== -1 || strCap.indexOf("bloqueo de pantalla") !== -1) {
+        strClass.indexOf("login") !== -1 || strName.indexOf("login") !== -1 ||
+        strCap.indexOf("inicio de sesión") !== -1 || strCap.indexOf("pantalla de inicio de sesión") !== -1 ||
+        strCap.indexOf("login screen") !== -1 || strCap.indexOf("bloqueo de pantalla") !== -1 ||
+        strCap.indexOf("screen lock") !== -1) {
       return false;
     }
 

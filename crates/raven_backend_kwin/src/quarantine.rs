@@ -232,9 +232,9 @@ impl KWinQuarantineManager {
             "org.kde.kclock", "org.kde.polkit", "polkit", "pinentry", "zenity", "kdialog",
             "xdotool", "portal", "desktopdialog", "plasmoidviewer", "raven_gui", "raven-gui", "raven config",
             "spectacle", "org.kde.spectacle", "flameshot", "ksnip",
-            "plasma-welcome", "org.kde.plasma.welcome", "org.kde.plasma-welcome",
+            "plasma-welcome", "org.kde.plasma.welcome", "org.kde.plasma-welcome", "welcome",
             "plasmashell", "systemsettings", "kscreenlocker", "screenlocker", "lockscreen",
-            "sddm", "plasmalogin",
+            "sddm", "plasmalogin", "login",
             "sun-awt-x11-xframepeer", "sun-awt-x11-xdialogpeer", "sun-awt-x11-xwindowpeer",
             "jetbrains-toolbox", "android-studio-splash", "splash",
         ];
@@ -246,8 +246,12 @@ impl KWinQuarantineManager {
         if cap_lower.contains("centro de bienvenida")
             || cap_lower.contains("welcome center")
             || cap_lower.contains("bienvenida de plasma")
+            || cap_lower.contains("bienvenida")
             || cap_lower.contains("inicio de sesión")
+            || cap_lower.contains("pantalla de inicio de sesión")
+            || cap_lower.contains("login screen")
             || cap_lower.contains("bloqueo de pantalla")
+            || cap_lower.contains("screen lock")
         {
             return false;
         }

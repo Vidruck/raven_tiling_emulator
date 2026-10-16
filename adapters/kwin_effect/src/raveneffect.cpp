@@ -549,16 +549,20 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
     }
 
     // Filtrar herramientas específicas del sistema y componentes de KDE / Display Manager:
-    // - Captura de pantalla de KDE (Spectacle)
-    // - Asistente y centro de bienvenida de KDE (plasma-welcome, Centro de bienvenida)
-    // - Pantalla de bloqueo y gestor de inicio de sesión (kscreenlocker, sddm, plasmalogin, lockscreen)
+    // - Captura de pantalla de KDE (Spectacle, ksnip, flameshot)
+    // - Asistente y centro de bienvenida de KDE (plasma-welcome, org.kde.plasma.welcome, Welcome Center, etc.)
+    // - Pantalla de bloqueo y gestor de inicio de sesión (kscreenlocker, sddm, plasmalogin, lockscreen, login)
     // - Ajustes del sistema y ventanas de configuración de Plasma (systemsettings, kcm_, plasmashell)
     const QString cls = w->windowClass().toLower();
+    const QString role = w->windowRole().toLower();
     const QString cap = w->caption().toLower();
 
     if (cls.contains(QStringLiteral("spectacle")) ||
+        cls.contains(QStringLiteral("flameshot")) ||
+        cls.contains(QStringLiteral("ksnip")) ||
         cls.contains(QStringLiteral("plasma-welcome")) ||
         cls.contains(QStringLiteral("plasma.welcome")) ||
+        cls.contains(QStringLiteral("welcome")) ||
         cls.contains(QStringLiteral("plasmashell")) ||
         cls.contains(QStringLiteral("systemsettings")) ||
         cls.contains(QStringLiteral("kscreenlocker")) ||
@@ -569,11 +573,19 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         cls.contains(QStringLiteral("kcm_")) ||
         cls.contains(QStringLiteral("polkit")) ||
         cls.contains(QStringLiteral("desktopdialog")) ||
+        role.contains(QStringLiteral("spectacle")) ||
+        role.contains(QStringLiteral("welcome")) ||
+        role.contains(QStringLiteral("lockscreen")) ||
+        role.contains(QStringLiteral("login")) ||
         cap.contains(QStringLiteral("centro de bienvenida")) ||
         cap.contains(QStringLiteral("welcome center")) ||
         cap.contains(QStringLiteral("bienvenida de plasma")) ||
+        cap.contains(QStringLiteral("bienvenida")) ||
         cap.contains(QStringLiteral("inicio de sesión")) ||
+        cap.contains(QStringLiteral("pantalla de inicio de sesión")) ||
+        cap.contains(QStringLiteral("login screen")) ||
         cap.contains(QStringLiteral("bloqueo de pantalla")) ||
+        cap.contains(QStringLiteral("screen lock")) ||
         cap.contains(QStringLiteral("preferencias del sistema")) ||
         cap.contains(QStringLiteral("system settings"))) {
         return false;
@@ -589,6 +601,14 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
 void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
 {
     if (!KWin::effects || !m_bordersEnabled) {
+        return;
+    }
+
+    // Blindaje anti-titileo (Flicker Guard):
+    // Si la nueva ventana enfocada es un overlay, captura (Spectacle), notificación,
+    // popup o elemento del sistema al que no le corresponde contorno, NO desmarcamos
+    // la ventana de aplicación previamente activa ni alteramos su estado visual.
+    if (w && !shouldDrawBorder(w)) {
         return;
     }
 
