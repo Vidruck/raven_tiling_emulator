@@ -244,6 +244,12 @@ impl CompositorBackend for KWinBackend {
                     KWinBridgeMessage::GetCurrentLayout { reply } => {
                         let _ = reply.send(String::from("raven"));
                     }
+                    KWinBridgeMessage::GetBorderConfig { reply } => {
+                        let _ = reply.send(String::from("{}"));
+                    }
+                    KWinBridgeMessage::SetBorderConfig { reply, .. } => {
+                        let _ = reply.send(true);
+                    }
                     KWinBridgeMessage::BridgeReady => {}
                 }
             }

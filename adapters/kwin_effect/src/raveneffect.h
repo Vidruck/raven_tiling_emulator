@@ -77,10 +77,22 @@ public:
     void cancelWindowAnimation(const QString &windowId);
 
     /**
+     * @brief Actualiza la configuración de los contornos activo/inactivo en tiempo real.
+     */
+    void updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor);
+
+    /**
      * @brief Comprueba si este efecto debe permanecer activo.
-     * @return true si existen animaciones en progreso.
+     * @return true si existen animaciones en progreso o si los contornos de ventana están habilitados.
      */
     bool isActive() const override;
+
+    /**
+     * @brief Intercepta el dibujado de cada ventana para renderizar el contorno coloreado por hardware.
+     */
+    bool paintWindow(const KWin::RenderTarget &renderTarget, const KWin::RenderViewport &viewport,
+                     KWin::EffectWindow *w, int mask, const KWin::Region &deviceRegion,
+                     KWin::WindowPaintData &data) override;
 
 protected:
     /**
@@ -102,6 +114,11 @@ private Q_SLOTS:
      */
     void slotWindowClosed(KWin::EffectWindow *w);
 
+    /**
+     * @brief Slot conectado a KWin::effects->windowActivated para forzar el repintado inmediato al cambiar el foco.
+     */
+    void slotWindowActivated(KWin::EffectWindow *w);
+
 private:
     /**
      * @brief Busca de manera segura un EffectWindow en el stack usando su ID interno.
@@ -117,7 +134,18 @@ private:
      */
     QEasingCurve parseEasing(const QString &easingName) const;
 
+    /**
+     * @brief Carga la configuración inicial desde ~/.config/raven/raven.json si está disponible.
+     */
+    void loadBorderConfig();
+
     RavenEffectAdaptor *m_dbusAdaptor;                      ///< Adaptador para exponer métodos en D-Bus
     QHash<QString, QList<quint64>> m_activeAnimations;      ///< Mapeo de IDs de ventanas a sus animaciones en curso
+
+    // Configuración y estado de contornos de ventana
+    bool m_bordersEnabled = true;                           ///< Habilita el dibujado de contornos
+    float m_borderWidth = 2.0f;                             ///< Grosor del contorno (máx 2px)
+    QColor m_activeBorderColor = QColor(61, 174, 233, 230); ///< Color del contorno en la ventana enfocada
+    QColor m_inactiveBorderColor = QColor(49, 54, 59, 140); ///< Color del contorno en ventanas inactivas
 };
 

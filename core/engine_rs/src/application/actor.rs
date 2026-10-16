@@ -674,6 +674,46 @@ impl RavenControllerActor {
                             .unwrap_or_else(|| config.layout_type.clone());
                         let _ = reply.send(layout);
                     }
+                    KWinBridgeMessage::GetBorderConfig { reply } => {
+                        let config = self.controller.get_config();
+                        let json = serde_json::json!({
+                            "enabled": config.borders_enabled,
+                            "width": config.border_width,
+                            "active_color": config.active_border_color,
+                            "inactive_color": config.inactive_border_color,
+                        }).to_string();
+                        let _ = reply.send(json);
+                    }
+                    KWinBridgeMessage::SetBorderConfig {
+                        enabled,
+                        width,
+                        active_color,
+                        inactive_color,
+                        reply,
+                    } => {
+                        let engine = self.controller.get_engine_mut();
+                        engine.config.borders_enabled = enabled;
+                        engine.config.border_width = width;
+                        engine.config.active_border_color = active_color.clone();
+                        engine.config.inactive_border_color = inactive_color.clone();
+
+                        let saved = engine.config.save().is_ok();
+                        
+                        // Notificar también al efecto C++ de KWin vía D-Bus si está activo
+                        tokio::spawn(async move {
+                            if let Ok(connection) = zbus::Connection::session().await {
+                                let _ = connection.call_method(
+                                    Some("org.kde.kwin.RavenEffect"),
+                                    "/Effects/Raven",
+                                    Some("org.kde.kwin.RavenEffect"),
+                                    "UpdateBorderConfig",
+                                    &(enabled, width as f64, active_color, inactive_color),
+                                ).await;
+                            }
+                        });
+
+                        let _ = reply.send(saved);
+                    }
                     KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height } => {
                         // Auditoría de geometría aplicada: comparar con target calculado
                         let is_special_mode = self.controller.get_engine().maximized_windows.contains(&window_id)

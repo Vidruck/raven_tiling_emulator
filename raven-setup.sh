@@ -483,6 +483,7 @@ do_quick_rebuild() {
     log_success "Binarios de Rust actualizados en $TARGET_DIR/bin/"
     
     do_rebuild_kwin
+    do_build_kwin_effect
     
     systemctl --user restart raven.service 2>/dev/null || true
     log_success "Servicio raven.service reiniciado"

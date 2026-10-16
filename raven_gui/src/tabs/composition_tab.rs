@@ -15,6 +15,46 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32) 
     ui.label(egui::RichText::new("Gestiona Aplicaciones problematicas o que quieras definir como flotantes/Pip's.").weak());
     ui.add_space(12.0);
 
+    // ── Isleta de Configuración de Bordes y Contorno Activo/Inactivo ──
+    ui.group(|ui| {
+        ui.set_width(ui.available_width());
+        ui.vertical(|ui| {
+            ui.heading(egui::RichText::new("✨ Contorno de Foco y Resaltado de Ventanas").strong().size(14.0));
+            ui.label(egui::RichText::new("Dibuja un marco delimitador nativo por hardware mediante el efecto KWin para indicar el foco de ventanas.").weak().size(11.0));
+            ui.add_space(8.0);
+
+            ui.checkbox(&mut config.borders_enabled, "Habilitar contornos de ventana");
+
+            if config.borders_enabled {
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label("Grosor del contorno (px):");
+                    ui.add(egui::Slider::new(&mut config.border_width, 1.0..=2.0).step_by(0.5).suffix(" px"));
+                });
+
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label("Ventana activa (foco):");
+                    let mut active_c = parse_hex_color(&config.active_border_color);
+                    if ui.color_edit_button_srgba(&mut active_c).changed() {
+                        config.active_border_color = format!("#{:02x}{:02x}{:02x}", active_c.r(), active_c.g(), active_c.b());
+                    }
+                    ui.text_edit_singleline(&mut config.active_border_color);
+                });
+
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    ui.label("Ventanas inactivas:");
+                    let mut inactive_c = parse_hex_color(&config.inactive_border_color);
+                    if ui.color_edit_button_srgba(&mut inactive_c).changed() {
+                        config.inactive_border_color = format!("#{:02x}{:02x}{:02x}", inactive_c.r(), inactive_c.g(), inactive_c.b());
+                    }
+                    ui.text_edit_singleline(&mut config.inactive_border_color);
+                });
+            }
+        });
+    });
+
     ui.add_space(12.0);
 
     ui.group(|ui| {
@@ -88,4 +128,21 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32) 
             }
         });
     });
+}
+
+fn parse_hex_color(hex: &str) -> egui::Color32 {
+    let clean = hex.trim().trim_start_matches('#');
+    if clean.len() >= 6 {
+        let r = u8::from_str_radix(&clean[0..2], 16).unwrap_or(61);
+        let g = u8::from_str_radix(&clean[2..4], 16).unwrap_or(174);
+        let b = u8::from_str_radix(&clean[4..6], 16).unwrap_or(233);
+        let a = if clean.len() >= 8 {
+            u8::from_str_radix(&clean[6..8], 16).unwrap_or(255)
+        } else {
+            255
+        };
+        egui::Color32::from_rgba_unmultiplied(r, g, b, a)
+    } else {
+        egui::Color32::from_rgb(61, 174, 233)
+    }
 }

@@ -58,7 +58,24 @@ pub struct RavenConfig {
     /// Mapa dinámico de algoritmos asignados específicamente por área de trabajo / workspace ID.
     #[serde(default)]
     pub workspace_layouts: std::collections::HashMap<String, String>,
+    /// Habilita el contorno (outline) de color en ventanas.
+    #[serde(default = "default_borders_enabled")]
+    pub borders_enabled: bool,
+    /// Ancho en píxeles del contorno (máximo recomendado 2px).
+    #[serde(default = "default_border_width")]
+    pub border_width: f32,
+    /// Color del contorno para la ventana activa enfocada (código hexadecimal #RRGGBB o #RRGGBBAA).
+    #[serde(default = "default_active_border_color")]
+    pub active_border_color: String,
+    /// Color del contorno para las ventanas inactivas (código hexadecimal #RRGGBB o #RRGGBBAA).
+    #[serde(default = "default_inactive_border_color")]
+    pub inactive_border_color: String,
 }
+
+pub fn default_borders_enabled() -> bool { true }
+pub fn default_border_width() -> f32 { 2.0 }
+pub fn default_active_border_color() -> String { "#3daee9".to_string() }
+pub fn default_inactive_border_color() -> String { "#31363b".to_string() }
 
 pub fn default_quarantine() -> Vec<String> {
     vec![
@@ -117,6 +134,10 @@ impl RavenConfig {
             quarantine_classes: default_quarantine(),
             window_rules: vec![],
             workspace_layouts: std::collections::HashMap::new(),
+            borders_enabled: default_borders_enabled(),
+            border_width: default_border_width(),
+            active_border_color: default_active_border_color(),
+            inactive_border_color: default_inactive_border_color(),
         }
     }
 

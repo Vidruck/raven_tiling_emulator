@@ -78,6 +78,16 @@ pub enum KWinBridgeMessage {
         workspace_id: String,
         reply: oneshot::Sender<String>,
     },
+    GetBorderConfig {
+        reply: oneshot::Sender<String>,
+    },
+    SetBorderConfig {
+        enabled: bool,
+        width: f32,
+        active_color: String,
+        inactive_color: String,
+        reply: oneshot::Sender<bool>,
+    },
 }
 
 /// Convierte una lista de acciones de Raven en la representación JSON de `TilingCommand` esperada por KWin.
@@ -544,6 +554,41 @@ impl KWinDbusService {
             reply_rx.await.unwrap_or_else(|_| String::from("raven"))
         } else {
             String::from("raven")
+        }
+    }
+
+    /// Retorna la configuración de bordes y contornos activos en formato JSON.
+    #[zbus(name = "getBorderConfig")]
+    async fn get_border_config(&self) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        if self.tx.send(KWinBridgeMessage::GetBorderConfig { reply: reply_tx }).await.is_ok() {
+            reply_rx.await.unwrap_or_else(|_| String::from("{}"))
+        } else {
+            String::from("{}")
+        }
+    }
+
+    /// Actualiza la configuración de bordes y contornos en caliente.
+    #[zbus(name = "setBorderConfig")]
+    async fn set_border_config(
+        &self,
+        enabled: bool,
+        width: f64,
+        active_color: String,
+        inactive_color: String,
+    ) -> bool {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = KWinBridgeMessage::SetBorderConfig {
+            enabled,
+            width: width as f32,
+            active_color,
+            inactive_color,
+            reply: reply_tx,
+        };
+        if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or(false)
+        } else {
+            false
         }
     }
 }

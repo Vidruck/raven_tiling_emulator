@@ -91,3 +91,13 @@ bool RavenEffectAdaptor::IsActive() const
     return m_effect != nullptr;
 }
 
+/**
+ * @brief Actualiza dinámicamente los parámetros del contorno de ventana en tiempo real.
+ */
+void RavenEffectAdaptor::UpdateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor)
+{
+    if (m_effect) {
+        m_effect->updateBorderConfig(enabled, width, activeColor, inactiveColor);
+    }
+}
+

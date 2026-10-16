@@ -60,6 +60,11 @@ public Q_SLOTS:
      */
     bool IsActive() const;
 
+    /**
+     * @brief Actualiza dinámicamente los parámetros del contorno de ventana en tiempo real.
+     */
+    void UpdateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor);
+
 Q_SIGNALS:
     /**
      * @brief Señal emitida cuando el efecto detecta y comienza la animación de nacimiento de una ventana.

@@ -10,9 +10,18 @@
 #include "raveneffect.h"
 #include "dbus/raven_effect_adaptor.h"
 #include <effect/effecthandler.h>
+#include <opengl/glshadermanager.h>
+#include <opengl/glvertexbuffer.h>
+#include <opengl/glshader.h>
+#include <core/rendertarget.h>
+#include <core/renderviewport.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QFile>
+#include <QDir>
+#include <QStandardPaths>
+#include <QVector2D>
 #include <QLoggingCategory>
 #include <chrono>
 
@@ -24,11 +33,13 @@ Q_LOGGING_CATEGORY(RAVEN_EFFECT, "raven.effect", QtInfoMsg)
  * 
  * Inicializa el adaptador D-Bus y registra el servicio y objeto en el bus de sesión
  * para permitir la comunicación remota (IPC). También conecta las señales del
- * compositor de KWin para la gestión de ventanas si está disponible.
+ * compositor de KWin para la gestión de ventanas y cambios de foco.
  */
 RavenEffect::RavenEffect()
     : m_dbusAdaptor(new RavenEffectAdaptor(this))
 {
+    loadBorderConfig();
+
     QDBusConnection dbus = QDBusConnection::sessionBus();
     if (dbus.registerService(QStringLiteral("org.kde.kwin.RavenEffect"))) {
         if (dbus.registerObject(QStringLiteral("/Effects/Raven"), this)) {
@@ -43,6 +54,7 @@ RavenEffect::RavenEffect()
     if (KWin::effects) {
         connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
         connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &RavenEffect::slotWindowClosed);
+        connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &RavenEffect::slotWindowActivated);
     }
 }
 
@@ -57,6 +69,7 @@ RavenEffect::~RavenEffect()
     if (KWin::effects) {
         disconnect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
         disconnect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &RavenEffect::slotWindowClosed);
+        disconnect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &RavenEffect::slotWindowActivated);
     }
     QDBusConnection dbus = QDBusConnection::sessionBus();
     dbus.unregisterObject(QStringLiteral("/Effects/Raven"));
@@ -80,7 +93,7 @@ bool RavenEffect::supported()
  */
 bool RavenEffect::isActive() const
 {
-    return !m_activeAnimations.isEmpty();
+    return !m_activeAnimations.isEmpty() || m_bordersEnabled;
 }
 
 /**
@@ -431,6 +444,152 @@ void RavenEffect::cancelWindowAnimation(const QString &windowId)
             cancel(id);
         }
     }
+}
+
+/**
+ * @brief Carga la configuración inicial desde ~/.config/raven/raven.json si existe.
+ */
+void RavenEffect::loadBorderConfig()
+{
+    QString configPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QStringLiteral("/raven/raven.json");
+    QFile file(configPath);
+    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+
+    QByteArray data = file.readAll();
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isObject()) {
+        return;
+    }
+
+    QJsonObject obj = doc.object();
+    if (obj.contains(QStringLiteral("borders_enabled"))) {
+        m_bordersEnabled = obj.value(QStringLiteral("borders_enabled")).toBool(true);
+    }
+    if (obj.contains(QStringLiteral("border_width"))) {
+        m_borderWidth = static_cast<float>(std::clamp(obj.value(QStringLiteral("border_width")).toDouble(2.0), 1.0, 2.0));
+    }
+    if (obj.contains(QStringLiteral("active_border_color"))) {
+        QColor ac(obj.value(QStringLiteral("active_border_color")).toString());
+        if (ac.isValid()) {
+            m_activeBorderColor = ac;
+        }
+    }
+    if (obj.contains(QStringLiteral("inactive_border_color"))) {
+        QColor ic(obj.value(QStringLiteral("inactive_border_color")).toString());
+        if (ic.isValid()) {
+            m_inactiveBorderColor = ic;
+        }
+    }
+}
+
+/**
+ * @brief Slot llamado al cambiar el foco de la ventana activa en KWin.
+ */
+void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
+{
+    Q_UNUSED(w);
+    if (KWin::effects && m_bordersEnabled) {
+        KWin::effects->addRepaintFull();
+    }
+}
+
+/**
+ * @brief Actualiza la configuración de bordes y solicita repintado completo.
+ */
+void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor)
+{
+    m_bordersEnabled = enabled;
+    m_borderWidth = static_cast<float>(std::clamp(width, 1.0, 2.0));
+
+    QColor ac(activeColor);
+    if (ac.isValid()) {
+        m_activeBorderColor = ac;
+    }
+
+    QColor ic(inactiveColor);
+    if (ic.isValid()) {
+        m_inactiveBorderColor = ic;
+    }
+
+    if (KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
+}
+
+/**
+ * @brief Intercepta el renderizado de la ventana para pintar el contorno activo o inactivo con OpenGL.
+ */
+bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin::RenderViewport &viewport,
+                             KWin::EffectWindow *w, int mask, const KWin::Region &deviceRegion,
+                             KWin::WindowPaintData &data)
+{
+    bool ret = KWin::AnimationEffect::paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+
+    if (!m_bordersEnabled || !w || !w->isNormalWindow() || w->isDeleted() || w->isMinimized()) {
+        return ret;
+    }
+
+    if (!KWin::effects || !KWin::ShaderManager::instance()) {
+        return ret;
+    }
+
+    bool isFocused = (w == KWin::effects->activeWindow());
+    QColor borderColor = isFocused ? m_activeBorderColor : m_inactiveBorderColor;
+
+    if (borderColor.alpha() <= 0) {
+        return ret;
+    }
+
+    KWin::GLShader *shader = KWin::ShaderManager::instance()->pushShader(KWin::ShaderTrait::UniformColor);
+    if (!shader) {
+        return ret;
+    }
+
+    shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
+    shader->setUniform(KWin::GLShader::ColorUniform::Color, borderColor);
+
+    QRectF frameRect = viewport.mapToRenderTarget(w->frameGeometry());
+    float x1 = static_cast<float>(frameRect.left());
+    float y1 = static_cast<float>(frameRect.top());
+    float wW = static_cast<float>(frameRect.width());
+    float hH = static_cast<float>(frameRect.height());
+    float bw = m_borderWidth;
+
+    if (wW > 2 * bw && hH > 2 * bw) {
+        std::vector<QVector2D> verts;
+        verts.reserve(24);
+
+        auto addQuad = [&verts](float rx, float ry, float rw, float rh) {
+            verts.push_back(QVector2D(rx, ry));
+            verts.push_back(QVector2D(rx + rw, ry));
+            verts.push_back(QVector2D(rx, ry + rh));
+
+            verts.push_back(QVector2D(rx + rw, ry));
+            verts.push_back(QVector2D(rx + rw, ry + rh));
+            verts.push_back(QVector2D(rx, ry + rh));
+        };
+
+        // Borde superior
+        addQuad(x1, y1, wW, bw);
+        // Borde inferior
+        addQuad(x1, y1 + hH - bw, wW, bw);
+        // Borde izquierdo
+        addQuad(x1, y1 + bw, bw, hH - 2.0f * bw);
+        // Borde derecho
+        addQuad(x1 + wW - bw, y1 + bw, bw, hH - 2.0f * bw);
+
+        KWin::GLVertexBuffer *vbo = KWin::GLVertexBuffer::streamingBuffer();
+        if (vbo) {
+            vbo->reset();
+            vbo->setVertices(verts);
+            vbo->render(GL_TRIANGLES);
+        }
+    }
+
+    KWin::ShaderManager::instance()->popShader();
+    return ret;
 }
 
 #include "moc_raveneffect.cpp"
