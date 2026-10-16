@@ -391,13 +391,13 @@ impl RavenControllerActor {
                                 .current_windows
                                 .get(&win_node.window_id)
                                 .map(|known| !known.is_quarantined && !known.strict_birth)
-                                .unwrap_or(true);
+                                .unwrap_or(false);
 
                             if !already_released && (win_node.is_quarantined || win_node.strict_birth) {
                                 self.quarantine_manager
                                     .schedule_release(win_node.window_id.clone(), &win_node.resource_class, &win_node.resource_name)
                                     .await;
-                            } else {
+                            } else if already_released {
                                 win_node.is_quarantined = false;
                                 win_node.strict_birth = false;
                             }

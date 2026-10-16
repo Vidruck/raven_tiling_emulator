@@ -132,21 +132,21 @@ impl KWinQuarantineManager {
     /// Retorna el tiempo de temporizador calibrado para estabilización.
     pub fn get_stabilization_delay(&self, mode: StartupMode, category: QuarantineCategory) -> Duration {
         match (mode, category) {
-            // Cold Start: tiempo suficiente pero ágil para configurar Wayland / CSD
-            (StartupMode::Cold, QuarantineCategory::Standard) => Duration::from_millis(60),
-            (StartupMode::Cold, QuarantineCategory::Browser) => Duration::from_millis(75),
-            (StartupMode::Cold, QuarantineCategory::Heavy) => Duration::from_millis(85),
+            // Cold Start: tiempo suficiente y seguro para configurar Wayland / CSD y buffers iniciales
+            (StartupMode::Cold, QuarantineCategory::Standard) => Duration::from_millis(80),
+            (StartupMode::Cold, QuarantineCategory::Browser) => Duration::from_millis(150),
+            (StartupMode::Cold, QuarantineCategory::Heavy) => Duration::from_millis(200),
 
-            // Warm Start: ultra rápido porque los recursos de renderizado ya están vivos
-            (StartupMode::Warm, QuarantineCategory::Standard) => Duration::from_millis(20),
-            (StartupMode::Warm, QuarantineCategory::Browser) => Duration::from_millis(25),
-            (StartupMode::Warm, QuarantineCategory::Heavy) => Duration::from_millis(30),
+            // Warm Start: proceso ya caliente pero dando margen al compositor
+            (StartupMode::Warm, QuarantineCategory::Standard) => Duration::from_millis(40),
+            (StartupMode::Warm, QuarantineCategory::Browser) => Duration::from_millis(70),
+            (StartupMode::Warm, QuarantineCategory::Heavy) => Duration::from_millis(90),
         }
     }
 
     /// Retorna el retraso calibrado para la verificación de rectificación post-layout.
     pub fn get_rectification_delay(&self) -> Duration {
-        Duration::from_millis(45)
+        Duration::from_millis(120)
     }
 
     /// Agenda la estabilización de una ventana y emite `ReleaseQuarantine` y `RectifyWindow` al expirar.
@@ -371,10 +371,10 @@ mod tests {
         let cat_std = QuarantineCategory::from_window("kitty", "kitty");
         assert_eq!(cat_std, QuarantineCategory::Standard);
 
-        // Validar temporizadores reducidos
-        assert_eq!(mgr.get_stabilization_delay(StartupMode::Cold, QuarantineCategory::Browser), Duration::from_millis(75));
-        assert_eq!(mgr.get_stabilization_delay(StartupMode::Warm, QuarantineCategory::Browser), Duration::from_millis(25));
-        assert_eq!(mgr.get_stabilization_delay(StartupMode::Warm, QuarantineCategory::Standard), Duration::from_millis(20));
+        // Validar temporizadores calibrados para estabilidad y robustez
+        assert_eq!(mgr.get_stabilization_delay(StartupMode::Cold, QuarantineCategory::Browser), Duration::from_millis(150));
+        assert_eq!(mgr.get_stabilization_delay(StartupMode::Warm, QuarantineCategory::Browser), Duration::from_millis(70));
+        assert_eq!(mgr.get_stabilization_delay(StartupMode::Warm, QuarantineCategory::Standard), Duration::from_millis(40));
     }
 
     #[tokio::test]
