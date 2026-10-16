@@ -507,7 +507,7 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
-    if (w->isDeleted() || w->isMinimized() || w->isHidden() || !w->isVisible()) {
+    if (w->isDeleted() || w->isMinimized() || w->isHidden() || !w->isVisible() || w->isFullScreen()) {
         return false;
     }
 
@@ -518,7 +518,23 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         w->isCriticalNotification() || w->isTooltip() || w->isAppletPopup() ||
         w->isOnScreenDisplay() || w->isComboBox() || w->isDNDIcon() ||
         w->isDropdownMenu() || w->isPopupMenu() || w->isOutline() ||
-        w->isInputMethod() || w->isSpecialWindow()) {
+        w->isInputMethod() || w->isSpecialWindow() || w->isSplash() ||
+        !w->isManaged()) {
+        return false;
+    }
+
+    // Filtrar herramientas específicas del sistema solicitadas por el usuario:
+    // - Captura de pantalla de KDE (Spectacle)
+    // - Asistente de bienvenida de KDE (plasma-welcome)
+    // - Pantalla de bloqueo y gestor de inicio (kscreenlocker, sddm)
+    // - Ajustes y ventanas internas de plasmashell
+    const QString cls = w->windowClass().toLower();
+    if (cls.contains(QStringLiteral("spectacle")) ||
+        cls.contains(QStringLiteral("plasma-welcome")) ||
+        cls.contains(QStringLiteral("org.kde.plasma.welcome")) ||
+        cls.contains(QStringLiteral("plasmashell")) ||
+        cls.contains(QStringLiteral("kscreenlocker")) ||
+        cls.contains(QStringLiteral("sddm"))) {
         return false;
     }
 
@@ -543,11 +559,11 @@ void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
 void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::RectF &oldGeometry)
 {
     if (KWin::effects && m_bordersEnabled && shouldDrawBorder(w)) {
+        const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
         if (!oldGeometry.isEmpty()) {
-            KWin::effects->addRepaint(oldGeometry.toAlignedRect().adjusted(-6, -6, 6, 6));
+            KWin::effects->addRepaint(oldGeometry.toAlignedRect().adjusted(-pad, -pad, pad, pad));
         }
-        w->addRepaintFull();
-        KWin::effects->addRepaintFull();
+        KWin::effects->addRepaint(w->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
     }
 }
 
@@ -556,10 +572,9 @@ void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::R
  */
 void RavenEffect::slotWindowStepUserMovedResized(KWin::EffectWindow *w, const KWin::RectF &geometry)
 {
-    Q_UNUSED(geometry);
     if (KWin::effects && m_bordersEnabled && shouldDrawBorder(w)) {
-        w->addRepaintFull();
-        KWin::effects->addRepaintFull();
+        const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
+        KWin::effects->addRepaint(geometry.toAlignedRect().adjusted(-pad, -pad, pad, pad));
     }
 }
 
@@ -663,11 +678,10 @@ bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin
             vbo->reset();
             vbo->setVertices(verts);
 
-            // Evitar que el contorno luche o se pinte por encima de ventanas que se sobreponen:
-            // Restringir el renderizado estrictamente a la región visible (deviceRegion) usando GL_SCISSOR_TEST
-            glEnable(GL_SCISSOR_TEST);
-            vbo->render(deviceRegion, GL_TRIANGLES, true);
-            glDisable(GL_SCISSOR_TEST);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            vbo->render(GL_TRIANGLES);
         }
     }
 
