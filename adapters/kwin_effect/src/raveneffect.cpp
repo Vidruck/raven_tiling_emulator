@@ -16,6 +16,7 @@
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
 #include <core/output.h>
+#include <window.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -560,7 +561,11 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         w->isOnScreenDisplay() || w->isComboBox() || w->isDNDIcon() ||
         w->isDropdownMenu() || w->isPopupMenu() || w->isOutline() ||
         w->isInputMethod() || w->isSpecialWindow() || w->isSplash() ||
-        !w->isManaged() || w->isMaximized()) {
+        !w->isManaged()) {
+        return false;
+    }
+
+    if (w->window() && w->window()->maximizeMode() != KWin::MaximizeRestore) {
         return false;
     }
 
