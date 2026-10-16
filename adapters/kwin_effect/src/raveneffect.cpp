@@ -560,7 +560,7 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         w->isOnScreenDisplay() || w->isComboBox() || w->isDNDIcon() ||
         w->isDropdownMenu() || w->isPopupMenu() || w->isOutline() ||
         w->isInputMethod() || w->isSpecialWindow() || w->isSplash() ||
-        !w->isManaged()) {
+        !w->isManaged() || w->isMaximized()) {
         return false;
     }
 
@@ -609,6 +609,7 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         QStringLiteral("ksplash"), QStringLiteral("ksplashqml"), QStringLiteral("ksmserver"),
         QStringLiteral("kscreenlocker"), QStringLiteral("kscreenlocker_greet"),
         QStringLiteral("plasma-lockscreen"), QStringLiteral("plasmalogin"), QStringLiteral("sddm"),
+        QStringLiteral("systemsettings"),
         QStringLiteral("org.kde.plasma.welcome"), QStringLiteral("org.kde.plasmashell"),
         QStringLiteral("krunner"), QStringLiteral("org.kde.krunner"),
         QStringLiteral("kwin_wayland"), QStringLiteral("kwin_x11"), QStringLiteral("xwaylandvideobridge"),
