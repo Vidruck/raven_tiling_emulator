@@ -119,7 +119,17 @@ private Q_SLOTS:
      */
     void slotWindowActivated(KWin::EffectWindow *w);
 
+    /**
+     * @brief Slot conectado a cambios de geometría o movimiento de ventanas para refrescar el marco.
+     */
+    void slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::RectF &oldGeometry);
+
 private:
+    /**
+     * @brief Determina si una ventana es apta para recibir contorno de foco o inactivo.
+     */
+    bool shouldDrawBorder(KWin::EffectWindow *w) const;
+
     /**
      * @brief Busca de manera segura un EffectWindow en el stack usando su ID interno.
      * @param windowId String representando la ID de la ventana en D-Bus.

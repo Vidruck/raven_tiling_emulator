@@ -55,6 +55,13 @@ RavenEffect::RavenEffect()
         connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
         connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &RavenEffect::slotWindowClosed);
         connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &RavenEffect::slotWindowActivated);
+
+        const auto windows = KWin::effects->stackingOrder();
+        for (auto *win : windows) {
+            if (win) {
+                connect(win, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
+            }
+        }
     }
 }
 
@@ -140,6 +147,8 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
         return;
     }
 
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
+
     // Filtrar ventanas no gestionables, overlays, paneles o popups
     if (w->isDock() || w->isDesktop() || w->isNotification() || w->isTooltip() || !w->isNormalWindow()) {
         return;
@@ -174,6 +183,8 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
     if (!w) {
         return;
     }
+
+    disconnect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
 
     QString windowId = w->internalId().toString();
     if (!windowId.isEmpty()) {
@@ -485,6 +496,34 @@ void RavenEffect::loadBorderConfig()
 }
 
 /**
+ * @brief Comprueba minuciosamente si una ventana debe recibir contornos visuales.
+ */
+bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
+{
+    if (!w) {
+        return false;
+    }
+
+    if (w->isDeleted() || w->isMinimized() || w->isHidden() || !w->isVisible()) {
+        return false;
+    }
+
+    // Filtrar explícitamente cualquier elemento que no sea una ventana de aplicación real:
+    // Pantalla de bloqueo / inicio de sesión (isLockScreen), fondos de escritorio, docks, barras de tareas,
+    // notificaciones, popups, tooltips, comboboxes, iconos DND, input methods, contornos internos, etc.
+    if (w->isLockScreen() || w->isDesktop() || w->isDock() || w->isNotification() ||
+        w->isCriticalNotification() || w->isTooltip() || w->isAppletPopup() ||
+        w->isOnScreenDisplay() || w->isComboBox() || w->isDNDIcon() ||
+        w->isDropdownMenu() || w->isPopupMenu() || w->isOutline() ||
+        w->isInputMethod() || w->isSpecialWindow()) {
+        return false;
+    }
+
+    // Aceptar únicamente ventanas normales de aplicaciones o cuadros de diálogo
+    return w->isNormalWindow() || w->isDialog();
+}
+
+/**
  * @brief Slot llamado al cambiar el foco de la ventana activa en KWin.
  */
 void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
@@ -492,6 +531,17 @@ void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
     Q_UNUSED(w);
     if (KWin::effects && m_bordersEnabled) {
         KWin::effects->addRepaintFull();
+    }
+}
+
+/**
+ * @brief Slot llamado al mover, redimensionar o actualizar la geometría de cualquier ventana.
+ */
+void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::RectF &oldGeometry)
+{
+    Q_UNUSED(oldGeometry);
+    if (KWin::effects && m_bordersEnabled && shouldDrawBorder(w)) {
+        w->addRepaintFull();
     }
 }
 
@@ -527,7 +577,7 @@ bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin
 {
     bool ret = KWin::AnimationEffect::paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 
-    if (!m_bordersEnabled || !w || !w->isNormalWindow() || w->isDeleted() || w->isMinimized()) {
+    if (!m_bordersEnabled || !shouldDrawBorder(w)) {
         return ret;
     }
 
@@ -538,16 +588,23 @@ bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin
     bool isFocused = (w == KWin::effects->activeWindow());
     QColor borderColor = isFocused ? m_activeBorderColor : m_inactiveBorderColor;
 
-    if (borderColor.alpha() <= 0) {
+    qreal effectiveAlpha = borderColor.alphaF() * data.opacity();
+    if (effectiveAlpha <= 0.001) {
         return ret;
     }
+    borderColor.setAlphaF(static_cast<float>(effectiveAlpha));
 
     KWin::GLShader *shader = KWin::ShaderManager::instance()->pushShader(KWin::ShaderTrait::UniformColor);
     if (!shader) {
         return ret;
     }
 
-    shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
+    // Matriz de proyección adaptada que incluye traslación y escala de animaciones activas
+    QMatrix4x4 mvp = viewport.projectionMatrix();
+    mvp.translate(data.translation());
+    mvp.scale(data.scale());
+
+    shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, mvp);
     shader->setUniform(KWin::GLShader::ColorUniform::Color, borderColor);
 
     QRectF frameRect = viewport.mapToRenderTarget(w->frameGeometry());
