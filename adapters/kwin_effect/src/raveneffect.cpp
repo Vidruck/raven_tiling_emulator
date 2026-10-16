@@ -15,6 +15,7 @@
 #include <opengl/glshader.h>
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
+#include <core/output.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -536,6 +537,21 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
+    // Descartar también ventanas que cubren por completo su pantalla (fullscreen de facto:
+    // apps que no activan el flag, splash, overlays de sesión, etc.)
+    if (auto *out = w->screen()) {
+        const QRect og = QRect(out->geometry());
+        const QRect wg = QRect(w->frameGeometry().toAlignedRect());
+        if (!og.isEmpty() && wg.contains(og)) {
+            return false;
+        }
+    }
+
+    // Ventanas sin identidad (sin clase ni título) no son aplicaciones reales
+    if (w->windowClass().trimmed().isEmpty() && w->caption().trimmed().isEmpty()) {
+        return false;
+    }
+
     // Filtrar explícitamente cualquier elemento que no sea una ventana de aplicación real:
     // Pantalla de bloqueo / inicio de sesión (isLockScreen), fondos de escritorio, docks, barras de tareas,
     // notificaciones, popups, tooltips, comboboxes, iconos DND, input methods, contornos internos, etc.
@@ -586,6 +602,26 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         cap.contains(QStringLiteral("screen lock")) ||
         false) {
         return false;
+    }
+
+    // Lista de exclusión ampliada de componentes de sesión/shell de KDE (clase o nombre de escritorio)
+    static const QStringList kSystemClasses = {
+        QStringLiteral("ksplash"), QStringLiteral("ksplashqml"), QStringLiteral("ksmserver"),
+        QStringLiteral("kscreenlocker"), QStringLiteral("kscreenlocker_greet"),
+        QStringLiteral("plasma-lockscreen"), QStringLiteral("plasmalogin"), QStringLiteral("sddm"),
+        QStringLiteral("org.kde.plasma.welcome"), QStringLiteral("org.kde.plasmashell"),
+        QStringLiteral("krunner"), QStringLiteral("org.kde.krunner"),
+        QStringLiteral("kwin_wayland"), QStringLiteral("kwin_x11"), QStringLiteral("xwaylandvideobridge"),
+        QStringLiteral("plasma-interactiveconsole"), QStringLiteral("org.kde.polkit-kde-authentication-agent"),
+        QStringLiteral("polkit-kde-authentication-agent"), QStringLiteral("ksshaskpass"),
+        QStringLiteral("kded"), QStringLiteral("org.kde.kdeconnect"), QStringLiteral("greeter"),
+        QStringLiteral("org.kde.plasma.emojier"), QStringLiteral("org.kde.kscreen.osd"),
+        QStringLiteral("org.kde.spectacle"), QStringLiteral("org.kde.plasma-welcome")
+    };
+    for (const QString &sc : kSystemClasses) {
+        if (cls.contains(sc) || role.contains(sc)) {
+            return false;
+        }
     }
 
     // Filtrar ventanas en modo Picture-in-Picture (PiP)
