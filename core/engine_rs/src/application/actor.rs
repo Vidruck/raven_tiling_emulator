@@ -69,6 +69,26 @@ impl RavenControllerActor {
     pub async fn run(mut self) {
         info!("🎭 Actor Model (P3) Inicializado con Canal Bounded (Capacidad: 256)");
 
+        // Sincronizar estado inicial de contornos con el plugin kwin4_effect_raven
+        {
+            let cfg = self.controller.get_config();
+            let enabled = cfg.borders_enabled;
+            let width = cfg.border_width as f64;
+            let active_c = cfg.active_border_color.clone();
+            let inactive_c = cfg.inactive_border_color.clone();
+            tokio::spawn(async move {
+                if let Ok(conn) = zbus::Connection::session().await {
+                    let _ = conn.call_method(
+                        Some("org.kde.kwin.RavenEffect"),
+                        "/Effects/Raven",
+                        Some("org.kde.kwin.RavenEffect"),
+                        "UpdateBorderConfig",
+                        &(enabled, width, active_c, inactive_c),
+                    ).await;
+                }
+            });
+        }
+
         while let Some(msg) = self.rx.recv().await {
             match msg {
                 RavenMessage::Compositor(event) => {
@@ -439,6 +459,24 @@ impl RavenControllerActor {
                     KWinBridgeMessage::BridgeReady => {
                         self.last_payload_json.clear();
                         self.controller.reset_state();
+
+                        // Sincronizar de inmediato la configuración de contornos con el efecto nativo de KWin
+                        let cfg = self.controller.get_config();
+                        let enabled = cfg.borders_enabled;
+                        let width = cfg.border_width as f64;
+                        let active_c = cfg.active_border_color.clone();
+                        let inactive_c = cfg.inactive_border_color.clone();
+                        tokio::spawn(async move {
+                            if let Ok(conn) = zbus::Connection::session().await {
+                                let _ = conn.call_method(
+                                    Some("org.kde.kwin.RavenEffect"),
+                                    "/Effects/Raven",
+                                    Some("org.kde.kwin.RavenEffect"),
+                                    "UpdateBorderConfig",
+                                    &(enabled, width, active_c, inactive_c),
+                                ).await;
+                            }
+                        });
                     }
                     KWinBridgeMessage::WindowClosed { window_id, reply } => {
                         self.controller.clear_window_flapping(&window_id);

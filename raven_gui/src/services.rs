@@ -94,6 +94,23 @@ impl ServiceManager {
             // Escritura atómica vía archivo temporal para prevenir lecturas parciales o corrupción
             let temp_path = self.config_path.with_extension("tmp");
             if fs::write(&temp_path, json).is_ok() && fs::rename(&temp_path, &self.config_path).is_ok() {
+                // Notificar en caliente al efecto C++ de KWin directamente vía D-Bus (busctl)
+                let _ = Command::new("busctl")
+                    .args([
+                        "--user",
+                        "call",
+                        "org.kde.kwin.RavenEffect",
+                        "/Effects/Raven",
+                        "org.kde.kwin.RavenEffect",
+                        "UpdateBorderConfig",
+                        "bdss",
+                        if clean_config.borders_enabled { "true" } else { "false" },
+                        &clean_config.border_width.to_string(),
+                        &clean_config.active_border_color,
+                        &clean_config.inactive_border_color,
+                    ])
+                    .output();
+
                 if self.is_service_active() {
                     let ok = Command::new("systemctl")
                         .args(["--user", "restart", "raven.service"])

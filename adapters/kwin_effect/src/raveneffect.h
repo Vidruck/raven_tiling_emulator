@@ -124,6 +124,11 @@ private Q_SLOTS:
      */
     void slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::RectF &oldGeometry);
 
+    /**
+     * @brief Slot conectado a movimientos/redimensionados interactivos del usuario.
+     */
+    void slotWindowStepUserMovedResized(KWin::EffectWindow *w, const KWin::RectF &geometry);
+
 private:
     /**
      * @brief Determina si una ventana es apta para recibir contorno de foco o inactivo.

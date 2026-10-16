@@ -60,6 +60,7 @@ RavenEffect::RavenEffect()
         for (auto *win : windows) {
             if (win) {
                 connect(win, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
+                connect(win, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
             }
         }
     }
@@ -148,6 +149,7 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
     }
 
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
+    connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
 
     // Filtrar ventanas no gestionables, overlays, paneles o popups
     if (w->isDock() || w->isDesktop() || w->isNotification() || w->isTooltip() || !w->isNormalWindow()) {
@@ -185,6 +187,7 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
     }
 
     disconnect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
+    disconnect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
 
     QString windowId = w->internalId().toString();
     if (!windowId.isEmpty()) {
@@ -541,9 +544,22 @@ void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::R
 {
     if (KWin::effects && m_bordersEnabled && shouldDrawBorder(w)) {
         if (!oldGeometry.isEmpty()) {
-            KWin::effects->addRepaint(oldGeometry.toAlignedRect().adjusted(-4, -4, 4, 4));
+            KWin::effects->addRepaint(oldGeometry.toAlignedRect().adjusted(-6, -6, 6, 6));
         }
         w->addRepaintFull();
+        KWin::effects->addRepaintFull();
+    }
+}
+
+/**
+ * @brief Slot llamado durante el arrastre/redimensionamiento interactivo de ventanas.
+ */
+void RavenEffect::slotWindowStepUserMovedResized(KWin::EffectWindow *w, const KWin::RectF &geometry)
+{
+    Q_UNUSED(geometry);
+    if (KWin::effects && m_bordersEnabled && shouldDrawBorder(w)) {
+        w->addRepaintFull();
+        KWin::effects->addRepaintFull();
     }
 }
 
@@ -601,20 +617,23 @@ bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin
         return ret;
     }
 
-    // Matriz de proyección adaptada que incluye traslación y escala de animaciones activas
+    const double scale = viewport.scale();
+
+    // Replicar la arquitectura de proyección nativa de KWin (idéntica a OffscreenData::paint):
+    // 1. Matriz de proyección base del viewport
+    // 2. Traslación al origen de la ventana escalado en coordenadas del render target
+    // 3. Multiplicación por data.toMatrix(scale) que incluye translation() y scale() de AnimationEffect
     QMatrix4x4 mvp = viewport.projectionMatrix();
-    mvp.translate(data.translation());
-    mvp.scale(data.scale());
+    mvp.translate(static_cast<float>(std::round(w->x() * scale)), static_cast<float>(std::round(w->y() * scale)));
+    mvp = mvp * data.toMatrix(scale);
 
     shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, mvp);
     shader->setUniform(KWin::GLShader::ColorUniform::Color, borderColor);
 
-    QRectF frameRect = viewport.mapToRenderTarget(w->frameGeometry());
-    float x1 = static_cast<float>(frameRect.left());
-    float y1 = static_cast<float>(frameRect.top());
-    float wW = static_cast<float>(frameRect.width());
-    float hH = static_cast<float>(frameRect.height());
-    float bw = m_borderWidth;
+    // Dimensiones en coordenadas locales de la ventana (desde (0, 0) hasta (wW, hH))
+    float wW = static_cast<float>(std::round(w->width() * scale));
+    float hH = static_cast<float>(std::round(w->height() * scale));
+    float bw = static_cast<float>(std::round(m_borderWidth * scale));
 
     if (wW > 2 * bw && hH > 2 * bw) {
         std::vector<QVector2D> verts;
@@ -631,19 +650,24 @@ bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin
         };
 
         // Borde superior
-        addQuad(x1, y1, wW, bw);
+        addQuad(0.0f, 0.0f, wW, bw);
         // Borde inferior
-        addQuad(x1, y1 + hH - bw, wW, bw);
+        addQuad(0.0f, hH - bw, wW, bw);
         // Borde izquierdo
-        addQuad(x1, y1 + bw, bw, hH - 2.0f * bw);
+        addQuad(0.0f, bw, bw, hH - 2.0f * bw);
         // Borde derecho
-        addQuad(x1 + wW - bw, y1 + bw, bw, hH - 2.0f * bw);
+        addQuad(wW - bw, bw, bw, hH - 2.0f * bw);
 
         KWin::GLVertexBuffer *vbo = KWin::GLVertexBuffer::streamingBuffer();
         if (vbo) {
             vbo->reset();
             vbo->setVertices(verts);
-            vbo->render(GL_TRIANGLES);
+
+            // Evitar que el contorno luche o se pinte por encima de ventanas que se sobreponen:
+            // Restringir el renderizado estrictamente a la región visible (deviceRegion) usando GL_SCISSOR_TEST
+            glEnable(GL_SCISSOR_TEST);
+            vbo->render(deviceRegion, GL_TRIANGLES, true);
+            glDisable(GL_SCISSOR_TEST);
         }
     }
 
