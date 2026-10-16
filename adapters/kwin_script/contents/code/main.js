@@ -289,6 +289,33 @@ function isWindowNativeFloating(w) {
     return true;
   }
 }
+
+/**
+ * @brief Identifica heurísticamente si una ventana es Picture-in-Picture (PiP).
+ */
+function isPipWindow(w) {
+  try {
+    if (!w || w.deleted) return false;
+    const cap = w.caption ? w.caption.toString().toLowerCase() : "";
+    if (
+      cap.indexOf("picture-in-picture") !== -1 ||
+      cap.indexOf("picture in picture") !== -1 ||
+      cap.indexOf("imagen en imagen") !== -1 ||
+      cap.indexOf("pantalla en pantalla") !== -1 ||
+      cap.indexOf("reproductor en miniatura") !== -1 ||
+      cap.indexOf("incrustation") !== -1 ||
+      cap.indexOf("bild-in-bild") !== -1 ||
+      cap.indexOf("imagem em imagem") !== -1 ||
+      cap === "pip"
+    ) {
+      return true;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 /**
  * @file quarantine.js
  * @brief Registro inicial de ventanas hacia el demonio Rust.
@@ -308,6 +335,12 @@ function isWindowNativeFloating(w) {
 function processNewWindow(w) {
   if (!w || w.deleted || !isManageable(w)) {
     return;
+  }
+
+  // Asignar inicialmente 'encima de todas las ventanas' (keepAbove) a ventanas PiP
+  if (isPipWindow(w) && !w.__raven_pip_init) {
+    w.__raven_pip_init = true;
+    w.keepAbove = true;
   }
 
   bindWindow(w);
@@ -526,6 +559,10 @@ function applyCommands(commandsJson) {
       switch (cmd.action) {
         case "set_floating":
           w.__raven_dynamic_float = Boolean(cmd.floating);
+          w.keepAbove = Boolean(cmd.keep_above);
+          break;
+
+        case "set_keep_above":
           w.keepAbove = Boolean(cmd.keep_above);
           break;
 

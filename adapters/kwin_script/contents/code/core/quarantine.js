@@ -19,6 +19,12 @@ function processNewWindow(w) {
     return;
   }
 
+  // Asignar inicialmente 'encima de todas las ventanas' (keepAbove) a ventanas PiP
+  if (isPipWindow(w) && !w.__raven_pip_init) {
+    w.__raven_pip_init = true;
+    w.keepAbove = true;
+  }
+
   bindWindow(w);
   syncWindowDelta(w);
   requestStateSync();

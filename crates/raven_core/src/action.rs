@@ -110,6 +110,13 @@ pub enum RavenAction {
         /// Identificador de la ventana a cerrar.
         window_id: String,
     },
+    /// Modifica únicamente la propiedad keepAbove (encima de todas las ventanas).
+    SetKeepAbove {
+        /// Identificador de la ventana.
+        window_id: String,
+        /// Indica si debe mantenerse por encima (keepAbove).
+        keep_above: bool,
+    },
     /// Solicita forzar una sincronización global de estado desde el compositor.
     RequestSync,
 }

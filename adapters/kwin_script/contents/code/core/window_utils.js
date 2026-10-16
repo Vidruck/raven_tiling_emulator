@@ -70,3 +70,30 @@ function isWindowNativeFloating(w) {
     return true;
   }
 }
+
+/**
+ * @brief Identifica heurísticamente si una ventana es Picture-in-Picture (PiP).
+ */
+function isPipWindow(w) {
+  try {
+    if (!w || w.deleted) return false;
+    const cap = w.caption ? w.caption.toString().toLowerCase() : "";
+    if (
+      cap.indexOf("picture-in-picture") !== -1 ||
+      cap.indexOf("picture in picture") !== -1 ||
+      cap.indexOf("imagen en imagen") !== -1 ||
+      cap.indexOf("pantalla en pantalla") !== -1 ||
+      cap.indexOf("reproductor en miniatura") !== -1 ||
+      cap.indexOf("incrustation") !== -1 ||
+      cap.indexOf("bild-in-bild") !== -1 ||
+      cap.indexOf("imagem em imagem") !== -1 ||
+      cap === "pip"
+    ) {
+      return true;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+

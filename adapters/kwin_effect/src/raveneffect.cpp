@@ -591,6 +591,19 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
+    // Filtrar ventanas en modo Picture-in-Picture (PiP)
+    if (cap.contains(QStringLiteral("picture-in-picture")) ||
+        cap.contains(QStringLiteral("picture in picture")) ||
+        cap.contains(QStringLiteral("imagen en imagen")) ||
+        cap.contains(QStringLiteral("pantalla en pantalla")) ||
+        cap.contains(QStringLiteral("reproductor en miniatura")) ||
+        cap.contains(QStringLiteral("incrustation")) ||
+        cap.contains(QStringLiteral("bild-in-bild")) ||
+        cap.contains(QStringLiteral("imagem em imagem")) ||
+        cap == QStringLiteral("pip")) {
+        return false;
+    }
+
     // Aceptar únicamente ventanas normales de aplicaciones o cuadros de diálogo
     return w->isNormalWindow() || w->isDialog();
 }
@@ -632,12 +645,14 @@ void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
  */
 void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::RectF &oldGeometry)
 {
-    if (KWin::effects && m_bordersEnabled && shouldDrawBorder(w)) {
+    if (KWin::effects && m_bordersEnabled) {
         const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
         if (!oldGeometry.isEmpty()) {
             KWin::effects->addRepaint(oldGeometry.toAlignedRect().adjusted(-pad, -pad, pad, pad));
         }
-        KWin::effects->addRepaint(w->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
+        if (shouldDrawBorder(w)) {
+            KWin::effects->addRepaint(w->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
+        }
     }
 }
 

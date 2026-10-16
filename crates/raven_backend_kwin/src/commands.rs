@@ -227,6 +227,21 @@ impl From<RavenAction> for TilingCommand {
                 floating: None,
                 keep_above: None,
             },
+            RavenAction::SetKeepAbove {
+                window_id,
+                keep_above,
+            } => TilingCommand {
+                action: "set_keep_above".to_string(),
+                window_id: Some(window_id),
+                x: None,
+                y: None,
+                width: None,
+                height: None,
+                target_ws: None,
+                direction: None,
+                floating: None,
+                keep_above: Some(keep_above),
+            },
             RavenAction::RequestSync => TilingCommand {
                 action: "request_sync".to_string(),
                 window_id: None,

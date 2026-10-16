@@ -185,6 +185,10 @@ function applyCommands(commandsJson) {
           w.keepAbove = Boolean(cmd.keep_above);
           break;
 
+        case "set_keep_above":
+          w.keepAbove = Boolean(cmd.keep_above);
+          break;
+
         case "set_maximize":
           w.__raven_mutating = true;
           try {

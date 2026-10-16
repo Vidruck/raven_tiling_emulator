@@ -16,6 +16,7 @@ use crate::application::controller::RavenController;
 use crate::application::quarantine::QuarantineManager;
 use crate::domain::geometry::Topology;
 use raven_backend_kwin::{parse_payload, parse_window_delta, service::KWinBridgeMessage};
+use raven_core::action::RavenAction;
 use raven_core::backend::{CompositorBackend, CompositorEvent};
 use raven_core::ports::NotificationPort;
 
@@ -42,6 +43,7 @@ pub struct RavenControllerActor {
     backend: Arc<dyn CompositorBackend>,
     notifier: Arc<dyn NotificationPort>,
     quarantine_manager: QuarantineManager,
+    initialized_pip_windows: std::collections::HashSet<String>,
     rx: mpsc::Receiver<RavenMessage>,
 }
 
@@ -62,6 +64,7 @@ impl RavenControllerActor {
             backend,
             notifier,
             quarantine_manager,
+            initialized_pip_windows: std::collections::HashSet::new(),
             rx,
         }
     }
@@ -98,6 +101,7 @@ impl RavenControllerActor {
                             let _ = self.controller.commit_layout();
                         }
                         CompositorEvent::WindowClosed(window_id) => {
+                            self.initialized_pip_windows.remove(&window_id);
                             let engine = self.controller.get_engine_mut();
                             engine.current_windows.remove(&window_id);
                             engine.window_history.retain(|id| id != &window_id);
@@ -361,7 +365,22 @@ impl RavenControllerActor {
                         }
                         self.controller.active_window_id = self.active_window_id.clone();
 
+                        let mut pip_init_cmds = Vec::new();
+                        for win in &windows {
+                            if win.is_pip && self.initialized_pip_windows.insert(win.window_id.clone()) {
+                                tracing::info!(
+                                    "[ACTOR] Asignando propiedad 'encima de todas las ventanas' (keepAbove) inicial a PiP {}",
+                                    win.window_id
+                                );
+                                pip_init_cmds.push(RavenAction::SetKeepAbove {
+                                    window_id: win.window_id.clone(),
+                                    keep_above: true,
+                                });
+                            }
+                        }
+
                         let mut all_commands = Vec::new();
+                        all_commands.extend(pip_init_cmds);
                         if let Ok(cmds) = self.controller.handle_state_change(workspaces, windows) {
                             all_commands.extend(cmds);
                         }
@@ -404,6 +423,17 @@ impl RavenControllerActor {
 
                             let is_tiled = !win_node.is_floating && !win_node.is_minimized;
                             let wid = win_node.window_id.clone();
+
+                            if win_node.is_pip && self.initialized_pip_windows.insert(wid.clone()) {
+                                tracing::info!(
+                                    "[ACTOR] Asignando propiedad 'encima de todas las ventanas' (keepAbove) inicial a PiP delta {}",
+                                    wid
+                                );
+                                commands.push(RavenAction::SetKeepAbove {
+                                    window_id: wid.clone(),
+                                    keep_above: true,
+                                });
+                            }
                             
                             self.controller.handle_delta_change(win_node);
 
@@ -479,6 +509,7 @@ impl RavenControllerActor {
                         });
                     }
                     KWinBridgeMessage::WindowClosed { window_id, reply } => {
+                        self.initialized_pip_windows.remove(&window_id);
                         self.controller.clear_window_flapping(&window_id);
                         let engine = self.controller.get_engine_mut();
                         engine.current_windows.remove(&window_id);
