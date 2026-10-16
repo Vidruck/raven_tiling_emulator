@@ -170,8 +170,8 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
     connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
 
-    // Filtrar ventanas no gestionables, overlays, paneles o popups
-    if (w->isDock() || w->isDesktop() || w->isNotification() || w->isTooltip() || !w->isNormalWindow()) {
+    // Filtrar ventanas no gestionables, overlays, paneles, popups o ventanas excluidas del sistema
+    if (!shouldDrawBorder(w)) {
         return;
     }
 
@@ -548,18 +548,34 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
-    // Filtrar herramientas específicas del sistema solicitadas por el usuario:
+    // Filtrar herramientas específicas del sistema y componentes de KDE / Display Manager:
     // - Captura de pantalla de KDE (Spectacle)
-    // - Asistente de bienvenida de KDE (plasma-welcome)
-    // - Pantalla de bloqueo y gestor de inicio (kscreenlocker, sddm)
-    // - Ajustes y ventanas internas de plasmashell
+    // - Asistente y centro de bienvenida de KDE (plasma-welcome, Centro de bienvenida)
+    // - Pantalla de bloqueo y gestor de inicio de sesión (kscreenlocker, sddm, plasmalogin, lockscreen)
+    // - Ajustes del sistema y ventanas de configuración de Plasma (systemsettings, kcm_, plasmashell)
     const QString cls = w->windowClass().toLower();
+    const QString cap = w->caption().toLower();
+
     if (cls.contains(QStringLiteral("spectacle")) ||
         cls.contains(QStringLiteral("plasma-welcome")) ||
-        cls.contains(QStringLiteral("org.kde.plasma.welcome")) ||
+        cls.contains(QStringLiteral("plasma.welcome")) ||
         cls.contains(QStringLiteral("plasmashell")) ||
+        cls.contains(QStringLiteral("systemsettings")) ||
         cls.contains(QStringLiteral("kscreenlocker")) ||
-        cls.contains(QStringLiteral("sddm"))) {
+        cls.contains(QStringLiteral("screenlocker")) ||
+        cls.contains(QStringLiteral("lockscreen")) ||
+        cls.contains(QStringLiteral("plasmalogin")) ||
+        cls.contains(QStringLiteral("sddm")) ||
+        cls.contains(QStringLiteral("kcm_")) ||
+        cls.contains(QStringLiteral("polkit")) ||
+        cls.contains(QStringLiteral("desktopdialog")) ||
+        cap.contains(QStringLiteral("centro de bienvenida")) ||
+        cap.contains(QStringLiteral("welcome center")) ||
+        cap.contains(QStringLiteral("bienvenida de plasma")) ||
+        cap.contains(QStringLiteral("inicio de sesión")) ||
+        cap.contains(QStringLiteral("bloqueo de pantalla")) ||
+        cap.contains(QStringLiteral("preferencias del sistema")) ||
+        cap.contains(QStringLiteral("system settings"))) {
         return false;
     }
 

@@ -218,22 +218,37 @@ impl KWinQuarantineManager {
         }
 
         let cls_lower = win.cls.to_lowercase();
-        if cls_lower.contains("spectacle") && win.fs {
+        let name_lower = win.cls_name.to_lowercase();
+        let cap_lower = win.cap.to_lowercase();
+
+        if (cls_lower.contains("spectacle") || name_lower.contains("spectacle")) && win.fs {
             return false;
         }
 
-        // Ignorar ventanas y diálogos flotantes del sistema o herramientas utilitarias
+        // Ignorar ventanas y diálogos del sistema, bienvenida, ajustes o herramientas utilitarias
         let ignored_classes = [
             "kcolorchooser", "colorpicker", "gcolor", "eyedropper",
             "klipper", "plasma.clipboard", "org.kde.klipper", "org.kde.plasma.clipboard",
             "org.kde.kclock", "org.kde.polkit", "polkit", "pinentry", "zenity", "kdialog",
             "xdotool", "portal", "desktopdialog", "plasmoidviewer", "raven_gui", "raven-gui", "raven config",
             "spectacle", "org.kde.spectacle", "flameshot", "ksnip",
+            "plasma-welcome", "org.kde.plasma.welcome", "org.kde.plasma-welcome",
+            "plasmashell", "systemsettings", "kscreenlocker", "screenlocker", "lockscreen",
+            "sddm", "plasmalogin",
             "sun-awt-x11-xframepeer", "sun-awt-x11-xdialogpeer", "sun-awt-x11-xwindowpeer",
             "jetbrains-toolbox", "android-studio-splash", "splash",
         ];
 
-        if ignored_classes.iter().any(|&c| cls_lower == c || cls_lower.contains(c)) {
+        if ignored_classes.iter().any(|&c| cls_lower == c || cls_lower.contains(c) || name_lower == c || name_lower.contains(c)) {
+            return false;
+        }
+
+        if cap_lower.contains("centro de bienvenida")
+            || cap_lower.contains("welcome center")
+            || cap_lower.contains("bienvenida de plasma")
+            || cap_lower.contains("inicio de sesión")
+            || cap_lower.contains("bloqueo de pantalla")
+        {
             return false;
         }
 
@@ -272,6 +287,9 @@ impl KWinQuarantineManager {
         let floating_classes = [
             "kcolorchooser", "colorpicker", "gcolor", "eyedropper",
             "spectacle", "org.kde.spectacle", "flameshot", "ksnip", "screenkey",
+            "plasma-welcome", "org.kde.plasma.welcome", "org.kde.plasma-welcome",
+            "plasmashell", "systemsettings", "kscreenlocker", "screenlocker", "lockscreen",
+            "sddm", "plasmalogin",
             "klipper", "plasma.clipboard", "org.kde.klipper", "org.kde.plasma.clipboard",
             "org.kde.kclock", "org.kde.polkit", "polkit", "pinentry", "zenity", "kdialog",
             "xdotool", "portal", "desktopdialog", "plasmoidviewer",
