@@ -16,27 +16,48 @@
 
 **Raven Tiling Emulator** es un gestor de ventanas dinámico en mosaico (Tiling Window Manager) de alto rendimiento diseñado específicamente para **KDE Plasma 6 (Wayland)**. 
 
-Con el lanzamiento de la **Versión 4.5**, Raven da un salto sustancial en arquitectura, robustez y rendimiento: integra **cliente nativo para CAVA** en el visualizador espectral de audio del lanzador, **migra el registro y captura de atajos globales a Rust** mediante `org.kde.kglobalaccel`, reduce drásticamente el código del puente de KWin (*dumb bridge*), actualiza su stack asíncrono central (**Tokio 1.43, zbus 5.19, Serde 1.0**) y resuelve casos.
+Con el lanzamiento de la **Versión 4.5.5**, Raven consolida su salto arquitectónico definitivo: incorpora el **Efecto Nativo de KWin en C++ con aceleración OpenGL** para contornos de foco por hardware y animaciones elásticas, **blindaje anti-flicker** al capturar pantalla con Spectacle, **filtrado profundo de ventanas del sistema** (Bienvenida, Login/SDDM, Ajustes, Bloqueo), **suite de gestión TUI reestructurada con instalación atómica** libre de crash, cliente nativo para **CAVA** en el visualizador espectral, y atajos globales desacoplados hacia **Rust y `kglobalaccel`**.
 
 ---
 
-## ⚡ Novedades Principales de la Versión 4.5
+## ⚡ Novedades Principales de la Versión 4.5.5
+
+### 🎬 Contornos de Ventana por Hardware y Animaciones Nativas (`adapters/kwin_effect`)
+- **Renderizado OpenGL Nativo en KWin**: Integración del plugin C++ `kwin4_effect_raven` que intercepta `paintWindow` en el compositor para dibujar contornos activos e inactivos de alta definición con shaders uniformes de OpenGL, sin impacto en la CPU ni sobrecarga en el script JS.
+- **Transiciones Elásticas en Apertura y Reordenamiento**: Animaciones reactivas de nacimiento ("gelatina" / *Zoom-In* con curva `EaseOutBack`) y reordenamiento espacial por lotes (`AnimateBatch`), ejecutadas a los FPS nativos de la pantalla.
+- **Blindaje Anti-Flicker ante Capturas de Pantalla (Spectacle Guard)**: Se solucionó el parpadeo en las ventanas subyacentes cuando se activan selectores rectangulares o herramientas de captura (Spectacle, Flameshot, Ksnip), evitando cambios espurios de foco.
+- **Filtrado Profundo de Ventanas del Sistema**: Exclusión integral y homogénea en C++, JS y Rust de componentes como el Centro de Bienvenida (*Welcome Center* / `plasma-welcome`), pantallas de bloqueo e inicio de sesión (`sddm`, `plasmalogin`, `kscreenlocker`), y Preferencias del Sistema (`systemsettings`, `kcm_`).
+
+### 🛠️ Suite TUI Modular e Instalación Atómica (`raven-setup.sh`)
+- **Delegación Estricta de Opciones**: Menú de mantenimiento reorganizado donde cada opción cumple un propósito atómico y aislado:
+  - `[1]` Instalación Completa (todos los componentes).
+  - `[2]` Sincronización de Atajos Globales en Plasma.
+  - `[3]` Recompilación Exclusiva del Motor y GUI Rust (con reinicio de servicio).
+  - `[4]` Ensamblado del Bundle KWin Script (`main.js` y `reconfigure`).
+  - `[5]` Compilación y Despliegue Dinámico del Efecto C++ KWin (recarga en caliente vía D-Bus sin reiniciar el compositor).
+  - `[6]` Compilación y Despliegue del Plasmoide / Raven Hub.
+  - `[7]` Auditoría y Estado en Vivo del Ecosistema.
+  - `[8]` Desinstalación Limpia con purga total de caches de compilación (`cargo clean`, `adapters/*/build`).
+- **Instalación Segura Anti-Crash**: Despliegue mediante `install -m 755` para generar nuevos inodos atómicamente, garantizando cero caídas del compositor Plasma 6 causadas por colisiones de memoria en archivos `.so` mapeados (`mmap`).
 
 ### 🎹 Integración Nativa con CAVA en el Lanzador (Raven Hub)
-- **Visualizador Espectral Reactivo en Vivo**: Implementación de subproceso optimizado en C++ (`mediacontroller.cpp`) para interactuar con **CAVA** (*Console-based Audio Visualizer for ALSA/Pulse/PipeWire*).
-- **Procesamiento Eficiente por Ráfagas (Frame Batching)**: Se eliminó el micro-stuttering en el panel de Plasma al drenar tramas intermedias obsoletas y emitir actualizaciones espectrales (`spectrumChanged`) de forma sincronizada con el framerate de la interfaz.
-- **Configuración Automática y Control de Ciclo de Vida**: Generación dinámica de perfiles `/tmp/cava_raven_config` y apagado automático del analizador cuando el reproductor se pausa o el widget no está visible.
+- **Visualizador Espectral Reactivo en Vivo**: Subproceso optimizado en C++ (`mediacontroller.cpp`) para interactuar con **CAVA** (*Console-based Audio Visualizer for ALSA/Pulse/PipeWire*).
+- **Procesamiento Eficiente por Ráfagas (Frame Batching)**: Eliminación de micro-stuttering en el panel de Plasma al drenar tramas intermedias obsoletas y sincronizar `spectrumChanged` con la tasa de refresco del compositor.
+- **Gestión Inteligente de Energía**: Generación automática de `/tmp/cava_raven_config` y suspensión del analizador en pausa o minimización del widget.
 
-### ⌨️ Migración de Atajos Globales a Rust Nativo (`raven_backend_kwin`)
-- **Desacoplamiento Completo de JavaScript**: El registro de combinaciones globales (`Meta+Space`, `Meta+J/K`, `Meta+F`, `Meta+X`, `Meta+Q`, `Meta+Shift+L`, etc.) se trasladó desde el script de KWin directamente al backend en Rust (`crates/raven_backend_kwin/src/shortcuts.rs`).
+### ⌨️ Atajos Globales en Rust Nativo (`raven_backend_kwin`)
+- **Desacoplamiento Completo de JavaScript**: El registro de combinaciones globales (`Meta+Space`, `Meta+J/K`, `Meta+F`, `Meta+X`, `Meta+Q`, `Meta+Shift+L`, etc.) se trasladó desde el script de KWin directamente al backend en Rust (`shortcuts.rs`).
 - **Integración con `org.kde.kglobalaccel`**: Los atajos de Raven ahora se gestionan en el subsistema nativo de KDE Plasma, permitiendo verlos y editarlos en *Preferencias del Sistema ➡️ Accesos rápidos*.
-- **Latencia Cero y "Dumb Bridge"**: El script de KWin ya no procesa atajos de teclado ni crea callbacks en `QJSEngine`. Pasa a ser un puente puramente ejecutor que solo recibe las órdenes de movimiento y las aplica al compositor.
+- **Latencia Cero y "Dumb Bridge"**: El script de KWin ya no procesa atajos ni genera callbacks en `QJSEngine`, actuando como un ejecutor liviano.
 
-### 📦 Actualización del Stack Base de Rust
-- **Tokio 1.43 & zbus 5.19**: Migración y optimización hacia las últimas versiones del ecosistema asíncrono y D-Bus en Rust, aprovechando mejoras de throughput en canales bounded `mpsc` y soporte no bloqueante con `QDBusPendingCallWatcher` en el frontend Qt.
-- **Serde 1.0**: Optimizaciones en la serialización/deserialización de payloads de topología y estado con asignaciones pre-dimensionadas.
+### 📦 Stack Asíncrono de Vanguardia
+- **Tokio 1.43 & zbus 5.19**: Migración y optimización hacia las últimas versiones del ecosistema asíncrono y D-Bus en Rust, aprovechando mejoras de throughput en canales `mpsc` y llamadas IPC no bloqueantes.
+- **Cuarentena Dinámica y Rectificación en Rust**: Estabilización CSD calibrada para navegadores basados en Gecko/Chromium con modelo de sospecha activa y rectificación forzada post-layout.
 
-### 🛡️ Corrección de Errores Críticos y Filtrado Robusto
+---
+
+## ⚡ Novedades de Versiones Anteriores (v4.5 / v4.2 / v4.1)
+
 ### 🖥️ Visualizador de Pantallas Wayland y Gestión Multialgoritmo
 - **Canvas Vectorial Interactivo de Pantallas (`MonitorCanvas`)**: Nuevo componente gráfico en `raven_gui` que detecta y dibuja la geometría espacial real, resolución y escala física de los monitores conectados según los ve Wayland/KWin (estilo *KDE Display Configuration*).
 - **Asignación Independiente de Algoritmos por Monitor**: Posibilidad de seleccionar un monitor individualmente y asignarle su propio esquema de mosaico (ej. *Raven Base* en la pantalla principal y *Monocle* o *Clásico* en secundarias).

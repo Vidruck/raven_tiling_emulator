@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-#  🐦 RAVEN TILING EMULATOR — Interactive TUI Management Suite (v3.4)
+#  🐦 RAVEN TILING EMULATOR — Interactive TUI Management Suite (v4.5.5)
 #  Autor: Alejandro González Hernández (Vidruck)
 #  Licencia: GPL-3.0
 # ==============================================================================
