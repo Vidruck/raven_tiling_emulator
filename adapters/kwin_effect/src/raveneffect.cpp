@@ -564,13 +564,11 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         cls.contains(QStringLiteral("plasma.welcome")) ||
         cls.contains(QStringLiteral("welcome")) ||
         cls.contains(QStringLiteral("plasmashell")) ||
-        cls.contains(QStringLiteral("systemsettings")) ||
         cls.contains(QStringLiteral("kscreenlocker")) ||
         cls.contains(QStringLiteral("screenlocker")) ||
         cls.contains(QStringLiteral("lockscreen")) ||
         cls.contains(QStringLiteral("plasmalogin")) ||
         cls.contains(QStringLiteral("sddm")) ||
-        cls.contains(QStringLiteral("kcm_")) ||
         cls.contains(QStringLiteral("polkit")) ||
         cls.contains(QStringLiteral("desktopdialog")) ||
         role.contains(QStringLiteral("spectacle")) ||
@@ -586,8 +584,7 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         cap.contains(QStringLiteral("login screen")) ||
         cap.contains(QStringLiteral("bloqueo de pantalla")) ||
         cap.contains(QStringLiteral("screen lock")) ||
-        cap.contains(QStringLiteral("preferencias del sistema")) ||
-        cap.contains(QStringLiteral("system settings"))) {
+        false) {
         return false;
     }
 
