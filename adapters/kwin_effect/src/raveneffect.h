@@ -16,6 +16,7 @@
 #include <QRectF>
 #include <QEasingCurve>
 #include <QDBusConnection>
+#include <QPointer>
 
 class RavenEffectAdaptor;
 
@@ -162,5 +163,9 @@ private:
     float m_borderWidth = 2.0f;                             ///< Grosor del contorno (máx 2px)
     QColor m_activeBorderColor = QColor(61, 174, 233, 230); ///< Color del contorno en la ventana enfocada
     QColor m_inactiveBorderColor = QColor(49, 54, 59, 140); ///< Color del contorno en ventanas inactivas
+
+    // Optimización de repintado de foco y memoria de renderizado
+    QPointer<KWin::EffectWindow> m_lastActiveWindow;        ///< Rastreo seguro de la ventana previamente activa
+    std::vector<QVector2D> m_quadBuffer;                    ///< Buffer pre-reservado para evitar asignaciones por fotograma
 };
 

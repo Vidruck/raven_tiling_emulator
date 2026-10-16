@@ -78,6 +78,14 @@ RavenEffect::~RavenEffect()
         disconnect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
         disconnect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &RavenEffect::slotWindowClosed);
         disconnect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &RavenEffect::slotWindowActivated);
+
+        const auto windows = KWin::effects->stackingOrder();
+        for (auto *win : windows) {
+            if (win) {
+                disconnect(win, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
+                disconnect(win, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
+            }
+        }
     }
     QDBusConnection dbus = QDBusConnection::sessionBus();
     dbus.unregisterObject(QStringLiteral("/Effects/Raven"));
@@ -123,7 +131,18 @@ void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
         return;
     }
 
-    // Purgar entradas huérfanas en m_activeAnimations
+    // Purgar inmediatamente las animaciones concluidas para la ventana dada
+    const QString windowId = w->internalId().toString();
+    const QString hexId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(w), 0, 16);
+    const QString decId = QString::number(reinterpret_cast<quintptr>(w));
+
+    if (!windowId.isEmpty()) {
+        m_activeAnimations.remove(windowId);
+    }
+    m_activeAnimations.remove(hexId);
+    m_activeAnimations.remove(decId);
+
+    // Purgar cualquier entrada vacía residual en m_activeAnimations
     for (auto it = m_activeAnimations.begin(); it != m_activeAnimations.end(); ) {
         if (it.value().isEmpty()) {
             it = m_activeAnimations.erase(it);
@@ -189,6 +208,10 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
     disconnect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
     disconnect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
 
+    if (m_lastActiveWindow == w) {
+        m_lastActiveWindow.clear();
+    }
+
     QString windowId = w->internalId().toString();
     if (!windowId.isEmpty()) {
         cancelWindowAnimation(windowId);
@@ -214,22 +237,24 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
  */
 KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
 {
-    if (!KWin::effects) {
+    if (!KWin::effects || windowId.isEmpty()) {
         return nullptr;
+    }
+
+    // 1. Optimización rápida: Si el ID es un puntero en formato hexadecimal o decimal
+    bool isPtrParsed = false;
+    quintptr ptrVal = 0;
+    if (windowId.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
+        ptrVal = windowId.toULongLong(&isPtrParsed, 16);
+    } else {
+        ptrVal = windowId.toULongLong(&isPtrParsed, 10);
     }
 
     const auto windows = KWin::effects->stackingOrder();
     for (auto *win : windows) {
         if (!win) continue;
         
-        // Match con internal ID o address pointer hex string (0x...)
-        QString hexId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(win), 0, 16);
-        if (hexId.compare(windowId, Qt::CaseInsensitive) == 0) {
-            return win;
-        }
-
-        // Match por windowId decimal o address
-        if (QString::number(reinterpret_cast<quintptr>(win)).compare(windowId) == 0) {
+        if (isPtrParsed && reinterpret_cast<quintptr>(win) == ptrVal) {
             return win;
         }
 
@@ -547,10 +572,23 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
  */
 void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
 {
-    Q_UNUSED(w);
-    if (KWin::effects && m_bordersEnabled) {
-        KWin::effects->addRepaintFull();
+    if (!KWin::effects || !m_bordersEnabled) {
+        return;
     }
+
+    const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
+
+    // Repintar únicamente la ventana que perdió el foco
+    if (m_lastActiveWindow && m_lastActiveWindow != w) {
+        KWin::effects->addRepaint(m_lastActiveWindow->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
+    }
+
+    // Repintar únicamente la nueva ventana enfocada
+    if (w && shouldDrawBorder(w)) {
+        KWin::effects->addRepaint(w->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
+    }
+
+    m_lastActiveWindow = w;
 }
 
 /**
@@ -651,17 +689,19 @@ bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin
     float bw = static_cast<float>(std::round(m_borderWidth * scale));
 
     if (wW > 2 * bw && hH > 2 * bw) {
-        std::vector<QVector2D> verts;
-        verts.reserve(24);
+        m_quadBuffer.clear();
+        if (m_quadBuffer.capacity() < 24) {
+            m_quadBuffer.reserve(24);
+        }
 
-        auto addQuad = [&verts](float rx, float ry, float rw, float rh) {
-            verts.push_back(QVector2D(rx, ry));
-            verts.push_back(QVector2D(rx + rw, ry));
-            verts.push_back(QVector2D(rx, ry + rh));
+        auto addQuad = [this](float rx, float ry, float rw, float rh) {
+            m_quadBuffer.push_back(QVector2D(rx, ry));
+            m_quadBuffer.push_back(QVector2D(rx + rw, ry));
+            m_quadBuffer.push_back(QVector2D(rx, ry + rh));
 
-            verts.push_back(QVector2D(rx + rw, ry));
-            verts.push_back(QVector2D(rx + rw, ry + rh));
-            verts.push_back(QVector2D(rx, ry + rh));
+            m_quadBuffer.push_back(QVector2D(rx + rw, ry));
+            m_quadBuffer.push_back(QVector2D(rx + rw, ry + rh));
+            m_quadBuffer.push_back(QVector2D(rx, ry + rh));
         };
 
         // Borde superior
@@ -676,7 +716,7 @@ bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin
         KWin::GLVertexBuffer *vbo = KWin::GLVertexBuffer::streamingBuffer();
         if (vbo) {
             vbo->reset();
-            vbo->setVertices(verts);
+            vbo->setVertices(m_quadBuffer);
 
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
