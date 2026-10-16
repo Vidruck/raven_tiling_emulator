@@ -102,6 +102,20 @@ function initDBusBridge() {
     requestStateSync();
   });
 
+  // Escuchar cambios en el área útil de trabajo (ej. aparición, redimensionamiento o movimiento del panel de Plasma)
+  if (workspace.clientAreaChanged) {
+    workspace.clientAreaChanged.connect(function () {
+      requestStateSync();
+    });
+  }
+
+  // Escuchar cambios o reconfiguración de pantallas
+  if (workspace.screensChanged) {
+    workspace.screensChanged.connect(function () {
+      requestStateSync();
+    });
+  }
+
   // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (100ms)
   setKWinTimeout(function () {
     try {

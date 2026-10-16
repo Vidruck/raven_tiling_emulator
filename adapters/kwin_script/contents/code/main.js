@@ -361,8 +361,17 @@ function syncState() {
       const out = outs[o];
       if (out && out.name) {
         masterOutputs.push(out.name.toString());
-        const deskId = currentDesk ? currentDesk.id.toString() : "default_desk";
-        screens[out.name + "||" + deskId] = getSafeScreenGeometry(out, currentDesk);
+        if (desks.length > 0) {
+          for (let d = 0; d < desks.length; d++) {
+            const desk = desks[d];
+            if (desk && desk.id) {
+              screens[out.name + "||" + desk.id.toString()] = getSafeScreenGeometry(out, desk);
+            }
+          }
+        } else {
+          const deskId = currentDesk ? currentDesk.id.toString() : "default_desk";
+          screens[out.name + "||" + deskId] = getSafeScreenGeometry(out, currentDesk);
+        }
       }
     }
     for (let d = 0; d < desks.length; d++) {
@@ -921,6 +930,20 @@ function initDBusBridge() {
   workspace.currentDesktopChanged.connect(function () {
     requestStateSync();
   });
+
+  // Escuchar cambios en el área útil de trabajo (ej. aparición, redimensionamiento o movimiento del panel de Plasma)
+  if (workspace.clientAreaChanged) {
+    workspace.clientAreaChanged.connect(function () {
+      requestStateSync();
+    });
+  }
+
+  // Escuchar cambios o reconfiguración de pantallas
+  if (workspace.screensChanged) {
+    workspace.screensChanged.connect(function () {
+      requestStateSync();
+    });
+  }
 
   // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (100ms)
   setKWinTimeout(function () {

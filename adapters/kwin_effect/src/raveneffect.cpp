@@ -539,8 +539,10 @@ void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
  */
 void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::RectF &oldGeometry)
 {
-    Q_UNUSED(oldGeometry);
     if (KWin::effects && m_bordersEnabled && shouldDrawBorder(w)) {
+        if (!oldGeometry.isEmpty()) {
+            KWin::effects->addRepaint(oldGeometry.toAlignedRect().adjusted(-4, -4, 4, 4));
+        }
         w->addRepaintFull();
     }
 }
