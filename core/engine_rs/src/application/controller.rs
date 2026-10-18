@@ -176,13 +176,19 @@ impl RavenController {
         }
 
         // Para preservar la estabilidad espacial del layout (evitando swaps visuales al enfocar o interactuar),
-        // las ventanas se ordenan por `spatial_order`.
-        // La evicción por saturación (si excede Cmax) utilizará independientemente `window_history` para desalojar las más antiguas.
+        // las ventanas se ordenan por `spatial_order` indexado en O(1) vía HashMap para evitar O(N^2).
+        let spatial_indices: HashMap<&str, usize> = self
+            .engine
+            .spatial_order
+            .iter()
+            .enumerate()
+            .map(|(idx, id)| (id.as_str(), idx))
+            .collect();
+
         windows.sort_by_key(|w| {
-            self.engine
-                .spatial_order
-                .iter()
-                .position(|id| id == &w.window_id)
+            spatial_indices
+                .get(w.window_id.as_str())
+                .copied()
                 .unwrap_or(usize::MAX)
         });
 

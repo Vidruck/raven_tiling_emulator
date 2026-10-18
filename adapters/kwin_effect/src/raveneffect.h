@@ -172,5 +172,6 @@ private:
     // Optimización de repintado de foco y memoria de renderizado
     QPointer<KWin::EffectWindow> m_lastActiveWindow;        ///< Rastreo seguro de la ventana previamente activa
     std::vector<QVector2D> m_quadBuffer;                    ///< Buffer pre-reservado para evitar asignaciones por fotograma
+    mutable QHash<const KWin::EffectWindow*, bool> m_borderVerdictCache; ///< Caché de idoneidad estática de ventana
 };
 

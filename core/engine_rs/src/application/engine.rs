@@ -365,14 +365,17 @@ impl TilingEngine {
     /// # Parámetros
     /// * `current_windows` - Estado actual de ventanas activas reportadas por el compositor.
     pub fn update_history(&mut self, current_windows: &[WindowNode]) -> bool {
+        let valid_ids: std::collections::HashSet<&str> = current_windows
+            .iter()
+            .map(|w| w.window_id.as_str())
+            .collect();
+
         // Detectar si hay ventanas nuevas o removidas
         let has_new_or_removed = current_windows.iter().any(|w| {
             !w.is_floating
                 && !self.dynamic_floating_windows.contains(&w.window_id)
                 && !self.window_history.contains(&w.window_id)
-        }) || self.window_history.iter().any(|id| {
-            !current_windows.iter().any(|w| &w.window_id == id)
-        });
+        }) || self.window_history.iter().any(|id| !valid_ids.contains(id.as_str()));
 
         // Debounce: solo omitir si la estructura de ventanas no ha cambiado y se llamó con demasiada frecuencia
         if !has_new_or_removed && !self.should_update_history() {
@@ -384,18 +387,18 @@ impl TilingEngine {
         let initial_order = self.window_history.clone();
 
         self.window_history
-            .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
+            .retain(|id| valid_ids.contains(id.as_str()));
 
         self.spatial_order
-            .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
+            .retain(|id| valid_ids.contains(id.as_str()));
 
         // Limpiar de la pila flotante aquellas ventanas que hayan sido cerradas
         self.dynamic_floating_windows
-            .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
+            .retain(|id| valid_ids.contains(id.as_str()));
 
         // Limpiar de la lista de minimizadas aquellas ventanas que hayan sido cerradas
         self.minimized_windows
-            .retain(|id| current_windows.iter().any(|w| &w.window_id == id));
+            .retain(|id| valid_ids.contains(id.as_str()));
 
         for win in current_windows {
             let is_dyn_float = self.dynamic_floating_windows.contains(&win.window_id);

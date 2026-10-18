@@ -72,6 +72,17 @@ impl RavenControllerActor {
     pub async fn run(mut self) {
         info!("🎭 Actor Model (P3) Inicializado con Canal Bounded (Capacidad: 256)");
 
+        // Canal acotado y secuencial para la aplicación de comandos al backend (evita colisiones asíncronas)
+        let (out_tx, mut out_rx) = mpsc::channel::<Vec<raven_core::action::RavenAction>>(64);
+        let backend_clone = self.backend.clone();
+        tokio::spawn(async move {
+            while let Some(actions) = out_rx.recv().await {
+                if let Err(e) = backend_clone.apply_actions(actions).await {
+                    tracing::error!("[ACTOR] Error aplicando acciones al compositor: {}", e);
+                }
+            }
+        });
+
         // Sincronizar estado inicial de contornos con el plugin kwin4_effect_raven
         {
             let cfg = self.controller.get_config();
@@ -195,12 +206,7 @@ impl RavenControllerActor {
                                     commands.extend(cmds);
                                 }
                                 if !commands.is_empty() {
-                                    let backend = self.backend.clone();
-                                    tokio::spawn(async move {
-                                        if let Err(e) = backend.apply_actions(commands).await {
-                                            tracing::error!("[ACTOR] Error al aplicar acciones de liberación de cuarentena: {}", e);
-                                        }
-                                    });
+                                    let _ = out_tx.send(commands).await;
                                 }
                                 // --- Fase 2: Agendar verificación de rectificación solo si no está minimizada ---
                                 if !is_min {
@@ -240,45 +246,44 @@ impl RavenControllerActor {
                                     info!("[SOSPECHA-ACTIVA] Ventana '{}' está minimizada. Rectificación omitida.", window_id);
                                 }
                                 Some(win) => {
-                                    let cat = raven_backend_kwin::QuarantineCategory::from_window(&win.resource_class, &win.resource_name);
-                                    let is_heavy_or_browser = matches!(cat, raven_backend_kwin::QuarantineCategory::Browser | raven_backend_kwin::QuarantineCategory::Heavy);
-                                    let is_suspicious = win.is_suspicious || win.resource_class.trim().is_empty() || is_heavy_or_browser;
+                                    let reported = win.geometry;
+                                    let target_opt = self.controller.get_target_rect_for_window(&window_id);
 
-                                    if is_suspicious {
-                                        // ALTA SOSPECHA: ventana anónima, CSD o categoría pesada/navegador
-                                        // → rectificación incondicional de todo el espacio de trabajo para asegurar convergencia total
-                                        tracing::warn!(
-                                            "[SOSPECHA-ACTIVA] Ventana SOSPECHOSA/CSD '{}' (cls='{}', exe='{}', cat={:?}) → rectificación forzada de workspace completo.",
-                                            window_id, win.resource_class, win.resource_name, cat
+                                    // Si la geometría física reportada ya converge con el objetivo (±2px),
+                                    // no saturamos KWin ni forzamos re-layouts innecesarios.
+                                    let diverged = target_opt.is_some_and(|target| {
+                                        (reported.x - target.x).abs() > 2
+                                            || (reported.y - target.y).abs() > 2
+                                            || (reported.width - target.width).abs() > 2
+                                            || (reported.height - target.height).abs() > 2
+                                    });
+
+                                    // Solo forzar rectificación si divergieron las medidas o es anónima sin clase
+                                    let is_truly_suspicious = win.is_suspicious || win.resource_class.trim().is_empty();
+
+                                    if !diverged && !is_truly_suspicious {
+                                        tracing::debug!(
+                                            "[SOSPECHA-ACTIVA] Ventana '{}' converge correctamente con el layout ({:?}). Rectificación omitida.",
+                                            window_id, reported
+                                        );
+                                    } else if is_truly_suspicious {
+                                        tracing::debug!(
+                                            "[SOSPECHA-ACTIVA] Ventana verdaderamente sospechosa/anónima '{}' → rectificación de workspace.",
+                                            window_id
                                         );
                                         if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(None) {
                                             if !rectify_cmds.is_empty() {
-                                                let backend = self.backend.clone();
-                                                tokio::spawn(async move {
-                                                    if let Err(e) = backend.apply_actions(rectify_cmds).await {
-                                                        tracing::error!("[SOSPECHA-ACTIVA] Error en rectificación de workspace: {}", e);
-                                                    }
-                                                });
+                                                let _ = out_tx.send(rectify_cmds).await;
                                             }
                                         }
                                     } else {
-                                        // SOSPECHA NORMAL: re-enviar target desde last_known_layout
-                                        // sin comparar contra win.geometry del bridge.
                                         if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
                                             if !rectify_cmds.is_empty() {
-                                                let wid_log = window_id.clone();
-                                                info!(
-                                                    "[SOSPECHA-ACTIVA] Re-enviando geometría calculada para '{}' (sospecha normal, {} cmds).",
-                                                    wid_log, rectify_cmds.len()
+                                                tracing::debug!(
+                                                    "[SOSPECHA-ACTIVA] Re-enviando geometría divergente para '{}' ({} cmds).",
+                                                    window_id, rectify_cmds.len()
                                                 );
-                                                let backend = self.backend.clone();
-                                                tokio::spawn(async move {
-                                                    if let Err(e) = backend.apply_actions(rectify_cmds).await {
-                                                        tracing::error!("[SOSPECHA-ACTIVA] Error re-enviando para '{}': {}", wid_log, e);
-                                                    }
-                                                });
-                                            } else {
-                                                info!("[SOSPECHA-ACTIVA] Ventana '{}' no necesita rectificación (no en layout activo).", window_id);
+                                                let _ = out_tx.send(rectify_cmds).await;
                                             }
                                         }
                                     }

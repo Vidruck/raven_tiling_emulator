@@ -1,6 +1,6 @@
 [package]
 name = "raven_backend_wayland"
-version = "4.0.0"
+version = "4.6.0"
 edition = "2021"
 description = "Adaptador de backend Wayland nativo para Raven Tiling mediante wayland-client y protocolos extendidos"
 license = "GPL-3.0"

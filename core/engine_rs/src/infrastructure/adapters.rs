@@ -49,7 +49,10 @@ impl HistoryStorage for FileHistoryStorage {
                 let _ = tokio::fs::create_dir_all(parent).await;
             }
             if let Ok(json) = serde_json::to_string(&history) {
-                let _ = tokio::fs::write(path, json).await;
+                let tmp_path = path.with_extension("tmp");
+                if tokio::fs::write(&tmp_path, json).await.is_ok() {
+                    let _ = tokio::fs::rename(&tmp_path, &path).await;
+                }
             }
         });
     }

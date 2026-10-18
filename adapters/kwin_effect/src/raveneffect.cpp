@@ -217,6 +217,8 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
         m_lastActiveWindow.clear();
     }
 
+    m_borderVerdictCache.remove(w);
+
     QString windowId = w->internalId().toString();
     if (!windowId.isEmpty()) {
         cancelWindowAnimation(windowId);
@@ -554,139 +556,144 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         }
     }
 
-    // Ventanas sin identidad (sin clase ni título) no son aplicaciones reales
-    if (w->windowClass().trimmed().isEmpty() && w->caption().trimmed().isEmpty()) {
-        return false;
-    }
-
-    // Filtrar explícitamente cualquier elemento que no sea una ventana de aplicación real:
-    // Pantalla de bloqueo / inicio de sesión (isLockScreen), fondos de escritorio, docks, barras de tareas,
-    // notificaciones, popups, tooltips, comboboxes, iconos DND, input methods, contornos internos, etc.
-    if (w->isLockScreen()
-        || w->isDesktop()
-        || w->isDock()
-        || w->isNotification()
-        || w->isCriticalNotification()
-        || w->isTooltip()
-        || w->isAppletPopup()
-        || w->isOnScreenDisplay()
-        || w->isComboBox()
-        || w->isDNDIcon()
-        || w->isDropdownMenu()
-        || w->isPopupMenu()
-        || w->isOutline()
-        || w->isInputMethod()
-        || w->isSpecialWindow()
-        || w->isSplash()
-        || !w->isManaged()) {
-        return false;
-    }
-
     if (w->window() && w->window()->maximizeMode() != KWin::MaximizeRestore) {
         return false;
     }
 
-    // Filtrar herramientas específicas del sistema y componentes de KDE / Display Manager:
-    // - Captura de pantalla de KDE (Spectacle, ksnip, flameshot)
-    // - Asistente y centro de bienvenida de KDE (plasma-welcome, org.kde.plasma.welcome, Welcome Center, etc.)
-    // - Pantalla de bloqueo y gestor de inicio de sesión (kscreenlocker, sddm, plasmalogin, lockscreen, login)
-    // - Ajustes del sistema y ventanas de configuración de Plasma (systemsettings, kcm_, plasmashell)
-    const QString cls = w->windowClass().toLower();
-    const QString role = w->windowRole().toLower();
-    const QString cap = w->caption().toLower();
+    // Comprobación de caché para el análisis estático de clase, rol y tipo de ventana
+    auto it = m_borderVerdictCache.constFind(w);
+    bool staticOk = false;
+    if (it != m_borderVerdictCache.cend()) {
+        staticOk = *it;
+    } else {
+        auto checkStatic = [w]() -> bool {
+            // Ventanas sin identidad (sin clase ni título) no son aplicaciones reales
+            if (w->windowClass().trimmed().isEmpty() && w->caption().trimmed().isEmpty()) {
+                return false;
+            }
 
-    if (cls.contains(QStringLiteral("spectacle"))
-        || cls.contains(QStringLiteral("flameshot"))
-        || cls.contains(QStringLiteral("ksnip"))
-        || cls.contains(QStringLiteral("plasma-welcome"))
-        || cls.contains(QStringLiteral("plasma.welcome"))
-        || cls.contains(QStringLiteral("welcome"))
-        || cls.contains(QStringLiteral("plasmashell"))
-        || cls.contains(QStringLiteral("kscreenlocker"))
-        || cls.contains(QStringLiteral("screenlocker"))
-        || cls.contains(QStringLiteral("lockscreen"))
-        || cls.contains(QStringLiteral("plasmalogin"))
-        || cls.contains(QStringLiteral("sddm"))
-        || cls.contains(QStringLiteral("polkit"))
-        || cls.contains(QStringLiteral("desktopdialog"))
-        || role.contains(QStringLiteral("spectacle"))
-        || role.contains(QStringLiteral("welcome"))
-        || role.contains(QStringLiteral("lockscreen"))
-        || role.contains(QStringLiteral("login"))
-        || cap.contains(QStringLiteral("centro de bienvenida"))
-        || cap.contains(QStringLiteral("welcome center"))
-        || cap.contains(QStringLiteral("bienvenida de plasma"))
-        || cap.contains(QStringLiteral("bienvenida"))
-        || cap.contains(QStringLiteral("inicio de sesión"))
-        || cap.contains(QStringLiteral("pantalla de inicio de sesión"))
-        || cap.contains(QStringLiteral("login screen"))
-        || cap.contains(QStringLiteral("bloqueo de pantalla"))
-        || cap.contains(QStringLiteral("screen lock"))
-        || false) {
+            // Filtrar explícitamente cualquier elemento que no sea una ventana de aplicación real:
+            if (w->isLockScreen()
+                || w->isDesktop()
+                || w->isDock()
+                || w->isNotification()
+                || w->isCriticalNotification()
+                || w->isTooltip()
+                || w->isAppletPopup()
+                || w->isOnScreenDisplay()
+                || w->isComboBox()
+                || w->isDNDIcon()
+                || w->isDropdownMenu()
+                || w->isPopupMenu()
+                || w->isOutline()
+                || w->isInputMethod()
+                || w->isSpecialWindow()
+                || w->isSplash()
+                || !w->isManaged()) {
+                return false;
+            }
+
+            const QString cls = w->windowClass().toLower();
+            const QString role = w->windowRole().toLower();
+            const QString cap = w->caption().toLower();
+
+            if (cls.contains(QStringLiteral("spectacle"))
+                || cls.contains(QStringLiteral("flameshot"))
+                || cls.contains(QStringLiteral("ksnip"))
+                || cls.contains(QStringLiteral("plasma-welcome"))
+                || cls.contains(QStringLiteral("plasma.welcome"))
+                || cls.contains(QStringLiteral("welcome"))
+                || cls.contains(QStringLiteral("plasmashell"))
+                || cls.contains(QStringLiteral("kscreenlocker"))
+                || cls.contains(QStringLiteral("screenlocker"))
+                || cls.contains(QStringLiteral("lockscreen"))
+                || cls.contains(QStringLiteral("plasmalogin"))
+                || cls.contains(QStringLiteral("sddm"))
+                || cls.contains(QStringLiteral("polkit"))
+                || cls.contains(QStringLiteral("desktopdialog"))
+                || role.contains(QStringLiteral("spectacle"))
+                || role.contains(QStringLiteral("welcome"))
+                || role.contains(QStringLiteral("lockscreen"))
+                || role.contains(QStringLiteral("login"))
+                || cap.contains(QStringLiteral("centro de bienvenida"))
+                || cap.contains(QStringLiteral("welcome center"))
+                || cap.contains(QStringLiteral("bienvenida de plasma"))
+                || cap.contains(QStringLiteral("bienvenida"))
+                || cap.contains(QStringLiteral("inicio de sesión"))
+                || cap.contains(QStringLiteral("pantalla de inicio de sesión"))
+                || cap.contains(QStringLiteral("login screen"))
+                || cap.contains(QStringLiteral("bloqueo de pantalla"))
+                || cap.contains(QStringLiteral("screen lock"))) {
+                return false;
+            }
+
+            static const QStringList kSystemClasses = {
+                QStringLiteral("ksplash"),
+                QStringLiteral("ksplashqml"),
+                QStringLiteral("ksmserver"),
+                QStringLiteral("kscreenlocker"),
+                QStringLiteral("kscreenlocker_greet"),
+                QStringLiteral("plasma-lockscreen"),
+                QStringLiteral("plasmalogin"),
+                QStringLiteral("sddm"),
+                QStringLiteral("org.kde.plasma.welcome"),
+                QStringLiteral("org.kde.plasmashell"),
+                QStringLiteral("krunner"),
+                QStringLiteral("org.kde.krunner"),
+                QStringLiteral("kwin_wayland"),
+                QStringLiteral("kwin_x11"),
+                QStringLiteral("xwaylandvideobridge"),
+                QStringLiteral("plasma-interactiveconsole"),
+                QStringLiteral("org.kde.polkit-kde-authentication-agent"),
+                QStringLiteral("polkit-kde-authentication-agent"),
+                QStringLiteral("ksshaskpass"),
+                QStringLiteral("kded"),
+                QStringLiteral("org.kde.kdeconnect"),
+                QStringLiteral("greeter"),
+                QStringLiteral("org.kde.plasma.emojier"),
+                QStringLiteral("org.kde.kscreen.osd"),
+                QStringLiteral("org.kde.spectacle"),
+                QStringLiteral("org.kde.plasma-welcome")
+            };
+            for (const QString &sc : kSystemClasses) {
+                if (cls.contains(sc) || role.contains(sc)) {
+                    return false;
+                }
+            }
+
+            if (cap.contains(QStringLiteral("picture-in-picture")) ||
+                cap.contains(QStringLiteral("picture in picture")) ||
+                cap.contains(QStringLiteral("imagen en imagen")) ||
+                cap.contains(QStringLiteral("pantalla en pantalla")) ||
+                cap.contains(QStringLiteral("reproductor en miniatura")) ||
+                cap.contains(QStringLiteral("incrustation")) ||
+                cap.contains(QStringLiteral("bild-in-bild")) ||
+                cap.contains(QStringLiteral("imagem em imagem")) ||
+                cap == QStringLiteral("pip")) {
+                return false;
+            }
+
+            return w->isNormalWindow() || w->isDialog();
+        };
+
+        staticOk = checkStatic();
+        m_borderVerdictCache.insert(w, staticOk);
+    }
+
+    if (!staticOk) {
         return false;
     }
 
-    // Lista de exclusión ampliada de componentes de sesión/shell de KDE (clase o nombre de escritorio)
-    static const QStringList kSystemClasses = {
-        QStringLiteral("ksplash"),
-        QStringLiteral("ksplashqml"),
-        QStringLiteral("ksmserver"),
-        QStringLiteral("kscreenlocker"),
-        QStringLiteral("kscreenlocker_greet"),
-        QStringLiteral("plasma-lockscreen"),
-        QStringLiteral("plasmalogin"),
-        QStringLiteral("sddm"),
-        QStringLiteral("org.kde.plasma.welcome"),
-        QStringLiteral("org.kde.plasmashell"),
-        QStringLiteral("krunner"),
-        QStringLiteral("org.kde.krunner"),
-        QStringLiteral("kwin_wayland"),
-        QStringLiteral("kwin_x11"),
-        QStringLiteral("xwaylandvideobridge"),
-        QStringLiteral("plasma-interactiveconsole"),
-        QStringLiteral("org.kde.polkit-kde-authentication-agent"),
-        QStringLiteral("polkit-kde-authentication-agent"),
-        QStringLiteral("ksshaskpass"),
-        QStringLiteral("kded"),
-        QStringLiteral("org.kde.kdeconnect"),
-        QStringLiteral("greeter"),
-        QStringLiteral("org.kde.plasma.emojier"),
-        QStringLiteral("org.kde.kscreen.osd"),
-        QStringLiteral("org.kde.spectacle"),
-         QStringLiteral("org.kde.plasma-welcome")
-    };
-    for (const QString &sc : kSystemClasses) {
-        if (cls.contains(sc) || role.contains(sc)) {
-            return false;
-        }
-    }
-
-    // Filtrar ventanas en modo Picture-in-Picture (PiP)
-    if (cap.contains(QStringLiteral("picture-in-picture")) ||
-        cap.contains(QStringLiteral("picture in picture")) ||
-        cap.contains(QStringLiteral("imagen en imagen")) ||
-        cap.contains(QStringLiteral("pantalla en pantalla")) ||
-        cap.contains(QStringLiteral("reproductor en miniatura")) ||
-        cap.contains(QStringLiteral("incrustation")) ||
-        cap.contains(QStringLiteral("bild-in-bild")) ||
-        cap.contains(QStringLiteral("imagem em imagem")) ||
-        cap == QStringLiteral("pip")) {
-        return false;
-    }
-
-    // Si la ventana tiene un cuadro de diálogo modal activo bloqueándola, no debe dibujar contorno
-    // (el contorno le corresponde al diálogo modal superior para evitar colisiones visuales)
+    // Filtros dinámicos en tiempo real (modales y diálogos)
     if (w->findModal() != nullptr) {
         return false;
     }
 
-    // Si es un diálogo secundario y no está enfocado activamente, descartar
     if (w->isDialog() && w->transientFor() != nullptr && KWin::effects && KWin::effects->activeWindow() != w) {
         return false;
     }
 
-    // Aceptar únicamente ventanas normales de aplicaciones o cuadros de diálogo
-    return w->isNormalWindow() || w->isDialog();
+    return true;
 }
 
 /**

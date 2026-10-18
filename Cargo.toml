@@ -9,8 +9,8 @@ members = [
 resolver = "2"
 
 [profile.release]
-# Optimización de nivel "z" (optimizar para tamaño mínimo)
-opt-level = "z"
+# Optimización de nivel 3 (máxima velocidad de cálculo y ejecución en bucle de compositor)
+opt-level = 3
 
 # Elimina todos los símbolos de depuración del binario final para reducir tamaño
 strip = true

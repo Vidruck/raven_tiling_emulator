@@ -1,6 +1,6 @@
 [package]
 name = "raven_backend_kwin"
-version = "3.2.0"
+version = "4.6.0"
 edition = "2021"
 description = "Adaptador de backend para el compositor KWin (KDE Plasma) mediante zbus y protocolos nativos"
 license = "GPL-3.0"

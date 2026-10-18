@@ -53,9 +53,9 @@ MediaController::MediaController(QObject *parent)
     connect(m_cavaStopTimer, &QTimer::timeout, this, &MediaController::stopCavaProcess);
 
     m_discoveryTimer = new QTimer(this);
-    m_discoveryTimer->setInterval(3000);
+    m_discoveryTimer->setInterval(15000); // Reducir sondeo reactivo a 15s; NameOwnerChanged gestiona el ciclo en tiempo real
     connect(m_discoveryTimer, &QTimer::timeout, this, [this]() {
-        if (m_active && (!m_hasPlayer || !isPlaying())) {
+        if (m_active && !m_hasPlayer) {
             findActivePlayer();
         }
     });
@@ -288,6 +288,10 @@ void MediaController::onNameOwnerChanged(const QString &name, const QString &old
         return;
     }
 
+    if (name.contains(QLatin1String(".Sandboxed.")) || name.contains(QLatin1String(".instance-"))) {
+        return;
+    }
+
     if (oldOwner.isEmpty() && !newOwner.isEmpty()) {
         connectToPlayer(name);
     } else if (!oldOwner.isEmpty() && newOwner.isEmpty()) {
@@ -449,9 +453,12 @@ void MediaController::updateCavaState()
                 inputMethod = QStringLiteral("pipewire");
             }
 
-            // Crear o refrescar archivo temporal de configuración para CAVA
-            QString tempDir = QDir::tempPath();
-            m_cavaConfigPath = QStringLiteral("%1/raven_cava_config").arg(tempDir);
+            // Crear o refrescar archivo temporal de configuración para CAVA en directorio de runtime seguro
+            QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+            if (runtimeDir.isEmpty() || !QDir(runtimeDir).exists()) {
+                runtimeDir = QDir::tempPath();
+            }
+            m_cavaConfigPath = QStringLiteral("%1/raven_cava_config").arg(runtimeDir);
             QFile cfgFile(m_cavaConfigPath);
             if (cfgFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
                 QTextStream out(&cfgFile);
