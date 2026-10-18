@@ -138,6 +138,7 @@ impl QuarantinePolicy {
             "inkscape",
             "blender",
             "krita",
+            "zuno",
         ];
 
         let is_heavy = heavy_executables.iter().any(|&exe| {

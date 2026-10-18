@@ -62,6 +62,7 @@ RavenEffect::RavenEffect()
             if (win) {
                 connect(win, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
                 connect(win, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
+                connect(win, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
             }
         }
     }
@@ -85,6 +86,7 @@ RavenEffect::~RavenEffect()
             if (win) {
                 disconnect(win, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
                 disconnect(win, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
+                disconnect(win, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
             }
         }
     }
@@ -170,6 +172,7 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
 
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
     connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
+    connect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
 
     // Filtrar ventanas no gestionables, overlays, paneles, popups o ventanas excluidas del sistema
     if (!shouldDrawBorder(w)) {
@@ -208,6 +211,7 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
 
     disconnect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
     disconnect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
+    disconnect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
 
     if (m_lastActiveWindow == w) {
         m_lastActiveWindow.clear();
@@ -670,6 +674,17 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
+    // Si la ventana tiene un cuadro de diálogo modal activo bloqueándola, no debe dibujar contorno
+    // (el contorno le corresponde al diálogo modal superior para evitar colisiones visuales)
+    if (w->findModal() != nullptr) {
+        return false;
+    }
+
+    // Si es un diálogo secundario y no está enfocado activamente, descartar
+    if (w->isDialog() && w->transientFor() != nullptr && KWin::effects && KWin::effects->activeWindow() != w) {
+        return false;
+    }
+
     // Aceptar únicamente ventanas normales de aplicaciones o cuadros de diálogo
     return w->isNormalWindow() || w->isDialog();
 }
@@ -730,6 +745,25 @@ void RavenEffect::slotWindowStepUserMovedResized(KWin::EffectWindow *w, const KW
     if (KWin::effects && m_bordersEnabled && shouldDrawBorder(w)) {
         const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
         KWin::effects->addRepaint(geometry.toAlignedRect().adjusted(-pad, -pad, pad, pad));
+    }
+}
+
+/**
+ * @brief Slot llamado al minimizar o restaurar una ventana. Invalida y limpia los contornos residuales.
+ */
+void RavenEffect::slotWindowMinimizedChanged(KWin::EffectWindow *w)
+{
+    if (!w || !KWin::effects) {
+        return;
+    }
+
+    const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
+    KWin::effects->addRepaint(w->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
+
+    if (w->isMinimized()) {
+        if (m_lastActiveWindow == w) {
+            m_lastActiveWindow.clear();
+        }
     }
 }
 

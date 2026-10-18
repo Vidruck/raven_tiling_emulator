@@ -106,6 +106,7 @@ pub fn default_quarantine() -> Vec<String> {
         "obsidian".into(),
         "thunderbird".into(),
         "postman".into(),
+        "zuno".into(),
     ]
 }
 

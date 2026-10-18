@@ -130,6 +130,11 @@ private Q_SLOTS:
      */
     void slotWindowStepUserMovedResized(KWin::EffectWindow *w, const KWin::RectF &geometry);
 
+    /**
+     * @brief Slot conectado al cambio de estado minimizado de ventanas para invalidar y repintar contornos.
+     */
+    void slotWindowMinimizedChanged(KWin::EffectWindow *w);
+
 private:
     /**
      * @brief Determina si una ventana es apta para recibir contorno de foco o inactivo.

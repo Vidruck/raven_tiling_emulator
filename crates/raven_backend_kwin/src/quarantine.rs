@@ -300,6 +300,7 @@ impl KWinQuarantineManager {
             "raven_gui", "raven-gui", "raven config",
             "sun-awt-x11-xdialogpeer", "sun-awt-x11-xwindowpeer",
             "jetbrains-toolbox",
+            "zuno",
         ];
         if floating_classes.iter().any(|&c| cls_lower == c || cls_lower.contains(c) || name_lower == c || name_lower.contains(c)) {
             return true;
@@ -310,7 +311,7 @@ impl KWinQuarantineManager {
             "clipboard", "portapapeles", "clipboard history", "historial del portapapeles",
             "borrar historial", "clear history", "delete history",
             "color picker", "selector de color", "mini player", "mini-player",
-            "miniplayer", "zuno widget", "now playing widget", "quick view",
+            "miniplayer", "zuno widget", "zuno", "now playing widget", "quick view",
             "raven control center", "open file", "save file", "abrir archivo",
             "guardar archivo", "select folder", "seleccionar carpeta", "browse", "examinar",
             "preferences", "preferencias", "settings", "configuración", "opciones",

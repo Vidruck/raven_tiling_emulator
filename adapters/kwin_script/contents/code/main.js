@@ -284,6 +284,14 @@ function isWindowNativeFloating(w) {
     if (w.fullScreen) return false;
     if (w.maximizeMode === 3) return true;
     if (w.resizeable === false) return true;
+
+    var cls = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
+    var name = w.resourceName ? w.resourceName.toString().toLowerCase() : "";
+    var cap = w.caption ? w.caption.toString().toLowerCase() : "";
+    if (cls.indexOf("zuno") !== -1 || name.indexOf("zuno") !== -1 || cap.indexOf("zuno") !== -1) {
+      return true;
+    }
+
     return false;
   } catch (e) {
     return true;
