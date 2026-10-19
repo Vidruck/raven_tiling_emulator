@@ -6,17 +6,24 @@
  * 
  * Descripción: Declaración del efecto nativo de KWin para Raven Tiling Emulator.
  * Maneja las animaciones de movimiento, escalado y transparencia utilizando las
- * utilidades nativas de KWin (AnimationEffect).
+ * utilidades nativas de KWin (AnimationEffect) y contornos mediante OutlinedBorderItem.
  */
 
 #pragma once
 
 #include <effect/animationeffect.h>
+#include <scene/outlinedborderitem.h>
+#include <scene/borderoutline.h>
+#include <scene/borderradius.h>
+#include <scene/windowitem.h>
 #include <QHash>
 #include <QRectF>
 #include <QEasingCurve>
 #include <QDBusConnection>
 #include <QPointer>
+#include <QUuid>
+#include <memory>
+#include <unordered_map>
 
 class RavenEffectAdaptor;
 
@@ -53,7 +60,7 @@ public:
      * @param startRect Geometría inicial.
      * @param targetRect Geometría objetivo final.
      * @param durationMs Duración de la animación en milisegundos.
-     * @param easingName Nombre de la curva de aceleración (ej. "EaseOutBack").
+     * @param easingName Nombre de la curva de aceleración (ej. "EaseOutCubic").
      */
     void animateWindowGeometry(const QString &windowId, const QRectF &startRect, const QRectF &targetRect,
                                int durationMs, const QString &easingName);
@@ -83,17 +90,10 @@ public:
     void updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor);
 
     /**
-     * @brief Comprueba si este efecto debe permanecer activo.
-     * @return true si existen animaciones en progreso o si los contornos de ventana están habilitados.
+     * @brief Comprueba si este efecto debe permanecer activo en el ciclo de dibujado.
+     * @return true si existen animaciones en progreso.
      */
     bool isActive() const override;
-
-    /**
-     * @brief Intercepta el dibujado de cada ventana para renderizar el contorno coloreado por hardware.
-     */
-    bool paintWindow(const KWin::RenderTarget &renderTarget, const KWin::RenderViewport &viewport,
-                     KWin::EffectWindow *w, int mask, const KWin::Region &deviceRegion,
-                     KWin::WindowPaintData &data) override;
 
 protected:
     /**
@@ -102,26 +102,26 @@ protected:
      * @param a Atributo animado.
      * @param meta Metadatos asociados.
      */
-     void animationEnded(KWin::EffectWindow *w, Attribute a, uint meta) override;
+    void animationEnded(KWin::EffectWindow *w, Attribute a, uint meta) override;
 
 private Q_SLOTS:
     /**
-     * @brief Slot conectado a KWin::effects->windowAdded para iniciar animación de nacimiento y emitir D-Bus.
+     * @brief Slot conectado a KWin::effects->windowAdded para registrar la ventana y configurar bordes.
      */
     void slotWindowAdded(KWin::EffectWindow *w);
 
     /**
-     * @brief Slot conectado a KWin::effects->windowClosed para purgar inmediatamente animaciones huérfanas.
+     * @brief Slot conectado a KWin::effects->windowClosed para purgar animaciones y bordes.
      */
     void slotWindowClosed(KWin::EffectWindow *w);
 
     /**
-     * @brief Slot conectado a KWin::effects->windowActivated para forzar el repintado inmediato al cambiar el foco.
+     * @brief Slot conectado a KWin::effects->windowActivated para actualizar estilos de foco de contornos.
      */
     void slotWindowActivated(KWin::EffectWindow *w);
 
     /**
-     * @brief Slot conectado a cambios de geometría o movimiento de ventanas para refrescar el marco.
+     * @brief Slot conectado a cambios de geometría de ventanas para reajustar dimensiones del contorno.
      */
     void slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::RectF &oldGeometry);
 
@@ -131,7 +131,7 @@ private Q_SLOTS:
     void slotWindowStepUserMovedResized(KWin::EffectWindow *w, const KWin::RectF &geometry);
 
     /**
-     * @brief Slot conectado al cambio de estado minimizado de ventanas para invalidar y repintar contornos.
+     * @brief Slot conectado al cambio de estado minimizado de ventanas para mostrar u ocultar contornos.
      */
     void slotWindowMinimizedChanged(KWin::EffectWindow *w);
 
@@ -142,7 +142,17 @@ private:
     bool shouldDrawBorder(KWin::EffectWindow *w) const;
 
     /**
-     * @brief Busca de manera segura un EffectWindow en el stack usando su ID interno.
+     * @brief Crea o actualiza el OutlinedBorderItem de la ventana especificada siguiendo su curvatura real.
+     */
+    void updateBorder(KWin::EffectWindow *w);
+
+    /**
+     * @brief Destruye y desvincula el OutlinedBorderItem de la ventana especificada.
+     */
+    void removeBorder(KWin::EffectWindow *w);
+
+    /**
+     * @brief Busca de manera segura un EffectWindow en el stack usando su ID interno (O(1) por UUID).
      * @param windowId String representando la ID de la ventana en D-Bus.
      * @return Puntero a KWin::EffectWindow, o nullptr si no se encuentra.
      */
@@ -162,16 +172,22 @@ private:
 
     RavenEffectAdaptor *m_dbusAdaptor;                      ///< Adaptador para exponer métodos en D-Bus
     QHash<QString, QList<quint64>> m_activeAnimations;      ///< Mapeo de IDs de ventanas a sus animaciones en curso
+    QHash<QUuid, KWin::EffectWindow*> m_windowByUuid;       ///< Mapeo rápido O(1) de UUID a EffectWindow
 
     // Configuración y estado de contornos de ventana
     bool m_bordersEnabled = true;                           ///< Habilita el dibujado de contornos
-    float m_borderWidth = 2.0f;                             ///< Grosor del contorno (máx 2px)
+    float m_borderWidth = 2.0f;                             ///< Grosor del contorno (px)
     QColor m_activeBorderColor = QColor(61, 174, 233, 230); ///< Color del contorno en la ventana enfocada
-    QColor m_inactiveBorderColor = QColor(49, 54, 59, 140); ///< Color del contorno en ventanas inactivas
+    QColor m_inactiveBorderColor = QColor(90, 101, 114, 160);///< Color del contorno en ventanas inactivas
 
-    // Optimización de repintado de foco y memoria de renderizado
+    // Estructura para gestión reactiva de bordes mediante el scene graph nativo de KWin
+    struct BorderData {
+        std::unique_ptr<KWin::OutlinedBorderItem> item;
+        QMetaObject::Connection radiusConnection;
+        QMetaObject::Connection classConnection;
+        QMetaObject::Connection captionConnection;
+    };
+    std::unordered_map<KWin::EffectWindow*, BorderData> m_borders;       ///< Contornos activos administrados por hardware
+
     QPointer<KWin::EffectWindow> m_lastActiveWindow;        ///< Rastreo seguro de la ventana previamente activa
-    std::vector<QVector2D> m_quadBuffer;                    ///< Buffer pre-reservado para evitar asignaciones por fotograma
-    mutable QHash<const KWin::EffectWindow*, bool> m_borderVerdictCache; ///< Caché de idoneidad estática de ventana
 };
-

@@ -304,7 +304,7 @@ impl CompositorBackend for KWinBackend {
                                     from: [prev_rect.x as f64, prev_rect.y as f64, prev_rect.width as f64, prev_rect.height as f64],
                                     to: [target_rect.x as f64, target_rect.y as f64, target_rect.width as f64, target_rect.height as f64],
                                     duration_ms: 130,
-                                    easing: "EaseOutBack".to_string(),
+                                    easing: "EaseOutCubic".to_string(),
                                 });
                             }
                         }

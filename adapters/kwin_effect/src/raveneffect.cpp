@@ -4,17 +4,13 @@
  * Licencia: GPL-3.0
  *
  * Descripción: Implementación del efecto nativo de KWin para Raven Tiling Emulator.
+ * Optimizado con OutlinedBorderItem nativo (SDF anti-aliasing con curvatura real),
+ * animaciones basadas en traslación FLIP y búsqueda O(1) de ventanas.
  */
 
 #include "raveneffect.h"
 #include "dbus/raven_effect_adaptor.h"
 #include <effect/effecthandler.h>
-#include <opengl/glshadermanager.h>
-#include <opengl/glvertexbuffer.h>
-#include <opengl/glshader.h>
-#include <core/rendertarget.h>
-#include <core/renderviewport.h>
-#include <core/output.h>
 #include <window.h>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -22,19 +18,18 @@
 #include <QFile>
 #include <QDir>
 #include <QStandardPaths>
-#include <QVector2D>
 #include <QLoggingCategory>
 #include <chrono>
+#include <cmath>
+#include <algorithm>
 
 Q_LOGGING_CATEGORY(RAVEN_EFFECT, "raven.effect", QtInfoMsg)
-
 
 /**
  * @brief Constructor de la clase RavenEffect.
  *
- * Inicializa el adaptador D-Bus y registra el servicio y objeto en el bus de sesión
- * para permitir la comunicación remota (IPC). También conecta las señales del
- * compositor de KWin para la gestión de ventanas y cambios de foco.
+ * Configura D-Bus, lee la configuración inicial y enlaza los eventos de ciclo de vida
+ * de ventanas del compositor KWin.
  */
 RavenEffect::RavenEffect()
     : m_dbusAdaptor(new RavenEffectAdaptor(this))
@@ -44,12 +39,12 @@ RavenEffect::RavenEffect()
     QDBusConnection dbus = QDBusConnection::sessionBus();
     if (dbus.registerService(QStringLiteral("org.kde.kwin.RavenEffect"))) {
         if (dbus.registerObject(QStringLiteral("/Effects/Raven"), this)) {
-            qCInfo(RAVEN_EFFECT) << "RavenEffect D-Bus service registrado exitosamente en /Effects/Raven";
+            qCInfo(RAVEN_EFFECT) << "RavenEffect D-Bus registrado exitosamente en /Effects/Raven";
         } else {
             qCWarning(RAVEN_EFFECT) << "Fallo al registrar objeto D-Bus /Effects/Raven";
         }
     } else {
-        qCWarning(RAVEN_EFFECT) << "Fallo al registrar servicio D-Bus org.kde.kwin.RavenEffect (¿servicio duplicado?)";
+        qCWarning(RAVEN_EFFECT) << "Fallo al registrar servicio D-Bus org.kde.kwin.RavenEffect";
     }
 
     if (KWin::effects) {
@@ -60,9 +55,14 @@ RavenEffect::RavenEffect()
         const auto windows = KWin::effects->stackingOrder();
         for (auto *win : windows) {
             if (win) {
+                m_windowByUuid.insert(win->internalId(), win);
                 connect(win, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
                 connect(win, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
                 connect(win, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
+
+                if (m_bordersEnabled) {
+                    updateBorder(win);
+                }
             }
         }
     }
@@ -71,8 +71,8 @@ RavenEffect::RavenEffect()
 /**
  * @brief Destructor de la clase RavenEffect.
  *
- * Se encarga de desconectar las señales de KWin y dar de baja el servicio
- * y el objeto D-Bus registrados durante la inicialización.
+ * Libera todos los OutlinedBorderItem registrados en el scene graph de KWin,
+ * desconecta las señales y desregistra el servicio D-Bus.
  */
 RavenEffect::~RavenEffect()
 {
@@ -90,15 +90,24 @@ RavenEffect::~RavenEffect()
             }
         }
     }
+
+    // Limpieza de todos los bordes nativos
+    for (auto &pair : m_borders) {
+        disconnect(pair.second.radiusConnection);
+        disconnect(pair.second.classConnection);
+        disconnect(pair.second.captionConnection);
+        pair.second.item.reset();
+    }
+    m_borders.clear();
+    m_windowByUuid.clear();
+
     QDBusConnection dbus = QDBusConnection::sessionBus();
     dbus.unregisterObject(QStringLiteral("/Effects/Raven"));
     dbus.unregisterService(QStringLiteral("org.kde.kwin.RavenEffect"));
 }
 
 /**
- * @brief Verifica si el efecto está soportado por el compositor actual.
- *
- * @return true si el compositor está activo y soporta efectos; false en caso contrario.
+ * @brief Verifica si el compositor soporta efectos de aceleración por hardware.
  */
 bool RavenEffect::supported()
 {
@@ -108,23 +117,17 @@ bool RavenEffect::supported()
 /**
  * @brief Comprueba si el efecto tiene alguna animación en progreso.
  *
- * @return true si existe al menos una animación activa; false de lo contrario.
+ * Con OutlinedBorderItem los bordes son gestionados directamente por el scene graph
+ * nativo de KWin, por lo que isActive() solo devuelve true cuando hay animaciones
+ * de movimiento/escala activas, liberando ciclos en reposo.
  */
 bool RavenEffect::isActive() const
 {
-    return !m_activeAnimations.isEmpty() || m_bordersEnabled;
+    return !m_activeAnimations.isEmpty();
 }
 
 /**
- * @brief Maneja el evento de finalización de una animación de KWin.
- *
- * Este método es llamado por el compositor (KWin) cuando una animación termina.
- * Se utiliza para purgar las animaciones que han concluido del registro interno
- * y liberar memoria.
- *
- * @param w Puntero a la ventana cuyo atributo terminó de animarse.
- * @param a Atributo que estaba siendo animado.
- * @param meta Metadatos asociados a la animación.
+ * @brief Maneja la finalización de una animación de KWin para purgar la memoria.
  */
 void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
 {
@@ -134,7 +137,6 @@ void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
         return;
     }
 
-    // Purgar inmediatamente las animaciones concluidas para la ventana dada
     const QString windowId = w->internalId().toString();
     const QString hexId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(w), 0, 16);
     const QString decId = QString::number(reinterpret_cast<quintptr>(w));
@@ -144,25 +146,10 @@ void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
     }
     m_activeAnimations.remove(hexId);
     m_activeAnimations.remove(decId);
-
-    // Purgar cualquier entrada vacía residual en m_activeAnimations
-    for (auto it = m_activeAnimations.begin(); it != m_activeAnimations.end(); ) {
-        if (it.value().isEmpty()) {
-            it = m_activeAnimations.erase(it);
-        } else {
-            ++it;
-        }
-    }
 }
 
 /**
  * @brief Slot que se ejecuta cuando se añade una nueva ventana al compositor.
- *
- * Ignora ventanas de sistema (paneles, notificaciones, etc.) y lanza una
- * animación reactiva (gelatina / zoom-in) indicando el "nacimiento" de la ventana.
- * Además, notifica al motor backend a través de D-Bus.
- *
- * @param w Puntero a la nueva ventana añadida.
  */
 void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
 {
@@ -170,38 +157,19 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
         return;
     }
 
+    m_windowByUuid.insert(w->internalId(), w);
+
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
     connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
 
-    // Filtrar ventanas no gestionables, overlays, paneles, popups o ventanas excluidas del sistema
-    if (!shouldDrawBorder(w)) {
-        return;
-    }
-
-    QString windowId = w->internalId().toString();
-    if (windowId.isEmpty()) {
-        windowId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(w), 0, 16);
-    }
-
-    qCInfo(RAVEN_EFFECT) << "Ventana detectada en compositing, iniciando nacimiento reactivo:" << windowId;
-
-    // Iniciar animación de nacimiento nativa
-    animateWindowBirth(windowId, 140);
-
-    // 2. Emitir señal D-Bus hacia Raven Backend
-    if (m_dbusAdaptor) {
-        Q_EMIT m_dbusAdaptor->WindowBirthStarted(windowId);
+    if (m_bordersEnabled) {
+        updateBorder(w);
     }
 }
 
 /**
  * @brief Slot que se ejecuta cuando una ventana es cerrada.
- *
- * Cancela inmediatamente cualquier animación activa que pertenezca
- * a la ventana que está siendo destruida para evitar fallos de memoria (segmentation faults).
- *
- * @param w Puntero a la ventana que se cierra.
  */
 void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
 {
@@ -213,11 +181,12 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
     disconnect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
     disconnect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
 
+    removeBorder(w);
+    m_windowByUuid.remove(w->internalId());
+
     if (m_lastActiveWindow == w) {
         m_lastActiveWindow.clear();
     }
-
-    m_borderVerdictCache.remove(w);
 
     QString windowId = w->internalId().toString();
     if (!windowId.isEmpty()) {
@@ -232,38 +201,39 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
 }
 
 /**
- * @brief Busca una ventana activa (EffectWindow) por su identificador.
- *
- * Realiza una búsqueda segura en la pila (stack) de ventanas del compositor.
- * Intenta coincidir utilizando el puntero en formato hexadecimal (0x...),
- * el valor decimal o el identificador interno de la ventana (internal ID).
- *
- * @param windowId Cadena de texto con el identificador de la ventana a buscar.
- * @return KWin::EffectWindow* Puntero a la ventana encontrada, o nullptr si no existe.
+ * @brief Busca una ventana activa (EffectWindow) por su ID de manera O(1).
  */
 KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
 {
-    if (!KWin::effects || windowId.isEmpty()) {
+    if (windowId.isEmpty() || !KWin::effects) {
         return nullptr;
     }
 
-    bool isPtrParsed = false;
-    quintptr ptrVal = 0;
-    if (windowId.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
-        ptrVal = windowId.toULongLong(&isPtrParsed, 16);
-    } else {
-        ptrVal = windowId.toULongLong(&isPtrParsed, 10);
+    // 1. Búsqueda rápida O(1) usando QUuid
+    QUuid uuid = QUuid::fromString(windowId);
+    if (!uuid.isNull()) {
+        auto it = m_windowByUuid.constFind(uuid);
+        if (it != m_windowByUuid.cend() && it.value()) {
+            return it.value();
+        }
     }
 
-    const auto windows = KWin::effects->stackingOrder();
-    for (auto *win : windows) {
-        if (!win) continue;
-
-        if (isPtrParsed && reinterpret_cast<quintptr>(win) == ptrVal) {
-            return win;
+    // 2. Comprobación por puntero hexadecimal si viene con prefijo "0x"
+    if (windowId.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
+        bool ok = false;
+        quintptr ptrVal = windowId.toULongLong(&ok, 16);
+        if (ok && ptrVal != 0) {
+            for (auto *win : KWin::effects->stackingOrder()) {
+                if (win && reinterpret_cast<quintptr>(win) == ptrVal) {
+                    return win;
+                }
+            }
         }
+    }
 
-        // Match con internalId QString si estuviera disponible
+    // 3. Fallback en la lista de apilamiento
+    for (auto *win : KWin::effects->stackingOrder()) {
+        if (!win) continue;
         if (win->internalId().toString().compare(windowId, Qt::CaseInsensitive) == 0) {
             return win;
         }
@@ -272,13 +242,7 @@ KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
 }
 
 /**
- * @brief Convierte un nombre de curva de aceleración en un objeto QEasingCurve nativo.
- *
- * Transforma identificadores en formato cadena (ej. "EaseOutBack" o "Jelly")
- * a la representación nativa de curva de suavizado (easing curve) de Qt.
- *
- * @param easingName Nombre descriptivo de la curva.
- * @return QEasingCurve Objeto con la curva de aceleración solicitada.
+ * @brief Convierte un nombre descriptivo en una curva QEasingCurve nativa.
  */
 QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
 {
@@ -288,8 +252,7 @@ QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
         return QEasingCurve(QEasingCurve::OutCubic);
     } else if (easingName == QLatin1String("EaseOutBack")) {
         return QEasingCurve(QEasingCurve::OutBack);
-    } else if (easingName == QLatin1String("EaseOutElastic") ||
-        easingName == QLatin1String("Jelly")) {
+    } else if (easingName == QLatin1String("EaseOutElastic") || easingName == QLatin1String("Jelly")) {
         QEasingCurve elastic(QEasingCurve::OutElastic);
         elastic.setPeriod(0.25);
         elastic.setAmplitude(1.05);
@@ -303,16 +266,7 @@ QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
 }
 
 /**
- * @brief Interpola de forma animada la geometría (tamaño y posición) de una ventana.
- *
- * Lanza una animación nativa usando el gestor de efectos para mover y escalar la ventana
- * desde su rectángulo de origen al de destino usando una curva específica.
- *
- * @param windowId Identificador interno de la ventana.
- * @param startRect Rectángulo inicial (x, y, ancho, alto).
- * @param targetRect Rectángulo objetivo.
- * @param durationMs Duración de la transición en milisegundos.
- * @param easingName Nombre de la curva de suavizado (easing curve) a utilizar.
+ * @brief Interpola suavemente la posición y tamaño usando KWin::AnimationEffect::Translation.
  */
 void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &startRect, const QRectF &targetRect,
                                         int durationMs, const QString &easingName)
@@ -324,42 +278,46 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
 
     cancelWindowAnimation(windowId);
 
-    // Ajustar duración por defecto si el valor no es válido
     if (durationMs <= 0 || durationMs > 300) {
         durationMs = 130;
     }
 
     QEasingCurve curve = parseEasing(easingName);
 
-    uint meta = 0;
-    setMetaData(SourceAnchor, Anchor::Left | Anchor::Top, meta);
+    // 1. Animación de posición: usar Translation (desplazamiento relativo delta -> 0.0)
+    // Técnica FLIP: la ventana ya se encuentra en targetRect, por lo que aplicamos un
+    // offset (startRect - targetRect) y lo interpolamos hasta (0, 0).
+    qreal deltaX = startRect.x() - targetRect.x();
+    qreal deltaY = startRect.y() - targetRect.y();
 
-    // 1. Animación de posición (traslación desde startRect hacia targetRect)
-    quint64 posAnim = animate(w,
-                              KWin::AnimationEffect::Position,
-                              meta,
-                              std::chrono::milliseconds(durationMs),
-                              KWin::FPx2(0.0, 0.0),
-                              curve,
-                              0,
-                              KWin::FPx2(startRect.x() - targetRect.x(), startRect.y() - targetRect.y()));
+    if (qAbs(deltaX) > 0.5 || qAbs(deltaY) > 0.5) {
+        quint64 posAnim = animate(w,
+                                  KWin::AnimationEffect::Translation,
+                                  0,
+                                  std::chrono::milliseconds(durationMs),
+                                  KWin::FPx2(0.0, 0.0),
+                                  curve,
+                                  0,
+                                  KWin::FPx2(deltaX, deltaY));
 
-    if (posAnim != 0) {
-        m_activeAnimations[windowId].append(posAnim);
+        if (posAnim != 0) {
+            m_activeAnimations[windowId].append(posAnim);
+        }
     }
 
     // 2. Animación de escala
-    // Se interpola la escala desde (startW / targetW, startH / targetH) hacia (1.0, 1.0)
     if (targetRect.width() > 0.0 && targetRect.height() > 0.0 &&
         startRect.width() > 0.0 && startRect.height() > 0.0) {
         qreal scaleX = startRect.width() / targetRect.width();
         qreal scaleY = startRect.height() / targetRect.height();
 
-        // Solo disparar animación de escala si las dimensiones difieren perceptiblemente
         if (qAbs(scaleX - 1.0) > 0.005 || qAbs(scaleY - 1.0) > 0.005) {
+            uint metaScale = 0;
+            setMetaData(SourceAnchor, Anchor::Left | Anchor::Top, metaScale);
+
             quint64 scaleAnim = animate(w,
                                         KWin::AnimationEffect::Scale,
-                                        meta,
+                                        metaScale,
                                         std::chrono::milliseconds(durationMs),
                                         KWin::FPx2(1.0, 1.0),
                                         curve,
@@ -374,13 +332,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
 }
 
 /**
- * @brief Procesa un bloque (batch) de animaciones de geometría a partir de JSON.
- *
- * Lee un texto en formato JSON que describe múltiples transiciones y lanza
- * las animaciones de manera simultánea para todas las ventanas indicadas.
- * Útil para los cambios de disposición (layouts) del gestor de ventanas en mosaico (tiling).
- *
- * @param jsonPayload Cadena JSON con el arreglo (array) de objetos de animación.
+ * @brief Procesa un lote de animaciones simultáneas a partir de un JSON de Raven Backend.
  */
 void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
 {
@@ -406,8 +358,8 @@ void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
         QJsonObject obj = val.toObject();
 
         QString winId = obj.value(QStringLiteral("id")).toString();
-        int durationMs = obj.value(QStringLiteral("duration_ms")).toInt(250);
-        QString easing = obj.value(QStringLiteral("easing")).toString(QStringLiteral("EaseOutBack"));
+        int durationMs = obj.value(QStringLiteral("duration_ms")).toInt(130);
+        QString easing = obj.value(QStringLiteral("easing")).toString(QStringLiteral("EaseOutCubic"));
 
         QJsonArray fromArr = obj.value(QStringLiteral("from")).toArray();
         QJsonArray toArr = obj.value(QStringLiteral("to")).toArray();
@@ -421,13 +373,7 @@ void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
 }
 
 /**
- * @brief Realiza la animación inicial de nacimiento (aparición) de una ventana.
- *
- * Ejecuta una interpolación doble combinando el escalado desde un tamaño menor
- * hacia el tamaño natural (1.0), junto con una transición de opacidad (fade in).
- *
- * @param windowId Identificador de la ventana.
- * @param durationMs Duración de la animación de nacimiento en milisegundos.
+ * @brief Animación de nacimiento controlada (fade-in + zoom elástico) llamada por D-Bus.
  */
 void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
 {
@@ -439,7 +385,7 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
     cancelWindowAnimation(windowId);
 
     if (durationMs <= 0) {
-        durationMs = 250;
+        durationMs = 140;
     }
 
     QEasingCurve curve(QEasingCurve::OutElastic);
@@ -448,7 +394,6 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
     uint metaCenter = 0;
     setMetaData(SourceAnchor, Anchor::Horizontal | Anchor::Vertical, metaCenter);
 
-    // Animación de escala desde 0.85 a 1.0
     quint64 scaleAnim = animate(w,
                                 KWin::AnimationEffect::Scale,
                                 metaCenter,
@@ -458,12 +403,11 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
                                 0,
                                 KWin::FPx2(0.85, 0.85));
 
-    // Animación de opacidad (Fade-in desde 0.0 a 1.0)
     uint metaOpacity = 0;
     quint64 opacityAnim = animate(w,
                                   KWin::AnimationEffect::Opacity,
                                   metaOpacity,
-                                  std::chrono::milliseconds(static_cast<int>(durationMs * 0.7)),
+                                  std::chrono::milliseconds(static_cast<int>(durationMs * 0.8)),
                                   KWin::FPx2(1.0, 1.0),
                                   opacityCurve,
                                   0,
@@ -474,12 +418,7 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
 }
 
 /**
- * @brief Cancela inmediatamente todas las animaciones activas asociadas a una ventana.
- *
- * Útil cuando se requiere interrumpir el efecto visual debido a un cerrado
- * súbito de la ventana u otra acción que vuelva obsoleta la animación.
- *
- * @param windowId Identificador de la ventana.
+ * @brief Cancela de manera inmediata todas las animaciones activas asociadas a una ventana.
  */
 void RavenEffect::cancelWindowAnimation(const QString &windowId)
 {
@@ -492,7 +431,7 @@ void RavenEffect::cancelWindowAnimation(const QString &windowId)
 }
 
 /**
- * @brief Carga la configuración inicial desde ~/.config/raven/raven.json si existe.
+ * @brief Carga la configuración de contornos desde ~/.config/raven/raven.json si existe.
  */
 void RavenEffect::loadBorderConfig()
 {
@@ -513,7 +452,7 @@ void RavenEffect::loadBorderConfig()
         m_bordersEnabled = obj.value(QStringLiteral("borders_enabled")).toBool(true);
     }
     if (obj.contains(QStringLiteral("border_width"))) {
-        m_borderWidth = static_cast<float>(std::clamp(obj.value(QStringLiteral("border_width")).toDouble(2.0), 1.0, 2.0));
+        m_borderWidth = static_cast<float>(std::clamp(obj.value(QStringLiteral("border_width")).toDouble(2.0), 1.0, 5.0));
     }
     if (obj.contains(QStringLiteral("active_border_color"))) {
         QColor ac(obj.value(QStringLiteral("active_border_color")).toString());
@@ -530,7 +469,7 @@ void RavenEffect::loadBorderConfig()
 }
 
 /**
- * @brief Comprueba minuciosamente si una ventana debe recibir contornos visuales.
+ * @brief Comprueba si una ventana es apta para recibir contornos visuales.
  */
 bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
 {
@@ -546,8 +485,7 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
-    // Descartar también ventanas que cubren por completo su pantalla (fullscreen de facto:
-    // apps que no activan el flag, splash, overlays de sesión, etc.)
+    // Descartar ventanas que cubren por completo su pantalla (fullscreen de facto)
     if (auto *out = w->screen()) {
         const QRect og = QRect(out->geometry());
         const QRect wg = QRect(w->frameGeometry().toAlignedRect());
@@ -560,131 +498,112 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
-    // Comprobación de caché para el análisis estático de clase, rol y tipo de ventana
-    auto it = m_borderVerdictCache.constFind(w);
-    bool staticOk = false;
-    if (it != m_borderVerdictCache.cend()) {
-        staticOk = *it;
-    } else {
-        auto checkStatic = [w]() -> bool {
-            // Ventanas sin identidad (sin clase ni título) no son aplicaciones reales
-            if (w->windowClass().trimmed().isEmpty() && w->caption().trimmed().isEmpty()) {
-                return false;
-            }
-
-            // Filtrar explícitamente cualquier elemento que no sea una ventana de aplicación real:
-            if (w->isLockScreen()
-                || w->isDesktop()
-                || w->isDock()
-                || w->isNotification()
-                || w->isCriticalNotification()
-                || w->isTooltip()
-                || w->isAppletPopup()
-                || w->isOnScreenDisplay()
-                || w->isComboBox()
-                || w->isDNDIcon()
-                || w->isDropdownMenu()
-                || w->isPopupMenu()
-                || w->isOutline()
-                || w->isInputMethod()
-                || w->isSpecialWindow()
-                || w->isSplash()
-                || !w->isManaged()) {
-                return false;
-            }
-
-            const QString cls = w->windowClass().toLower();
-            const QString role = w->windowRole().toLower();
-            const QString cap = w->caption().toLower();
-
-            if (cls.contains(QStringLiteral("spectacle"))
-                || cls.contains(QStringLiteral("flameshot"))
-                || cls.contains(QStringLiteral("ksnip"))
-                || cls.contains(QStringLiteral("plasma-welcome"))
-                || cls.contains(QStringLiteral("plasma.welcome"))
-                || cls.contains(QStringLiteral("welcome"))
-                || cls.contains(QStringLiteral("plasmashell"))
-                || cls.contains(QStringLiteral("kscreenlocker"))
-                || cls.contains(QStringLiteral("screenlocker"))
-                || cls.contains(QStringLiteral("lockscreen"))
-                || cls.contains(QStringLiteral("plasmalogin"))
-                || cls.contains(QStringLiteral("sddm"))
-                || cls.contains(QStringLiteral("polkit"))
-                || cls.contains(QStringLiteral("desktopdialog"))
-                || role.contains(QStringLiteral("spectacle"))
-                || role.contains(QStringLiteral("welcome"))
-                || role.contains(QStringLiteral("lockscreen"))
-                || role.contains(QStringLiteral("login"))
-                || cap.contains(QStringLiteral("centro de bienvenida"))
-                || cap.contains(QStringLiteral("welcome center"))
-                || cap.contains(QStringLiteral("bienvenida de plasma"))
-                || cap.contains(QStringLiteral("bienvenida"))
-                || cap.contains(QStringLiteral("inicio de sesión"))
-                || cap.contains(QStringLiteral("pantalla de inicio de sesión"))
-                || cap.contains(QStringLiteral("login screen"))
-                || cap.contains(QStringLiteral("bloqueo de pantalla"))
-                || cap.contains(QStringLiteral("screen lock"))) {
-                return false;
-            }
-
-            static const QStringList kSystemClasses = {
-                QStringLiteral("ksplash"),
-                QStringLiteral("ksplashqml"),
-                QStringLiteral("ksmserver"),
-                QStringLiteral("kscreenlocker"),
-                QStringLiteral("kscreenlocker_greet"),
-                QStringLiteral("plasma-lockscreen"),
-                QStringLiteral("plasmalogin"),
-                QStringLiteral("sddm"),
-                QStringLiteral("org.kde.plasma.welcome"),
-                QStringLiteral("org.kde.plasmashell"),
-                QStringLiteral("krunner"),
-                QStringLiteral("org.kde.krunner"),
-                QStringLiteral("kwin_wayland"),
-                QStringLiteral("kwin_x11"),
-                QStringLiteral("xwaylandvideobridge"),
-                QStringLiteral("plasma-interactiveconsole"),
-                QStringLiteral("org.kde.polkit-kde-authentication-agent"),
-                QStringLiteral("polkit-kde-authentication-agent"),
-                QStringLiteral("ksshaskpass"),
-                QStringLiteral("kded"),
-                QStringLiteral("org.kde.kdeconnect"),
-                QStringLiteral("greeter"),
-                QStringLiteral("org.kde.plasma.emojier"),
-                QStringLiteral("org.kde.kscreen.osd"),
-                QStringLiteral("org.kde.spectacle"),
-                QStringLiteral("org.kde.plasma-welcome")
-            };
-            for (const QString &sc : kSystemClasses) {
-                if (cls.contains(sc) || role.contains(sc)) {
-                    return false;
-                }
-            }
-
-            if (cap.contains(QStringLiteral("picture-in-picture")) ||
-                cap.contains(QStringLiteral("picture in picture")) ||
-                cap.contains(QStringLiteral("imagen en imagen")) ||
-                cap.contains(QStringLiteral("pantalla en pantalla")) ||
-                cap.contains(QStringLiteral("reproductor en miniatura")) ||
-                cap.contains(QStringLiteral("incrustation")) ||
-                cap.contains(QStringLiteral("bild-in-bild")) ||
-                cap.contains(QStringLiteral("imagem em imagem")) ||
-                cap == QStringLiteral("pip")) {
-                return false;
-            }
-
-            return w->isNormalWindow() || w->isDialog();
-        };
-
-        staticOk = checkStatic();
-        m_borderVerdictCache.insert(w, staticOk);
-    }
-
-    if (!staticOk) {
+    // Filtrar elementos de sistema, popups, overlays y paneles
+    if (w->isLockScreen()
+        || w->isDesktop()
+        || w->isDock()
+        || w->isNotification()
+        || w->isCriticalNotification()
+        || w->isTooltip()
+        || w->isAppletPopup()
+        || w->isOnScreenDisplay()
+        || w->isComboBox()
+        || w->isDNDIcon()
+        || w->isDropdownMenu()
+        || w->isPopupMenu()
+        || w->isOutline()
+        || w->isInputMethod()
+        || w->isSpecialWindow()
+        || w->isSplash()
+        || !w->isManaged()) {
         return false;
     }
 
-    // Filtros dinámicos en tiempo real (modales y diálogos)
+    const QString cls = w->windowClass().toLower();
+    const QString role = w->windowRole().toLower();
+    const QString cap = w->caption().toLower();
+
+    // Si aún no tiene clase ni título (ventana Wayland recién creada), esperar a que se pueblen
+    if (cls.trimmed().isEmpty() && cap.trimmed().isEmpty()) {
+        return false;
+    }
+
+    if (cls.contains(QStringLiteral("spectacle"))
+        || cls.contains(QStringLiteral("flameshot"))
+        || cls.contains(QStringLiteral("ksnip"))
+        || cls.contains(QStringLiteral("plasma-welcome"))
+        || cls.contains(QStringLiteral("plasma.welcome"))
+        || cls.contains(QStringLiteral("welcome"))
+        || cls.contains(QStringLiteral("plasmashell"))
+        || cls.contains(QStringLiteral("kscreenlocker"))
+        || cls.contains(QStringLiteral("screenlocker"))
+        || cls.contains(QStringLiteral("lockscreen"))
+        || cls.contains(QStringLiteral("plasmalogin"))
+        || cls.contains(QStringLiteral("sddm"))
+        || cls.contains(QStringLiteral("polkit"))
+        || cls.contains(QStringLiteral("desktopdialog"))
+        || role.contains(QStringLiteral("spectacle"))
+        || role.contains(QStringLiteral("welcome"))
+        || role.contains(QStringLiteral("lockscreen"))
+        || role.contains(QStringLiteral("login"))
+        || cap.contains(QStringLiteral("centro de bienvenida"))
+        || cap.contains(QStringLiteral("welcome center"))
+        || cap.contains(QStringLiteral("bienvenida de plasma"))
+        || cap.contains(QStringLiteral("bienvenida"))
+        || cap.contains(QStringLiteral("inicio de sesión"))
+        || cap.contains(QStringLiteral("pantalla de inicio de sesión"))
+        || cap.contains(QStringLiteral("login screen"))
+        || cap.contains(QStringLiteral("bloqueo de pantalla"))
+        || cap.contains(QStringLiteral("screen lock"))) {
+        return false;
+    }
+
+    static const QStringList kSystemClasses = {
+        QStringLiteral("ksplash"),
+        QStringLiteral("ksplashqml"),
+        QStringLiteral("ksmserver"),
+        QStringLiteral("kscreenlocker"),
+        QStringLiteral("kscreenlocker_greet"),
+        QStringLiteral("plasma-lockscreen"),
+        QStringLiteral("plasmalogin"),
+        QStringLiteral("sddm"),
+        QStringLiteral("org.kde.plasma.welcome"),
+        QStringLiteral("org.kde.plasmashell"),
+        QStringLiteral("krunner"),
+        QStringLiteral("org.kde.krunner"),
+        QStringLiteral("kwin_wayland"),
+        QStringLiteral("kwin_x11"),
+        QStringLiteral("xwaylandvideobridge"),
+        QStringLiteral("plasma-interactiveconsole"),
+        QStringLiteral("org.kde.polkit-kde-authentication-agent"),
+        QStringLiteral("polkit-kde-authentication-agent"),
+        QStringLiteral("ksshaskpass"),
+        QStringLiteral("kded"),
+        QStringLiteral("org.kde.kdeconnect"),
+        QStringLiteral("greeter"),
+        QStringLiteral("org.kde.plasma.emojier"),
+        QStringLiteral("org.kde.kscreen.osd"),
+        QStringLiteral("org.kde.spectacle"),
+        QStringLiteral("org.kde.plasma-welcome")
+    };
+    for (const QString &sc : kSystemClasses) {
+        if (cls.contains(sc) || role.contains(sc)) {
+            return false;
+        }
+    }
+
+    if (cap.contains(QStringLiteral("picture-in-picture")) ||
+        cap.contains(QStringLiteral("picture in picture")) ||
+        cap.contains(QStringLiteral("imagen en imagen")) ||
+        cap.contains(QStringLiteral("pantalla en pantalla")) ||
+        cap.contains(QStringLiteral("reproductor en miniatura")) ||
+        cap.contains(QStringLiteral("incrustation")) ||
+        cap.contains(QStringLiteral("bild-in-bild")) ||
+        cap.contains(QStringLiteral("imagem em imagem")) ||
+        cap == QStringLiteral("pip")) {
+        return false;
+    }
+
     if (w->findModal() != nullptr) {
         return false;
     }
@@ -693,7 +612,79 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
-    return true;
+    return w->isNormalWindow() || w->isDialog();
+}
+
+/**
+ * @brief Crea o actualiza el OutlinedBorderItem de la ventana respetando su radio de curvatura.
+ */
+void RavenEffect::updateBorder(KWin::EffectWindow *w)
+{
+    if (!w || !m_bordersEnabled || !shouldDrawBorder(w)) {
+        removeBorder(w);
+        return;
+    }
+
+    KWin::WindowItem *parentItem = w->windowItem();
+    if (!parentItem) {
+        removeBorder(w);
+        return;
+    }
+
+    bool isFocused = (KWin::effects && w == KWin::effects->activeWindow());
+    QColor color = isFocused ? m_activeBorderColor : m_inactiveBorderColor;
+
+    if (color.alpha() == 0 || m_borderWidth <= 0.0f) {
+        removeBorder(w);
+        return;
+    }
+
+    // Obtener la curvatura real de la ventana reportada nativamente por KWin
+    KWin::BorderRadius radius;
+    if (w->window()) {
+        radius = w->window()->borderRadius();
+    }
+
+    KWin::BorderOutline outline(m_borderWidth, color, radius);
+    KWin::RectF innerRect(QPointF(0, 0), w->frameGeometry().size());
+
+    auto it = m_borders.find(w);
+    if (it != m_borders.end()) {
+        if (it->second.item) {
+            it->second.item->setInnerRect(innerRect);
+            it->second.item->setOutline(outline);
+        }
+    } else {
+        BorderData data;
+        data.item = std::make_unique<KWin::OutlinedBorderItem>(innerRect, outline, parentItem);
+        if (w->window()) {
+            data.radiusConnection = connect(w->window(), &KWin::Window::borderRadiusChanged, this, [this, w]() {
+                updateBorder(w);
+            });
+            data.classConnection = connect(w->window(), &KWin::Window::windowClassChanged, this, [this, w]() {
+                updateBorder(w);
+            });
+            data.captionConnection = connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
+                updateBorder(w);
+            });
+        }
+        m_borders.emplace(w, std::move(data));
+    }
+}
+
+/**
+ * @brief Elimina y desconecta el OutlinedBorderItem de la ventana.
+ */
+void RavenEffect::removeBorder(KWin::EffectWindow *w)
+{
+    auto it = m_borders.find(w);
+    if (it != m_borders.end()) {
+        disconnect(it->second.radiusConnection);
+        disconnect(it->second.classConnection);
+        disconnect(it->second.captionConnection);
+        it->second.item.reset();
+        m_borders.erase(it);
+    }
 }
 
 /**
@@ -701,46 +692,27 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
  */
 void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
 {
-    if (!KWin::effects || !m_bordersEnabled) {
+    if (!m_bordersEnabled) {
         return;
     }
 
-    // Blindaje anti-titileo (Flicker Guard):
-    // Si la nueva ventana enfocada es un overlay, captura (Spectacle), notificación,
-    // popup o elemento del sistema al que no le corresponde contorno, NO desmarcamos
-    // la ventana de aplicación previamente activa ni alteramos su estado visual.
-    if (w && !shouldDrawBorder(w)) {
-        return;
-    }
-
-    const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
-
-    // Repintar únicamente la ventana que perdió el foco
     if (m_lastActiveWindow && m_lastActiveWindow != w) {
-        KWin::effects->addRepaint(m_lastActiveWindow->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
+        updateBorder(m_lastActiveWindow);
     }
-
-    // Repintar únicamente la nueva ventana enfocada
-    if (w && shouldDrawBorder(w)) {
-        KWin::effects->addRepaint(w->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
+    if (w) {
+        updateBorder(w);
     }
-
     m_lastActiveWindow = w;
 }
 
 /**
- * @brief Slot llamado al mover, redimensionar o actualizar la geometría de cualquier ventana.
+ * @brief Slot llamado al mover, redimensionar o actualizar la geometría de una ventana.
  */
 void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::RectF &oldGeometry)
 {
-    if (KWin::effects && m_bordersEnabled) {
-        const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
-        if (!oldGeometry.isEmpty()) {
-            KWin::effects->addRepaint(oldGeometry.toAlignedRect().adjusted(-pad, -pad, pad, pad));
-        }
-        if (shouldDrawBorder(w)) {
-            KWin::effects->addRepaint(w->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
-        }
+    Q_UNUSED(oldGeometry);
+    if (m_bordersEnabled) {
+        updateBorder(w);
     }
 }
 
@@ -749,38 +721,38 @@ void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::R
  */
 void RavenEffect::slotWindowStepUserMovedResized(KWin::EffectWindow *w, const KWin::RectF &geometry)
 {
-    if (KWin::effects && m_bordersEnabled && shouldDrawBorder(w)) {
-        const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
-        KWin::effects->addRepaint(geometry.toAlignedRect().adjusted(-pad, -pad, pad, pad));
+    Q_UNUSED(geometry);
+    if (m_bordersEnabled) {
+        updateBorder(w);
     }
 }
 
 /**
- * @brief Slot llamado al minimizar o restaurar una ventana. Invalida y limpia los contornos residuales.
+ * @brief Slot llamado al minimizar o restaurar una ventana.
  */
 void RavenEffect::slotWindowMinimizedChanged(KWin::EffectWindow *w)
 {
-    if (!w || !KWin::effects) {
+    if (!w) {
         return;
     }
 
-    const int pad = static_cast<int>(std::ceil(m_borderWidth)) + 2;
-    KWin::effects->addRepaint(w->frameGeometry().toAlignedRect().adjusted(-pad, -pad, pad, pad));
-
     if (w->isMinimized()) {
+        removeBorder(w);
         if (m_lastActiveWindow == w) {
             m_lastActiveWindow.clear();
         }
+    } else {
+        updateBorder(w);
     }
 }
 
 /**
- * @brief Actualiza la configuración de bordes y solicita repintado completo.
+ * @brief Actualiza la configuración de bordes y refresca todas las ventanas en tiempo real.
  */
 void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor)
 {
     m_bordersEnabled = enabled;
-    m_borderWidth = static_cast<float>(std::clamp(width, 1.0, 2.0));
+    m_borderWidth = static_cast<float>(std::clamp(width, 1.0, 5.0));
 
     QColor ac(activeColor);
     if (ac.isValid()) {
@@ -793,100 +765,13 @@ void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &
     }
 
     if (KWin::effects) {
-        KWin::effects->addRepaintFull();
-    }
-}
-
-/**
- * @brief Intercepta el renderizado de la ventana para pintar el contorno activo o inactivo con OpenGL.
- */
-bool RavenEffect::paintWindow(const KWin::RenderTarget &renderTarget, const KWin::RenderViewport &viewport,
-                             KWin::EffectWindow *w, int mask, const KWin::Region &deviceRegion,
-                             KWin::WindowPaintData &data)
-{
-    bool ret = KWin::AnimationEffect::paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
-
-    if (!m_bordersEnabled ||
-        !shouldDrawBorder(w)) {
-        return ret;
-    }
-
-    if (!KWin::effects ||
-        !KWin::ShaderManager::instance()) {
-        return ret;
-    }
-
-    bool isFocused = (w == KWin::effects->activeWindow());
-    QColor borderColor = isFocused ? m_activeBorderColor : m_inactiveBorderColor;
-
-    qreal effectiveAlpha = borderColor.alphaF() * data.opacity();
-    if (effectiveAlpha <= 0.001) {
-        return ret;
-    }
-    borderColor.setAlphaF(static_cast<float>(effectiveAlpha));
-
-    KWin::GLShader *shader = KWin::ShaderManager::instance()->pushShader(KWin::ShaderTrait::UniformColor);
-    if (!shader) {
-        return ret;
-    }
-
-    const double scale = viewport.scale();
-
-    // Replicar la arquitectura de proyección nativa de KWin (idéntica a OffscreenData::paint):
-    // 1. Matriz de proyección base del viewport
-    // 2. Traslación al origen de la ventana escalado en coordenadas del render target
-    // 3. Multiplicación por data.toMatrix(scale) que incluye translation() y scale() de AnimationEffect
-    QMatrix4x4 mvp = viewport.projectionMatrix();
-    mvp.translate(static_cast<float>(std::round(w->x() * scale)), static_cast<float>(std::round(w->y() * scale)));
-    mvp = mvp * data.toMatrix(scale);
-
-    shader->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, mvp);
-    shader->setUniform(KWin::GLShader::ColorUniform::Color, borderColor);
-
-    // Dimensiones en coordenadas locales de la ventana (desde (0, 0) hasta (wW, hH))
-    float wW = static_cast<float>(std::round(w->width() * scale));
-    float hH = static_cast<float>(std::round(w->height() * scale));
-    float bw = static_cast<float>(std::round(m_borderWidth * scale));
-
-    if (wW > 2 * bw && hH > 2 * bw) {
-        m_quadBuffer.clear();
-        if (m_quadBuffer.capacity() < 24) {
-            m_quadBuffer.reserve(24);
-        }
-
-        auto addQuad = [this](float rx, float ry, float rw, float rh) {
-            m_quadBuffer.push_back(QVector2D(rx, ry));
-            m_quadBuffer.push_back(QVector2D(rx + rw, ry));
-            m_quadBuffer.push_back(QVector2D(rx, ry + rh));
-
-            m_quadBuffer.push_back(QVector2D(rx + rw, ry));
-            m_quadBuffer.push_back(QVector2D(rx + rw, ry + rh));
-            m_quadBuffer.push_back(QVector2D(rx, ry + rh));
-        };
-
-        // Borde superior
-        addQuad(0.0f, 0.0f, wW, bw);
-        // Borde inferior
-        addQuad(0.0f, hH - bw, wW, bw);
-        // Borde izquierdo
-        addQuad(0.0f, bw, bw, hH - 2.0f * bw);
-        // Borde derecho
-        addQuad(wW - bw, bw, bw, hH - 2.0f * bw);
-
-        KWin::GLVertexBuffer *vbo = KWin::GLVertexBuffer::streamingBuffer();
-        if (vbo) {
-            vbo->reset();
-            vbo->setVertices(m_quadBuffer);
-
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-            vbo->render(GL_TRIANGLES);
+        const auto windows = KWin::effects->stackingOrder();
+        for (auto *win : windows) {
+            if (win) {
+                updateBorder(win);
+            }
         }
     }
-
-    KWin::ShaderManager::instance()->popShader();
-    return ret;
 }
 
 #include "moc_raveneffect.cpp"
