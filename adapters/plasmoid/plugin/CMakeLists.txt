@@ -19,6 +19,8 @@ qt_add_qml_module(ravenplugin
         mediacontroller.h
         systemstats.cpp
         systemstats.h
+        gpustats.cpp
+        gpustats.h
 
 
     QML_FILES

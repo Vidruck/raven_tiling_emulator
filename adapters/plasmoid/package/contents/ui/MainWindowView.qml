@@ -39,14 +39,18 @@ Item {
     // Sincronización al desplegar el launcher
     Component.onCompleted: {
         RavenPlugin.SystemStats.active = root.appletExpanded;
+        if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.active = root.appletExpanded;
         RavenPlugin.SystemStats.refresh();
+        if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.refresh();
         RavenPlugin.RavenController.refreshState();
     }
     onAppletExpandedChanged: {
         RavenPlugin.SystemStats.active = root.appletExpanded;
+        if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.active = root.appletExpanded;
         if (root.appletExpanded) {
             root.currentDate = new Date();
             RavenPlugin.SystemStats.refresh();
+            if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.refresh();
             RavenPlugin.RavenController.refreshState();
             if (appGridView) {
                 appGridView.refresh();
@@ -65,6 +69,9 @@ Item {
         property real value: 0
         property string title: ""
         property string colorOverride: ""
+        
+        property string valueText: ""
+        property string tooltipText: ""
         
         Canvas {
             id: canvas
@@ -119,7 +126,7 @@ Item {
             anchors.centerIn: parent
             spacing: 0
             Text {
-                text: Math.round(gaugeRoot.value) + "%"
+                text: gaugeRoot.valueText !== "" ? gaugeRoot.valueText : (Math.round(gaugeRoot.value) + "%")
                 color: RavenPlugin.RavenTheme.textColor
                 font.pixelSize: 10
                 font.bold: true
@@ -131,6 +138,16 @@ Item {
                 font.pixelSize: 8
                 anchors.horizontalCenter: parent.horizontalCenter
             }
+        }
+
+        ToolTip.visible: gaugeMa.containsMouse && gaugeRoot.tooltipText !== ""
+        ToolTip.text: gaugeRoot.tooltipText
+        ToolTip.delay: 200
+
+        MouseArea {
+            id: gaugeMa
+            anchors.fill: parent
+            hoverEnabled: true
         }
     }
 
@@ -691,7 +708,8 @@ Item {
                 MediaWidgetView {
                     id: mediaWidget
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 155
+                    Layout.preferredHeight: mediaWidget.hasPlayer ? 155 : 0
+                    visible: mediaWidget.hasPlayer
                     active: root.appletExpanded
                 }
 
@@ -791,16 +809,38 @@ Item {
                         // Fila de Métricas y Gauges del Sistema
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: 16
+                            spacing: (RavenPlugin.GPUStats && RavenPlugin.GPUStats.available && RavenPlugin.SystemStats.hasBattery) ? 10 : 16
                             Layout.alignment: Qt.AlignHCenter
 
                             CircularGauge {
                                 value: RavenPlugin.SystemStats.cpuUsage
                                 title: i18n("CPU")
+                                tooltipText: i18n("Uso de CPU: ") + RavenPlugin.SystemStats.cpuUsage + "%"
                             }
                             CircularGauge {
                                 value: RavenPlugin.SystemStats.ramUsage
                                 title: i18n("RAM")
+                                tooltipText: (RavenPlugin.SystemStats.ramUsedString || "") + " / " + (RavenPlugin.SystemStats.ramTotalString || "")
+                            }
+                            CircularGauge {
+                                visible: RavenPlugin.GPUStats && RavenPlugin.GPUStats.available
+                                value: (RavenPlugin.GPUStats && RavenPlugin.GPUStats.available) ? RavenPlugin.GPUStats.usage : 0
+                                title: i18n("GPU")
+                                colorOverride: {
+                                    if (!RavenPlugin.GPUStats || !RavenPlugin.GPUStats.available) return "";
+                                    if (RavenPlugin.GPUStats.usage > 85) return RavenPlugin.RavenTheme.negativeColor;
+                                    // Paleta armónica Anyu / Amber / Cyan
+                                    if (RavenPlugin.GPUStats.usage > 65) return "#FFB454";
+                                    return "#36A3D9";
+                                }
+                                tooltipText: {
+                                    if (!RavenPlugin.GPUStats || !RavenPlugin.GPUStats.available) return "";
+                                    var txt = i18n("GPU: ") + RavenPlugin.GPUStats.usage + "%\n" + i18n("VRAM: ") + RavenPlugin.GPUStats.vramUsage + "%";
+                                    if (RavenPlugin.GPUStats.temperature > 0) {
+                                        txt += "\n" + i18n("Temp: ") + RavenPlugin.GPUStats.temperature + "°C";
+                                    }
+                                    return txt;
+                                }
                             }
                             CircularGauge {
                                 visible: RavenPlugin.SystemStats.hasBattery
@@ -811,6 +851,7 @@ Item {
                                     if (RavenPlugin.SystemStats.batteryUsage <= 20) return "#E74C3C";
                                     return "#F39C12";
                                 }
+                                tooltipText: i18n("Batería: ") + RavenPlugin.SystemStats.batteryUsage + "%" + (RavenPlugin.SystemStats.isCharging ? (" (" + i18n("Cargando") + ")") : "")
                             }
                         }
                     }

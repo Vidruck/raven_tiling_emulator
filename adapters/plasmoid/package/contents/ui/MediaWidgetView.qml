@@ -25,6 +25,8 @@ Rectangle {
     border.color: RavenPlugin.RavenTheme.cardBackground
 
     property alias active: media.active
+    property alias hasPlayer: media.hasPlayer
+    visible: media.hasPlayer
 
     RavenPlugin.MediaController {
         id: media
