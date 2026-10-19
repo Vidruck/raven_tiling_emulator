@@ -52,17 +52,25 @@ signals:
 
 private slots:
     void updateStats();
+    void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
 
 private:
     void detectUtility();
+    bool readSysfsStats();
     void parseNvidiaSmi(const QString &output);
     void parseRadeonTop(const QString &output);
     void parseIntelGpuTop(const QString &output);
 
-    bool m_available = false;          ///< true if a utility was detected
+    bool m_available = false;          ///< true if sysfs or a utility was detected
+    bool m_useSysfs = false;           ///< zero-overhead Linux sysfs direct reading
+    QString m_sysfsGpuBusy;
+    QString m_sysfsVramUsed;
+    QString m_sysfsVramTotal;
+    QString m_sysfsTemp;
+
     QString m_utilityPath;             ///< full path to the detected binary
     QTimer *m_timer = nullptr;         ///< polling timer (2 s interval)
-    QProcess *m_process = nullptr;    ///< subprocess used for single‑shot queries
+    QProcess *m_process = nullptr;     ///< asynchronous non-blocking process
     bool m_active = false;             ///< mirrors SystemStats behaviour
     int m_usage = 0;
     int m_vramUsage = 0;

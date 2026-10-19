@@ -40,20 +40,14 @@ Item {
     Component.onCompleted: {
         RavenPlugin.SystemStats.active = root.appletExpanded;
         if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.active = root.appletExpanded;
-        RavenPlugin.SystemStats.refresh();
-        if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.refresh();
-        RavenPlugin.RavenController.refreshState();
     }
     onAppletExpandedChanged: {
         RavenPlugin.SystemStats.active = root.appletExpanded;
         if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.active = root.appletExpanded;
         if (root.appletExpanded) {
             root.currentDate = new Date();
-            RavenPlugin.SystemStats.refresh();
-            if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.refresh();
             RavenPlugin.RavenController.refreshState();
             if (appGridView) {
-                appGridView.refresh();
                 appGridView.resetSearch();
             }
         }

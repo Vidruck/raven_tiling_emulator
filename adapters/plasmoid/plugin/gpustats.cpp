@@ -1,5 +1,7 @@
 #include "gpustats.h"
 #include <QFileInfo>
+#include <QDir>
+#include <QFile>
 #include <QStandardPaths>
 #include <QProcess>
 #include <QRegularExpression>
@@ -7,8 +9,10 @@
 
 GPUStats::GPUStats(QObject *parent)
     : QObject(parent),
-      m_timer(new QTimer(this))
+      m_timer(new QTimer(this)),
+      m_process(new QProcess(this))
 {
+    connect(m_process, &QProcess::finished, this, &GPUStats::onProcessFinished);
     detectUtility();
     m_timer->setInterval(2000); // 2 s polling
     connect(m_timer, &QTimer::timeout, this, &GPUStats::updateStats);
@@ -25,6 +29,9 @@ void GPUStats::setActive(bool act)
         updateStats(); // immediate read
     } else {
         m_timer->stop();
+        if (m_process && m_process->state() != QProcess::NotRunning) {
+            m_process->terminate();
+        }
     }
 }
 
@@ -35,6 +42,34 @@ void GPUStats::refresh()
 
 void GPUStats::detectUtility()
 {
+    // 1. Prioridad: Inspección nativa directa de Linux sysfs (cero costo de CPU, sin forks)
+    for (int cardIdx = 0; cardIdx < 8; ++cardIdx) {
+        QString cardPath = QStringLiteral("/sys/class/drm/card%1/device").arg(cardIdx);
+        if (QFile::exists(cardPath + QStringLiteral("/gpu_busy_percent"))) {
+            m_sysfsGpuBusy = cardPath + QStringLiteral("/gpu_busy_percent");
+            m_sysfsVramUsed = cardPath + QStringLiteral("/mem_info_vram_used");
+            m_sysfsVramTotal = cardPath + QStringLiteral("/mem_info_vram_total");
+
+            // Buscar sensor hwmon de temperatura
+            QDir hwmonDir(cardPath + QStringLiteral("/hwmon"));
+            QStringList hwmons = hwmonDir.entryList(QStringList() << QStringLiteral("hwmon*"), QDir::Dirs | QDir::NoDotAndDotDot);
+            for (const QString &h : hwmons) {
+                QString tempPath = hwmonDir.absoluteFilePath(h) + QStringLiteral("/temp1_input");
+                if (QFile::exists(tempPath)) {
+                    m_sysfsTemp = tempPath;
+                    break;
+                }
+            }
+
+            m_useSysfs = true;
+            m_available = true;
+            emit availabilityChanged();
+            qDebug() << "GPUStats: detected native Linux sysfs DRM interface at" << cardPath;
+            return;
+        }
+    }
+
+    // 2. Fallback: herramientas CLI externas (nvidia-smi, radeontop, intel_gpu_top)
     const QStringList candidates = {"nvidia-smi", "radeontop", "intel_gpu_top"};
     for (const QString &bin : candidates) {
         const QString path = QStandardPaths::findExecutable(bin);
@@ -50,31 +85,89 @@ void GPUStats::detectUtility()
     emit availabilityChanged();
 }
 
+bool GPUStats::readSysfsStats()
+{
+    if (!m_useSysfs) return false;
+
+    // Lectura de gpu_busy_percent
+    QFile busyFile(m_sysfsGpuBusy);
+    if (busyFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QByteArray data = busyFile.readAll().trimmed();
+        m_usage = qBound(0, data.toInt(), 100);
+        busyFile.close();
+    }
+
+    // Lectura de VRAM
+    if (!m_sysfsVramUsed.isEmpty() && !m_sysfsVramTotal.isEmpty()) {
+        QFile usedFile(m_sysfsVramUsed);
+        QFile totalFile(m_sysfsVramTotal);
+        if (usedFile.open(QIODevice::ReadOnly | QIODevice::Text) &&
+            totalFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            quint64 used = usedFile.readAll().trimmed().toULongLong();
+            quint64 total = totalFile.readAll().trimmed().toULongLong();
+            if (total > 0) {
+                m_vramUsage = qBound(0, int((used * 100) / total), 100);
+            }
+            usedFile.close();
+            totalFile.close();
+        }
+    }
+
+    // Lectura de Temperatura (miliCelsius -> Celsius)
+    if (!m_sysfsTemp.isEmpty()) {
+        QFile tempFile(m_sysfsTemp);
+        if (tempFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            int milliC = tempFile.readAll().trimmed().toInt();
+            if (milliC > 0) {
+                m_temperature = milliC / 1000;
+            }
+            tempFile.close();
+        }
+    }
+
+    emit statsChanged();
+    return true;
+}
+
 void GPUStats::updateStats()
 {
     if (!m_available) return;
 
-    QProcess proc;
-    proc.setProgram(m_utilityPath);
-    if (m_utilityPath.endsWith("nvidia-smi")) {
-        proc.setArguments({"-q", "-x"});
-    } else if (m_utilityPath.endsWith("radeontop")) {
-        proc.setArguments({"-d", "-l"}); // single sample
-    } else if (m_utilityPath.endsWith("intel_gpu_top")) {
-        proc.setArguments({"-J"}); // JSON output if supported
-    }
-    proc.start();
-    if (!proc.waitForFinished(1000)) {
-        qWarning() << "GPUStats: timeout executing" << m_utilityPath;
+    // Si disponemos de sysfs, leemos de inmediato sin subprocesos
+    if (m_useSysfs) {
+        readSysfsStats();
         return;
     }
-    const QString out = QString::fromUtf8(proc.readAllStandardOutput());
 
-    if (m_utilityPath.contains("nvidia-smi")) {
+    // Para utilidades CLI externas, ejecutar de forma estrictamente asíncrona sin bloquear la UI
+    if (m_process->state() != QProcess::NotRunning) {
+        // La consulta previa aún sigue en ejecución, descartar para evitar saturación
+        return;
+    }
+
+    m_process->setProgram(m_utilityPath);
+    if (m_utilityPath.endsWith(QLatin1String("nvidia-smi"))) {
+        m_process->setArguments({QStringLiteral("-q"), QStringLiteral("-x")});
+    } else if (m_utilityPath.endsWith(QLatin1String("radeontop"))) {
+        m_process->setArguments({QStringLiteral("-d"), QStringLiteral("-"), QStringLiteral("-l"), QStringLiteral("1")});
+    } else if (m_utilityPath.endsWith(QLatin1String("intel_gpu_top"))) {
+        m_process->setArguments({QStringLiteral("-J"), QStringLiteral("-s"), QStringLiteral("100")});
+    }
+    m_process->start();
+}
+
+void GPUStats::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    if (exitStatus != QProcess::NormalExit || exitCode != 0) {
+        return;
+    }
+
+    const QString out = QString::fromUtf8(m_process->readAllStandardOutput());
+    if (m_utilityPath.contains(QLatin1String("nvidia-smi"))) {
         parseNvidiaSmi(out);
-    } else if (m_utilityPath.contains("radeontop")) {
+    } else if (m_utilityPath.contains(QLatin1String("radeontop"))) {
         parseRadeonTop(out);
-    } else if (m_utilityPath.contains("intel_gpu_top")) {
+    } else if (m_utilityPath.contains(QLatin1String("intel_gpu_top"))) {
         parseIntelGpuTop(out);
     }
     emit statsChanged();
