@@ -672,15 +672,102 @@ void SystemStats::readUptime()
 }
 
 /**
+ * @brief Lee la temperatura de la CPU o zona térmica del sistema.
+ *
+ * Utiliza sysfs directo (/sys/class/hwmon o /sys/class/thermal) con detección en caché
+ * para lograr una lectura de microsegundos con costo nulo de CPU.
+ */
+void SystemStats::readTemperature()
+{
+    // 1. Si no hemos descubierto la ruta aún, buscar el mejor sensor de CPU / SoC
+    if (m_thermalSensorPath.isEmpty()) {
+        QDir hwmonBase(QStringLiteral("/sys/class/hwmon"));
+        QStringList hwmons = hwmonBase.entryList(QStringList() << QStringLiteral("hwmon*"), QDir::Dirs | QDir::NoDotAndDotDot);
+        QString candidateFallback;
+
+        for (const QString &h : hwmons) {
+            QString dirPath = hwmonBase.absoluteFilePath(h);
+            QFile nameFile(dirPath + QStringLiteral("/name"));
+            QString sensorName;
+            if (nameFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                sensorName = QString::fromUtf8(nameFile.readAll()).trimmed().toLower();
+                nameFile.close();
+            }
+
+            // Ignorar sensores que no corresponden al procesador o placa
+            if (sensorName.contains(QLatin1String("amdgpu")) ||
+                sensorName.contains(QLatin1String("nvme")) ||
+                sensorName.contains(QLatin1String("bat")) ||
+                sensorName.contains(QLatin1String("acad")) ||
+                sensorName.contains(QLatin1String("ucsi"))) {
+                continue;
+            }
+
+            // Buscar primer temp*_input disponible
+            QDir dir(dirPath);
+            QStringList temps = dir.entryList(QStringList() << QStringLiteral("temp*_input"), QDir::Files);
+            if (!temps.isEmpty()) {
+                QString fullTempPath = dir.absoluteFilePath(temps.first());
+                // Sensores de CPU prioritarios conocidos en Linux
+                if (sensorName.contains(QLatin1String("k10temp")) ||
+                    sensorName.contains(QLatin1String("coretemp")) ||
+                    sensorName.contains(QLatin1String("zenpower")) ||
+                    sensorName.contains(QLatin1String("cpu_thermal")) ||
+                    sensorName.contains(QLatin1String("acpitz"))) {
+                    m_thermalSensorPath = fullTempPath;
+                    break;
+                }
+                if (candidateFallback.isEmpty()) {
+                    candidateFallback = fullTempPath;
+                }
+            }
+        }
+
+        if (m_thermalSensorPath.isEmpty() && !candidateFallback.isEmpty()) {
+            m_thermalSensorPath = candidateFallback;
+        }
+
+        // Si no se encontró en hwmon, intentar zona térmica ACPI genérica
+        if (m_thermalSensorPath.isEmpty() && QFile::exists(QStringLiteral("/sys/class/thermal/thermal_zone0/temp"))) {
+            m_thermalSensorPath = QStringLiteral("/sys/class/thermal/thermal_zone0/temp");
+        }
+    }
+
+    if (m_thermalSensorPath.isEmpty()) {
+        m_hasTemperature = false;
+        m_temperature = -1;
+        return;
+    }
+
+    QFile file(m_thermalSensorPath);
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        bool ok = false;
+        int rawVal = QString::fromUtf8(file.readAll()).trimmed().toInt(&ok);
+        file.close();
+        if (ok && rawVal > 0) {
+            // La mayoría de sensores reportan en miligrados Celsius
+            int c = (rawVal > 1000) ? (rawVal / 1000) : rawVal;
+            m_temperature = qBound(0, c, 125);
+            m_hasTemperature = true;
+            return;
+        }
+    }
+
+    m_hasTemperature = false;
+    m_temperature = -1;
+}
+
+/**
  * @brief Orquestador central de recolección métrica.
  *
- * Ejecuta sincronizadamente la lectura de CPU, RAM, Batería y Uptime.
+ * Ejecuta sincronizadamente la lectura de CPU, RAM, Batería, Temperatura y Uptime.
  */
 void SystemStats::updateStats()
 {
     readCpuStats();
     readRamStats();
     readBatteryStats();
+    readTemperature();
     readUptime();
     emit statsChanged();
 }

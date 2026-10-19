@@ -85,6 +85,12 @@ class SystemStats : public QObject
     /** @brief true si la batería se encuentra conectada al cargador y en proceso de recarga. */
     Q_PROPERTY(bool isCharging READ isCharging NOTIFY statsChanged)
 
+    /** @brief Temperatura del sistema/CPU en grados Celsius (-1 si no disponible). */
+    Q_PROPERTY(int temperature READ temperature NOTIFY statsChanged)
+
+    /** @brief true si hay sensores térmicos de CPU o sistema disponibles. */
+    Q_PROPERTY(bool hasTemperature READ hasTemperature NOTIFY statsChanged)
+
     /** @brief Bandera de activación para suspender lecturas de disco si el plasmoide está oculto. */
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     
@@ -197,6 +203,12 @@ public:
     /** @return true si está cargando. */
     bool isCharging() const { return m_isCharging; }
 
+    /** @return Temperatura de CPU/sistema en °C. */
+    int temperature() const { return m_temperature; }
+
+    /** @return true si hay temperatura disponible. */
+    bool hasTemperature() const { return m_hasTemperature; }
+
     /** @return true si el tema de Plasma es oscuro. */
     bool isDarkTheme() const { return m_isDarkTheme; }
     
@@ -281,6 +293,7 @@ private:
     void readRamStats();                       ///< Parsea /proc/meminfo para calcular MemTotal y MemAvailable.
     void readBatteryStats();                   ///< Parsea /sys/class/power_supply/ para nivel y estado.
     void readUptime();                         ///< Parsea /proc/uptime y genera la cadena amigable.
+    void readTemperature();                    ///< Parsea /sys/class/hwmon o /sys/class/thermal para temperatura promedio de CPU.
     void readKdeGlobalsTheme();                ///< Parsea los bloques [Colors:Window] y [Colors:View] de KDE.
 
     int m_cpuUsage = 0;                        ///< Uso de CPU en porcentaje.
@@ -303,6 +316,9 @@ private:
     int m_batteryUsage = 0;                    ///< Nivel de batería.
     bool m_hasBattery = false;                 ///< Presencia de batería.
     bool m_isCharging = false;                 ///< Estado de carga.
+    int m_temperature = -1;                    ///< Temperatura de CPU/sistema en °C.
+    bool m_hasTemperature = false;             ///< Disponibilidad de sensor térmico.
+    QString m_thermalSensorPath;               ///< Ruta en caché al sensor térmico primario.
 
     bool m_isDarkTheme = true;                 ///< Esquema oscuro activo.
     QString m_windowBgColor = QStringLiteral("#15181d");

@@ -61,6 +61,7 @@ Item {
         width: 46
         height: 46
         property real value: 0
+        property real maxValue: 100
         property string title: ""
         property string colorOverride: ""
         
@@ -78,7 +79,8 @@ Item {
                 var radius = (Math.min(width, height) - 7) / 2;
                 var startAngle = -Math.PI * 0.75;
                 var totalAngle = Math.PI * 1.5;
-                var endAngle = startAngle + (totalAngle * Math.min(Math.max(gaugeRoot.value, 0), 100) / 100.0);
+                var fraction = (gaugeRoot.maxValue > 0) ? Math.min(Math.max(gaugeRoot.value / gaugeRoot.maxValue, 0), 1.0) : 0;
+                var endAngle = startAngle + (totalAngle * fraction);
 
                 // Pista de fondo
                 ctx.beginPath();
@@ -803,7 +805,7 @@ Item {
                         // Fila de Métricas y Gauges del Sistema
                         RowLayout {
                             Layout.fillWidth: true
-                            spacing: (RavenPlugin.GPUStats && RavenPlugin.GPUStats.available && RavenPlugin.SystemStats.hasBattery) ? 10 : 16
+                            spacing: 8
                             Layout.alignment: Qt.AlignHCenter
 
                             CircularGauge {
@@ -834,6 +836,37 @@ Item {
                                         txt += "\n" + i18n("Temp: ") + RavenPlugin.GPUStats.temperature + "°C";
                                     }
                                     return txt;
+                                }
+                            }
+                            CircularGauge {
+                                id: tempGauge
+                                readonly property int cpuTemp: (RavenPlugin.SystemStats && RavenPlugin.SystemStats.hasTemperature) ? RavenPlugin.SystemStats.temperature : -1
+                                readonly property int gpuTemp: (RavenPlugin.GPUStats && RavenPlugin.GPUStats.available) ? RavenPlugin.GPUStats.temperature : -1
+                                readonly property int avgTemp: {
+                                    if (cpuTemp > 0 && gpuTemp > 0) return Math.round((cpuTemp + gpuTemp) / 2.0);
+                                    if (cpuTemp > 0) return cpuTemp;
+                                    if (gpuTemp > 0) return gpuTemp;
+                                    return -1;
+                                }
+
+                                visible: avgTemp > 0
+                                value: Math.max(0, avgTemp)
+                                maxValue: 100
+                                title: i18n("TEMP")
+                                valueText: (avgTemp > 0) ? (avgTemp + "°") : "--"
+                                colorOverride: {
+                                    if (avgTemp > 80) return RavenPlugin.RavenTheme.negativeColor;
+                                    if (avgTemp > 65) return "#FFB454";
+                                    return "#39BAE6";
+                                }
+                                tooltipText: {
+                                    var details = [];
+                                    if (cpuTemp > 0) details.push(i18n("CPU: ") + cpuTemp + "°C");
+                                    if (gpuTemp > 0) details.push(i18n("GPU: ") + gpuTemp + "°C");
+                                    if (details.length > 1) {
+                                        return i18n("Temp. Promedio: ") + avgTemp + "°C\n" + details.join("\n");
+                                    }
+                                    return i18n("Temperatura: ") + avgTemp + "°C";
                                 }
                             }
                             CircularGauge {
