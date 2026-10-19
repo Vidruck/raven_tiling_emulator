@@ -47,40 +47,40 @@ PlasmoidItem {
         backgroundHints: PlasmaCore.Dialog.StandardBackground
         hideOnWindowDeactivate: true
         visible: false
-        property int calculatedHeight: {
-            var rows = (Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 3
-            // Isla 1 (195) + Isla 3 (155) + Isla 4 (118) + Espaciados entre 4 islas (3*8 = 24) = 492px fijos
-            // Isla 2 (Grilla): 38px buscador + 8px spacing + 20px márgenes + (rows * 82px) = (rows * 82) + 66px
-            // Total = 492 + 66 + (rows * 82) = 558 + (rows * 82)
-            var desired = 558 + (rows * 82)
-            var maxH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? (Plasmoid.screenGeometry.height - 80) : 1200
-            return Math.min(desired, maxH)
+
+        property int targetWidth: 410
+        property int maxAllowedHeight: {
+            var screenH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Plasmoid.screenGeometry.height : 1080;
+            return Math.max(300, screenH - 80);
         }
 
-        width: 440
-        height: calculatedHeight
+        width: targetWidth
+        height: Math.min(dialogContent.implicitHeight, maxAllowedHeight)
 
-        Component.onCompleted: {
-            var screenW = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.width > 0) ? Plasmoid.screenGeometry.width : 1920
-            var screenH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Plasmoid.screenGeometry.height : 1080
-            x = (screenW - 440) / 2
-            y = (screenH - height) / 2
+        Component.onCompleted: updatePosition()
+        onWidthChanged: updatePosition()
+        onHeightChanged: updatePosition()
+
+        function updatePosition() {
+            var screenW = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.width > 0) ? Plasmoid.screenGeometry.width : 1920;
+            var screenH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Plasmoid.screenGeometry.height : 1080;
+            x = Math.round((screenW - width) / 2);
+            y = Math.round((screenH - height) / 2);
         }
 
         mainItem: Item {
             id: dialogContent
             
-            Layout.minimumWidth: 380
-            Layout.maximumWidth: 1000
-            Layout.preferredWidth: 440
-            Layout.minimumHeight: 300
-            Layout.maximumHeight: 2000
-            Layout.preferredHeight: centerDialog.calculatedHeight
+            Layout.minimumWidth: 360
+            Layout.maximumWidth: 500
+            Layout.preferredWidth: centerDialog.targetWidth
+            Layout.preferredHeight: mainViewDialog.contentHeight
             
-            implicitWidth: 440
-            implicitHeight: centerDialog.calculatedHeight
+            implicitWidth: centerDialog.targetWidth
+            implicitHeight: mainViewDialog.contentHeight
 
             MainWindowView {
+                id: mainViewDialog
                 anchors.fill: parent
                 appletExpanded: centerDialog.visible
                 onAppClicked: (appUrl, execCmd) => {
@@ -92,14 +92,16 @@ PlasmoidItem {
     }
 
     fullRepresentation: Item {
-        Layout.minimumWidth: 380
-        Layout.minimumHeight: 300
-        Layout.preferredWidth: 440
-        Layout.preferredHeight: {
-            var rows = (Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 3
-            return 558 + (rows * 82)
-        }
+        id: fullRepItem
+        Layout.minimumWidth: 360
+        Layout.maximumWidth: 500
+        Layout.preferredWidth: 410
+        Layout.preferredHeight: mainViewFull.contentHeight
+        implicitWidth: 410
+        implicitHeight: mainViewFull.contentHeight
+
         MainWindowView {
+            id: mainViewFull
             anchors.fill: parent
             appletExpanded: root.expanded
             onAppClicked: (appUrl, execCmd) => {

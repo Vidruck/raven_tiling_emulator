@@ -19,8 +19,14 @@ import "./org/kde/plasma/ravenlauncher/plugin" as RavenPlugin
  */
 Item {
     id: root
-    implicitWidth: 440
-    implicitHeight: 880
+    implicitWidth: 410
+    implicitHeight: Math.min(contentHeight, 820)
+
+    readonly property int contentHeight: {
+        var baseH = mainColumn.implicitHeight;
+        var sidebarH = sidebarCol.implicitHeight + 20; // 10 topMargin + 10 bottomMargin
+        return Math.max(baseH, sidebarH);
+    }
 
     property bool appletExpanded: false
     property var currentDate: new Date()
