@@ -186,6 +186,7 @@ private:
         QMetaObject::Connection radiusConnection;
         QMetaObject::Connection classConnection;
         QMetaObject::Connection captionConnection;
+        QMetaObject::Connection decorationConnection;
     };
     std::unordered_map<KWin::EffectWindow*, BorderData> m_borders;       ///< Contornos activos administrados por hardware
 

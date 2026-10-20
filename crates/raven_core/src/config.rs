@@ -61,7 +61,7 @@ pub struct RavenConfig {
     /// Habilita el contorno (outline) de color en ventanas.
     #[serde(default = "default_borders_enabled")]
     pub borders_enabled: bool,
-    /// Ancho en píxeles del contorno (máximo recomendado 2px).
+    /// Ancho en píxeles del contorno (1px a 6px).
     #[serde(default = "default_border_width")]
     pub border_width: f32,
     /// Color del contorno para la ventana activa enfocada (código hexadecimal #RRGGBB o #RRGGBBAA).

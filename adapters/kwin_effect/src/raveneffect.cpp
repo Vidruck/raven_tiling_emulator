@@ -12,6 +12,7 @@
 #include "dbus/raven_effect_adaptor.h"
 #include <effect/effecthandler.h>
 #include <window.h>
+#include <kdecoration3/decoration.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -96,6 +97,7 @@ RavenEffect::~RavenEffect()
         disconnect(pair.second.radiusConnection);
         disconnect(pair.second.classConnection);
         disconnect(pair.second.captionConnection);
+        disconnect(pair.second.decorationConnection);
         pair.second.item.reset();
     }
     m_borders.clear();
@@ -452,7 +454,7 @@ void RavenEffect::loadBorderConfig()
         m_bordersEnabled = obj.value(QStringLiteral("borders_enabled")).toBool(true);
     }
     if (obj.contains(QStringLiteral("border_width"))) {
-        m_borderWidth = static_cast<float>(std::clamp(obj.value(QStringLiteral("border_width")).toDouble(2.0), 1.0, 5.0));
+        m_borderWidth = static_cast<float>(std::clamp(obj.value(QStringLiteral("border_width")).toDouble(2.0), 1.0, 6.0));
     }
     if (obj.contains(QStringLiteral("active_border_color"))) {
         QColor ac(obj.value(QStringLiteral("active_border_color")).toString());
@@ -641,8 +643,16 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
 
     // Obtener la curvatura real de la ventana reportada nativamente por KWin
     KWin::BorderRadius radius;
+    KDecoration3::Decoration *decor = nullptr;
     if (w->window()) {
         radius = w->window()->borderRadius();
+        decor = w->window()->decoration();
+        if (radius.isNull() && decor) {
+            const auto decorRadius = KWin::BorderRadius::from(decor->borderRadius());
+            if (!decorRadius.isNull()) {
+                radius = decorRadius;
+            }
+        }
     }
 
     KWin::BorderOutline outline(m_borderWidth, color, radius);
@@ -653,6 +663,12 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
         if (it->second.item) {
             it->second.item->setInnerRect(innerRect);
             it->second.item->setOutline(outline);
+        }
+        // Reconectar señal de decoración si cambió o se instanció posteriormente
+        if (decor && !it->second.decorationConnection) {
+            it->second.decorationConnection = connect(decor, &KDecoration3::Decoration::borderRadiusChanged, this, [this, w]() {
+                updateBorder(w);
+            });
         }
     } else {
         BorderData data;
@@ -667,6 +683,11 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
             data.captionConnection = connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
                 updateBorder(w);
             });
+            if (decor) {
+                data.decorationConnection = connect(decor, &KDecoration3::Decoration::borderRadiusChanged, this, [this, w]() {
+                    updateBorder(w);
+                });
+            }
         }
         m_borders.emplace(w, std::move(data));
     }
@@ -682,6 +703,7 @@ void RavenEffect::removeBorder(KWin::EffectWindow *w)
         disconnect(it->second.radiusConnection);
         disconnect(it->second.classConnection);
         disconnect(it->second.captionConnection);
+        disconnect(it->second.decorationConnection);
         it->second.item.reset();
         m_borders.erase(it);
     }
@@ -752,7 +774,7 @@ void RavenEffect::slotWindowMinimizedChanged(KWin::EffectWindow *w)
 void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor)
 {
     m_bordersEnabled = enabled;
-    m_borderWidth = static_cast<float>(std::clamp(width, 1.0, 5.0));
+    m_borderWidth = static_cast<float>(std::clamp(width, 1.0, 6.0));
 
     QColor ac(activeColor);
     if (ac.isValid()) {

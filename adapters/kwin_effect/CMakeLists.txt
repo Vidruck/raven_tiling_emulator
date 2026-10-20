@@ -33,6 +33,7 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
 )
 
 find_package(KWin REQUIRED)
+find_package(KDecoration3 REQUIRED)
 
 # Requerido por kcoreaddons_add_plugin / KDECMakeSettings
 if(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
@@ -64,5 +65,6 @@ target_link_libraries(kwin4_effect_raven
     KF6::ConfigCore
     KF6::CoreAddons
     KF6::WindowSystem
+    KDecoration3::KDecoration
     KWin::kwin
 )

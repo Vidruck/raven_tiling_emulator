@@ -29,7 +29,7 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32) 
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.label("Grosor del contorno (px):");
-                    ui.add(egui::Slider::new(&mut config.border_width, 1.0..=2.0).step_by(0.5).suffix(" px"));
+                    ui.add(egui::Slider::new(&mut config.border_width, 1.0..=6.0).step_by(0.5).suffix(" px"));
                 });
 
                 ui.add_space(6.0);
