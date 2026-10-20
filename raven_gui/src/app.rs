@@ -124,6 +124,12 @@ impl eframe::App for RavenGuiApp {
 
         let accent = self.kde_palette.selection_bg;
 
+        // Borde tenue y sutil para las islas, adaptado a esquemas oscuros y claros
+        let island_stroke = if self.kde_palette.is_dark {
+            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(255, 255, 255, 30))
+        } else {
+            egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(0, 0, 0, 28))
+        };
 
         // ── Panel Lateral Izquierdo ──
         egui::Panel::left("navigation_rail")
@@ -135,8 +141,8 @@ impl eframe::App for RavenGuiApp {
                     .fill(self.kde_palette.window_bg)
                     .inner_margin(egui::Margin::same(12))
                     .outer_margin(egui::Margin::same(8))
-                    .corner_radius(12.0)
-                    .stroke(egui::Stroke::NONE)
+                    .corner_radius(16.0)
+                    .stroke(island_stroke)
             )
             .show(ui, |ui| {
                 ui.set_height(ui.available_height()); // Fuerza a ocupar toda la altura
@@ -258,7 +264,7 @@ impl eframe::App for RavenGuiApp {
                     .inner_margin(egui::Margin::same(16))
                     .outer_margin(egui::Margin::same(8))
                     .corner_radius(16.0)
-                    .stroke(egui::Stroke::NONE)
+                    .stroke(island_stroke)
             )
             .show(ui, |ui| {
                 ui.set_height(ui.available_height()); // Fuerza a ocupar toda la altura
