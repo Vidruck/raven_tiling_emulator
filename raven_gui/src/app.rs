@@ -145,6 +145,8 @@ impl eframe::App for RavenGuiApp {
                     .stroke(island_stroke)
             )
             .show(ui, |ui| {
+                // Asegurar que el recorte del panel no mutile las esquinas redondeadas derechas de la isla
+                ui.set_clip_rect(ui.ctx().viewport_rect());
                 ui.set_height(ui.available_height()); // Fuerza a ocupar toda la altura
                 ui.add_space(8.0);
                 ui.vertical_centered(|ui| {
@@ -267,6 +269,7 @@ impl eframe::App for RavenGuiApp {
                     .stroke(island_stroke)
             )
             .show(ui, |ui| {
+                ui.set_clip_rect(ui.ctx().viewport_rect());
                 ui.set_height(ui.available_height()); // Fuerza a ocupar toda la altura
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     match self.active_tab {
