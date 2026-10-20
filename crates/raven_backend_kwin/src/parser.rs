@@ -154,11 +154,15 @@ pub fn parse_payload(
     }
 
     let mut topology = payload.topology;
+
     // Si la topología no trae output_nodes poblados, derivarlos de screens y outputs conocidos
+    
     if topology.output_nodes.is_empty() {
         let mut output_nodes = Vec::new();
         for out in &topology.outputs {
+            
             // Buscar si hay alguna pantalla en payload.screens que corresponda al output
+
             let matching_rect = payload.screens.iter().find_map(|(ws_id, screen)| {
                 if ws_id.starts_with(out) {
                     Some(Rect::new(screen.x, screen.y, screen.w, screen.h))

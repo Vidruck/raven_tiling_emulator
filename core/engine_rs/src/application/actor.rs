@@ -44,6 +44,7 @@ pub struct RavenControllerActor {
     notifier: Arc<dyn NotificationPort>,
     quarantine_manager: QuarantineManager,
     initialized_pip_windows: std::collections::HashSet<String>,
+    rectify_retries: std::collections::HashMap<String, u8>,
     rx: mpsc::Receiver<RavenMessage>,
 }
 
@@ -65,6 +66,7 @@ impl RavenControllerActor {
             notifier,
             quarantine_manager,
             initialized_pip_windows: std::collections::HashSet::new(),
+            rectify_retries: std::collections::HashMap::new(),
             rx,
         }
     }
@@ -113,6 +115,7 @@ impl RavenControllerActor {
                         }
                         CompositorEvent::WindowClosed(window_id) => {
                             self.initialized_pip_windows.remove(&window_id);
+                            self.rectify_retries.remove(&window_id);
                             let engine = self.controller.get_engine_mut();
                             engine.current_windows.remove(&window_id);
                             engine.window_history.retain(|id| id != &window_id);
@@ -216,20 +219,16 @@ impl RavenControllerActor {
                             }
                         }
                         CompositorEvent::RectifyWindow(window_id) => {
-                            // --- Modelo de Sospecha Activa — Rectificación Forzada (Fase 2) ---
+                            // --- Modelo de Rectificación Selectiva de Alta Confiabilidad (Fase 2) ---
                             //
-                            // Rust NO confía en la geometría reportada por el bridge KWin.
-                            // La fuente de verdad son los árboles internos de Rust (last_known_layout
-                            // y current_windows). Se determinan dos niveles de sospecha:
+                            // En momentos de alta carga del sistema, clientes CSD / Gecko (Firefox, Zen, Librewolf)
+                            // o ventanas anónimas por nacer pueden demorar en procesar su frame inicial y
+                            // sobreescribir su geometría tras la liberación de cuarentena.
                             //
-                            // [ALTA SOSPECHA] Ventana marcada por KWin como sospechosa (is_suspicious=true):
-                            //   flood de señales durante Timer-0 o sin clase WM.
-                            //   → Rectificación incondicional: re-calcular layout completo y
-                            //     re-enviar TODOS los comandos de ese workspace como RectifyWindow.
-                            //
-                            // [SOSPECHA NORMAL] Ventana con target registrado en last_known_layout:
-                            //   → Re-enviar directamente el target calculado sin comparar con
-                            //     win.geometry del bridge (fuente no confiable post-CSD).
+                            // REGLA FUNDAMENTAL DE RENDIMIENTO:
+                            // Rust rectifica ÚNICAMENTE la ventana afectada (Some(&window_id)),
+                            // eliminando por completo cualquier re-layout global del workspace que sobrecargue
+                            // al compositor o la CPU.
 
                             let win_opt = self
                                 .controller
@@ -240,17 +239,18 @@ impl RavenControllerActor {
 
                             match win_opt {
                                 None => {
-                                    info!("[SOSPECHA-ACTIVA] Ventana '{}' ya no existe. Rectificación omitida.", window_id);
+                                    self.rectify_retries.remove(&window_id);
+                                    info!("[RECTIFICACION-PRACTICA] Ventana '{}' ya no existe. Rectificación omitida.", window_id);
                                 }
                                 Some(win) if win.is_minimized => {
-                                    info!("[SOSPECHA-ACTIVA] Ventana '{}' está minimizada. Rectificación omitida.", window_id);
+                                    self.rectify_retries.remove(&window_id);
+                                    info!("[RECTIFICACION-PRACTICA] Ventana '{}' está minimizada. Rectificación omitida.", window_id);
                                 }
                                 Some(win) => {
                                     let reported = win.geometry;
                                     let target_opt = self.controller.get_target_rect_for_window(&window_id);
 
-                                    // Si la geometría física reportada ya converge con el objetivo (±2px),
-                                    // no saturamos KWin ni forzamos re-layouts innecesarios.
+                                    // Comprobamos si la ventana diverge del objetivo calculado por el motor (±2px)
                                     let diverged = target_opt.is_some_and(|target| {
                                         (reported.x - target.x).abs() > 2
                                             || (reported.y - target.y).abs() > 2
@@ -258,33 +258,55 @@ impl RavenControllerActor {
                                             || (reported.height - target.height).abs() > 2
                                     });
 
-                                    // Solo forzar rectificación si divergieron las medidas o es anónima sin clase
-                                    let is_truly_suspicious = win.is_suspicious || win.resource_class.trim().is_empty();
+                                    // Ventana sin ID explícito al nacer (anónima) o sospechosa por ráfagas
+                                    let is_anonymous_or_suspicious = win.is_suspicious || win.resource_class.trim().is_empty();
 
-                                    if !diverged && !is_truly_suspicious {
+                                    // Comprobamos si la ventana califica bajo política de navegador/cuarentena
+                                    let policy = crate::application::quarantine::QuarantinePolicy::from_class(
+                                        &win.resource_class,
+                                        &win.resource_name,
+                                    );
+                                    let is_quarantine_app = matches!(policy, crate::application::quarantine::QuarantinePolicy::Browser | crate::application::quarantine::QuarantinePolicy::Heavy);
+
+                                    let needs_rectification = diverged || is_anonymous_or_suspicious;
+
+                                    if !needs_rectification {
+                                        self.rectify_retries.remove(&window_id);
                                         tracing::debug!(
-                                            "[SOSPECHA-ACTIVA] Ventana '{}' converge correctamente con el layout ({:?}). Rectificación omitida.",
+                                            "[RECTIFICACION-PRACTICA] Ventana '{}' converge correctamente con el layout ({:?}). Rectificación omitida.",
                                             window_id, reported
                                         );
-                                    } else if is_truly_suspicious {
-                                        tracing::debug!(
-                                            "[SOSPECHA-ACTIVA] Ventana verdaderamente sospechosa/anónima '{}' → rectificación de workspace.",
-                                            window_id
-                                        );
-                                        if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(None) {
-                                            if !rectify_cmds.is_empty() {
-                                                let _ = out_tx.send(rectify_cmds).await;
-                                            }
-                                        }
                                     } else {
+                                        // Rectificar EXCLUSIVAMENTE la ventana afectada
                                         if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
                                             if !rectify_cmds.is_empty() {
-                                                tracing::debug!(
-                                                    "[SOSPECHA-ACTIVA] Re-enviando geometría divergente para '{}' ({} cmds).",
-                                                    window_id, rectify_cmds.len()
+                                                tracing::info!(
+                                                    "[RECTIFICACION-PRACTICA] Rectificando ventana '{}' (diverged={}, anónima/sospechosa={}, retries={})",
+                                                    window_id, diverged, is_anonymous_or_suspicious,
+                                                    self.rectify_retries.get(&window_id).copied().unwrap_or(0)
                                                 );
                                                 let _ = out_tx.send(rectify_cmds).await;
                                             }
+                                        }
+
+                                        // Verificación en lazo cerrado para alta carga:
+                                        // Si la app es de cuarentena (Gecko/Firefox/Electron) o anónima, y aún presenta
+                                        // divergencia o sospecha, agendamos una re-verificación única adicional (máximo 2 intentos)
+                                        // para garantizar que asuma la geometría final sin saturar el sistema.
+                                        let current_attempts = self.rectify_retries.entry(window_id.clone()).or_insert(0);
+                                        if *current_attempts < 2 && (is_quarantine_app || is_anonymous_or_suspicious) {
+                                            *current_attempts += 1;
+                                            tracing::debug!(
+                                                "[RECTIFICACION-PRACTICA] Agendando verificación de lazo cerrado (intento {}) para '{}'",
+                                                *current_attempts, window_id
+                                            );
+                                            self.quarantine_manager.schedule_rectification(
+                                                window_id.clone(),
+                                                &win.resource_class,
+                                                &win.resource_name,
+                                            );
+                                        } else if *current_attempts >= 2 {
+                                            self.rectify_retries.remove(&window_id);
                                         }
                                     }
                                 }
@@ -515,6 +537,7 @@ impl RavenControllerActor {
                     }
                     KWinBridgeMessage::WindowClosed { window_id, reply } => {
                         self.initialized_pip_windows.remove(&window_id);
+                        self.rectify_retries.remove(&window_id);
                         self.controller.clear_window_flapping(&window_id);
                         let engine = self.controller.get_engine_mut();
                         engine.current_windows.remove(&window_id);

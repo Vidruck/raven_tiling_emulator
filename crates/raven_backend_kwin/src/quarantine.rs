@@ -34,28 +34,83 @@ impl QuarantineCategory {
         let cls = resource_class.to_lowercase();
         let name = resource_name.to_lowercase();
 
+        // Ventana por nacer sin identificación explícita o anónima en Wayland
+        if cls.trim().is_empty() && name.trim().is_empty() {
+            return Self::Browser;
+        }
+
         let browser_executables = [
-            "zen", "zen-browser", "firefox", "firefox-esr", "navigator",
-            "librewolf", "floorp", "waterfox", "icecat", "chrome",
-            "google-chrome", "chromium", "chromium-browser", "brave-browser",
-            "brave", "vivaldi", "vivaldi-stable", "opera", "msedge",
-            "microsoft-edge", "epiphany", "falkon", "midori", "qutebrowser", "min",
+            "zen", "zen-browser", "zen-alpha", "zen-beta",
+            "firefox", "firefox-esr", "firefox-bin", "firefox-nightly",
+            "gecko", "mozilla",
+            "navigator",
+            "librewolf", 
+            "floorp", 
+            "waterfox", 
+            "icecat", 
+            "tor-browser",
+            "mullvad-browser",
+            "chrome",
+            "google-chrome", "chromium", "chromium-browser", 
+            "brave-browser",
+            "brave", 
+            "vivaldi", "vivaldi-stable", 
+            "opera", 
+            "msedge", "microsoft-edge", 
+            "epiphany", 
+            "falkon", 
+            "midori", 
+            "qutebrowser", 
+            "min",
         ];
 
         if browser_executables.iter().any(|&exe| {
-            name == exe || name.starts_with(exe) || cls == exe || cls.starts_with(exe)
-        }) || cls.contains("browser") {
+            name == exe 
+            || name.starts_with(exe) 
+            || cls == exe 
+            || cls.starts_with(exe)
+        }) || cls.contains("browser")
+            || name.contains("browser")
+            || cls.contains("firefox")
+            || name.contains("firefox")
+            || cls.contains("gecko")
+            || name.contains("gecko")
+            || cls.contains("mozilla")
+            || name.contains("mozilla")
+        {
             return Self::Browser;
         }
 
         let heavy_executables = [
-            "code", "code-oss", "vscodium", "cursor", "discord",
-            "discordcanary", "slack", "steam", "spotify", "obsidian",
-            "thunderbird", "postman", "idea", "idea64", "clion",
-            "clion64", "pycharm", "pycharm64", "datagrip", "goland",
-            "rider", "webstorm", "java", "teams", "signal",
-            "telegram-desktop", "notion-app", "figma-linux", "gimp",
-            "inkscape", "blender", "krita",
+            "code", "code-oss", "vscodium", 
+            "cursor", 
+            "discord", "discordcanary", 
+            "slack", 
+            "steam", 
+            "spotify", 
+            "obsidian",
+            "thunderbird", 
+            "postman", 
+            "idea", 
+            "idea64", 
+            "clion",
+            "clion64", 
+            "pycharm", 
+            "pycharm64", 
+            "datagrip", 
+            "goland",
+            "rider", 
+            "webstorm", 
+            "java", 
+            "teams", 
+            "signal",
+            "telegram-desktop", 
+            "notion-app", 
+            "figma-linux", 
+            "gimp",
+            "inkscape", 
+            "blender", 
+            "krita",
         ];
 
         if heavy_executables.iter().any(|&exe| {

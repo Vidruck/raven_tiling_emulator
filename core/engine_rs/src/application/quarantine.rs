@@ -61,6 +61,11 @@ impl QuarantinePolicy {
         let cls  = resource_class.to_lowercase();
         let name = resource_name.to_lowercase();
 
+        // Ventana por nacer sin identificación explícita o anónima en Wayland
+        if cls.trim().is_empty() && name.trim().is_empty() {
+            return Self::Browser;
+        }
+
         // --- Navegadores por nombre de ejecutable exacto (WM_CLASS instancia) ---
         // Zen Browser ejecutable: "zen" (resourceName) / "zen-browser" (resourceClass)
         // Firefox/Librewolf:      "navigator" (resourceName en Wayland) / "firefox" (resourceClass)
@@ -70,13 +75,21 @@ impl QuarantinePolicy {
         let browser_executables: &[&str] = &[
             "zen",
             "zen-browser",
+            "zen-alpha",
+            "zen-beta",
             "firefox",
             "firefox-esr",
-            "navigator",      // Firefox en modo Wayland usa "Navigator" como resourceName
+            "firefox-bin",
+            "firefox-nightly",
+            "gecko",
+            "mozilla",
+            "navigator",      // Firefox/Gecko en modo Wayland usa "Navigator" como resourceName
             "librewolf",
             "floorp",
             "waterfox",
             "icecat",
+            "tor-browser",
+            "mullvad-browser",
             "chrome",
             "google-chrome",
             "chromium",
@@ -95,10 +108,17 @@ impl QuarantinePolicy {
             "min",
         ];
 
-        // Comparación exacta primero (más preciso), luego prefijo (ej "zen" en "zen-snapshot")
+        // Comparación exacta primero (más preciso), luego prefijo o substrings de motor gecko/browser
         let is_browser = browser_executables.iter().any(|&exe| {
             name == exe || name.starts_with(exe) || cls == exe || cls.starts_with(exe)
-        }) || cls.contains("browser");
+        }) || cls.contains("browser")
+            || name.contains("browser")
+            || cls.contains("firefox")
+            || name.contains("firefox")
+            || cls.contains("gecko")
+            || name.contains("gecko")
+            || cls.contains("mozilla")
+            || name.contains("mozilla");
 
         if is_browser {
             return Self::Browser;

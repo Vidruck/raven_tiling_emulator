@@ -159,6 +159,7 @@ impl CompositorBackend for KWinBackend {
                     KWinBridgeMessage::WindowActivated { window_id } => {
                         let _ = event_tx.send(CompositorEvent::WindowFocused(window_id)).await;
                     }
+
                     KWinBridgeMessage::SyncState { payload_json, reply } => {
                         if let Ok((workspaces, windows, topology)) = parse_payload(&payload_json) {
                             // Emitir cambio de topología universal
@@ -173,6 +174,7 @@ impl CompositorBackend for KWinBackend {
                         // Responder con vector vacío si se usa como listener puro
                         let _ = reply.send(Vec::new());
                     }
+
                     KWinBridgeMessage::SyncWindowDelta { delta_json, reply } => {
                         if let Ok(win) = serde_json::from_str::<KWinWindow>(&delta_json) {
                             let ws_id = if !win.ws.is_empty() {
@@ -294,15 +296,26 @@ impl CompositorBackend for KWinBackend {
                         // 140ms de animación de nacimiento reactiva con zoom y elastic
                         self.effect_client.animate_birth(window_id, 140).await;
                     }
-                    RavenAction::MoveWindow { window_id, x, y, width, height } |
-                    RavenAction::RectifyWindow { window_id, x, y, width, height } => {
+                    RavenAction::MoveWindow { 
+                        window_id, x, y, width, height 
+                    } | RavenAction::RectifyWindow { 
+                        window_id, x, y, width, height 
+                    } => {
                         let target_rect = Rect::new(*x, *y, *width, *height);
                         if let Some(prev_rect) = geom_guard.get(window_id).copied() {
                             if prev_rect != target_rect {
                                 animations.push(WindowAnimation {
                                     id: window_id.clone(),
-                                    from: [prev_rect.x as f64, prev_rect.y as f64, prev_rect.width as f64, prev_rect.height as f64],
-                                    to: [target_rect.x as f64, target_rect.y as f64, target_rect.width as f64, target_rect.height as f64],
+                                    from: [
+                                        prev_rect.x as f64, 
+                                        prev_rect.y as f64, 
+                                        prev_rect.width as f64, 
+                                        prev_rect.height as f64],
+                                    to: [
+                                        target_rect.x as f64, 
+                                        target_rect.y as f64, 
+                                        target_rect.width as f64, 
+                                        target_rect.height as f64],
                                     duration_ms: 130,
                                     easing: "EaseOutCubic".to_string(),
                                 });

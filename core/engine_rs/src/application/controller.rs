@@ -422,7 +422,7 @@ impl RavenController {
         let layout_cmds = self.handle_state_change(workspaces, windows)?;
 
         // Transformar MoveWindow → RectifyWindow, filtrando por target si se especifica
-        let rectify_cmds: Vec<RavenAction> = layout_cmds
+        let mut rectify_cmds: Vec<RavenAction> = layout_cmds
             .into_iter()
             .filter_map(|cmd| match cmd {
                 RavenAction::MoveWindow { ref window_id, x, y, width, height } => {
@@ -450,6 +450,29 @@ impl RavenController {
                 }
             })
             .collect();
+
+        // Si se especificó un target_window_id y handle_state_change no emitió MoveWindow
+        // (por ejemplo, porque el rect en last_known_layout coincidía con la última corrida previa),
+        // recuperamos el target rect de last_known_layout para garantizar la emisión de RectifyWindow
+        // únicamente para la ventana afectada sin tocar el resto.
+        if let Some(target) = target_window_id {
+            let has_target_rectify = rectify_cmds.iter().any(|cmd| match cmd {
+                RavenAction::RectifyWindow { window_id, .. } => window_id.as_str() == target,
+                _ => false,
+            });
+
+            if !has_target_rectify {
+                if let Some(target_rect) = self.last_known_layout.get(target).copied() {
+                    rectify_cmds.push(RavenAction::RectifyWindow {
+                        window_id: target.to_string(),
+                        x: target_rect.x,
+                        y: target_rect.y,
+                        width: target_rect.width,
+                        height: target_rect.height,
+                    });
+                }
+            }
+        }
 
         Ok(rectify_cmds)
     }
