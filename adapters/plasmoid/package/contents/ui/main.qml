@@ -71,13 +71,22 @@ PlasmoidItem {
         mainItem: Item {
             id: dialogContent
             
-            Layout.minimumWidth: 360
-            Layout.maximumWidth: 500
+            Layout.minimumWidth: 410
+            Layout.maximumWidth: 410
             Layout.preferredWidth: centerDialog.targetWidth
             Layout.preferredHeight: mainViewDialog.contentHeight
+            Layout.minimumHeight: mainViewDialog.contentHeight
+            Layout.maximumHeight: mainViewDialog.contentHeight
             
             implicitWidth: centerDialog.targetWidth
             implicitHeight: mainViewDialog.contentHeight
+
+            onImplicitHeightChanged: {
+                centerDialog.height = Qt.binding(function() {
+                    return Math.min(dialogContent.implicitHeight, centerDialog.maxAllowedHeight);
+                });
+                centerDialog.updatePosition();
+            }
 
             MainWindowView {
                 id: mainViewDialog
@@ -93,10 +102,12 @@ PlasmoidItem {
 
     fullRepresentation: Item {
         id: fullRepItem
-        Layout.minimumWidth: 360
-        Layout.maximumWidth: 500
+        Layout.minimumWidth: 410
+        Layout.maximumWidth: 410
         Layout.preferredWidth: 410
         Layout.preferredHeight: mainViewFull.contentHeight
+        Layout.minimumHeight: mainViewFull.contentHeight
+        Layout.maximumHeight: mainViewFull.contentHeight
         implicitWidth: 410
         implicitHeight: mainViewFull.contentHeight
 
@@ -114,6 +125,12 @@ PlasmoidItem {
         target: root
         function onExpandedChanged() {
             if (Plasmoid.location === PlasmaCore.Types.Floating) {
+                if (root.expanded) {
+                    centerDialog.height = Qt.binding(function() {
+                        return Math.min(dialogContent.implicitHeight, centerDialog.maxAllowedHeight);
+                    });
+                    centerDialog.updatePosition();
+                }
                 centerDialog.visible = root.expanded;
             }
         }

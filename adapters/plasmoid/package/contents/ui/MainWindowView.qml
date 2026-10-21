@@ -20,7 +20,7 @@ import "./org/kde/plasma/ravenlauncher/plugin" as RavenPlugin
 Item {
     id: root
     implicitWidth: 410
-    implicitHeight: Math.min(contentHeight, 820)
+    implicitHeight: contentHeight
 
     readonly property int contentHeight: {
         var baseH = mainColumn.implicitHeight;
@@ -685,13 +685,13 @@ Item {
                 // ── ISLA 2: APP GRID & BÚSQUEDA ───────────────────────────────
                 Island {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.minimumHeight: 200
-                    Layout.preferredHeight: {
+                    implicitHeight: preferredHeight
+                    readonly property int preferredHeight: {
                         var rows = (Plasmoid.configuration && Plasmoid.configuration.gridRows >= 3) ? Plasmoid.configuration.gridRows : 3;
                         // 38px buscador + 8px espaciado + (filas * 82px) + 20px márgenes de isla
                         return (rows * 82) + 66;
                     }
+                    Layout.preferredHeight: preferredHeight
 
                     AppGridView {
                         id: appGridView

@@ -27,6 +27,7 @@ Rectangle {
     property alias active: media.active
     property alias hasPlayer: media.hasPlayer
     visible: media.hasPlayer
+    implicitHeight: (visible && media.hasPlayer) ? 155 : 0
 
     RavenPlugin.MediaController {
         id: media
