@@ -50,9 +50,12 @@ Item {
     onConfigEnableGlassmorphismChanged: {
         RavenPlugin.RavenTheme.enableGlassmorphismOverride = root.configEnableGlassmorphism;
     }
+    // Sincronización e inicialización al cargar la vista
     Component.onCompleted: {
         RavenPlugin.RavenTheme.islandOpacityOverride = root.configIslandOpacity;
         RavenPlugin.RavenTheme.enableGlassmorphismOverride = root.configEnableGlassmorphism;
+        RavenPlugin.SystemStats.active = root.appletExpanded;
+        if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.active = root.appletExpanded;
     }
 
     Timer {
@@ -63,12 +66,6 @@ Item {
         onTriggered: {
             root.currentDate = new Date();
         }
-    }
-
-    // Sincronización al desplegar el launcher
-    Component.onCompleted: {
-        RavenPlugin.SystemStats.active = root.appletExpanded;
-        if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.active = root.appletExpanded;
     }
     onAppletExpandedChanged: {
         RavenPlugin.SystemStats.active = root.appletExpanded;
