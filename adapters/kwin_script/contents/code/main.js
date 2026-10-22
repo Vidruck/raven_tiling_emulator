@@ -614,27 +614,38 @@ function applyCommands(commandsJson) {
           w.__raven_mutating = true;
           w.frameGeometry = targetGeom;
 
-          // Auditoría de geometría aplicada
-          try {
-            const fgApplied = w.frameGeometry || targetGeom;
-            callDBus(
-              "org.kde.raven.Daemon",
-              "/Events",
-              "org.kde.raven.Events",
-              "commandAppliedState",
-              cmd.window_id,
-              Math.round(fgApplied.x),
-              Math.round(fgApplied.y),
-              Math.round(fgApplied.width),
-              Math.round(fgApplied.height)
-            );
-          } catch (eAudit) {}
-
-          (function (cw) {
+          // Auditoría y verificación suave de convergencia:
+          // Si el cliente Wayland CSD (Gecko, GTK, Electron) confirma su superficie inicial
+          // milisegundos después y se queda en el centro, re-aplicamos targetGeom de inmediato.
+          (function (cw, tgt, wid) {
             setKWinTimeout(function () {
-              if (cw && !cw.deleted) cw.__raven_mutating = false;
+              if (!cw || cw.deleted) return;
+              try {
+                var cur = cw.frameGeometry;
+                if (cur && (Math.abs(cur.x - tgt.x) > 2 || Math.abs(cur.y - tgt.y) > 2 ||
+                            Math.abs(cur.width - tgt.width) > 2 || Math.abs(cur.height - tgt.height) > 2)) {
+                  cw.frameGeometry = tgt;
+                }
+              } catch (eReapply) {}
+
+              try {
+                var fgApplied = cw.frameGeometry || tgt;
+                callDBus(
+                  "org.kde.raven.Daemon",
+                  "/Events",
+                  "org.kde.raven.Events",
+                  "commandAppliedState",
+                  wid,
+                  Math.round(fgApplied.x),
+                  Math.round(fgApplied.y),
+                  Math.round(fgApplied.width),
+                  Math.round(fgApplied.height)
+                );
+              } catch (eAudit) {}
+
+              cw.__raven_mutating = false;
             }, 60);
-          })(w);
+          })(w, targetGeom, cmd.window_id);
           break;
 
         case "focus":

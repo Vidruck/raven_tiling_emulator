@@ -125,7 +125,7 @@ bool RavenEffect::supported()
  */
 bool RavenEffect::isActive() const
 {
-    return !m_activeAnimations.isEmpty();
+    return !m_activeGeometryAnimations.isEmpty() || !m_activeBirthAnimations.isEmpty();
 }
 
 /**
@@ -144,10 +144,13 @@ void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
     const QString decId = QString::number(reinterpret_cast<quintptr>(w));
 
     if (!windowId.isEmpty()) {
-        m_activeAnimations.remove(windowId);
+        m_activeGeometryAnimations.remove(windowId);
+        m_activeBirthAnimations.remove(windowId);
     }
-    m_activeAnimations.remove(hexId);
-    m_activeAnimations.remove(decId);
+    m_activeGeometryAnimations.remove(hexId);
+    m_activeBirthAnimations.remove(hexId);
+    m_activeGeometryAnimations.remove(decId);
+    m_activeBirthAnimations.remove(decId);
 }
 
 /**
@@ -270,6 +273,38 @@ QEasingCurve RavenEffect::parseEasing(const QString &easingName) const
 /**
  * @brief Interpola suavemente la posición y tamaño usando KWin::AnimationEffect::Translation.
  */
+void RavenEffect::cancelGeometryAnimation(const QString &windowId)
+{
+    if (m_activeGeometryAnimations.contains(windowId)) {
+        const auto anims = m_activeGeometryAnimations.take(windowId);
+        for (quint64 id : anims) {
+            cancel(id);
+        }
+    }
+}
+
+void RavenEffect::cancelBirthAnimation(const QString &windowId)
+{
+    if (m_activeBirthAnimations.contains(windowId)) {
+        const auto anims = m_activeBirthAnimations.take(windowId);
+        for (quint64 id : anims) {
+            cancel(id);
+        }
+    }
+}
+
+/**
+ * @brief Cancela de manera inmediata todas las animaciones activas asociadas a una ventana.
+ */
+void RavenEffect::cancelWindowAnimation(const QString &windowId)
+{
+    cancelGeometryAnimation(windowId);
+    cancelBirthAnimation(windowId);
+}
+
+/**
+ * @brief Interpola suavemente la posición y tamaño usando KWin::AnimationEffect::Translation.
+ */
 void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &startRect, const QRectF &targetRect,
                                         int durationMs, const QString &easingName)
 {
@@ -278,7 +313,9 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
         return;
     }
 
-    cancelWindowAnimation(windowId);
+    // Cancelar únicamente animaciones de traslación/geometría previas,
+    // preservando la animación de nacimiento (scale/opacity) si está en curso
+    cancelGeometryAnimation(windowId);
 
     if (durationMs <= 0 || durationMs > 300) {
         durationMs = 130;
@@ -303,12 +340,13 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
                                   KWin::FPx2(deltaX, deltaY));
 
         if (posAnim != 0) {
-            m_activeAnimations[windowId].append(posAnim);
+            m_activeGeometryAnimations[windowId].append(posAnim);
         }
     }
 
-    // 2. Animación de escala
-    if (targetRect.width() > 0.0 && targetRect.height() > 0.0 &&
+    // 2. Animación de escala por geometría (solo si no hay animación de nacimiento activa con escala central)
+    if (!m_activeBirthAnimations.contains(windowId) &&
+        targetRect.width() > 0.0 && targetRect.height() > 0.0 &&
         startRect.width() > 0.0 && startRect.height() > 0.0) {
         qreal scaleX = startRect.width() / targetRect.width();
         qreal scaleY = startRect.height() / targetRect.height();
@@ -327,7 +365,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
                                         KWin::FPx2(scaleX, scaleY));
 
             if (scaleAnim != 0) {
-                m_activeAnimations[windowId].append(scaleAnim);
+                m_activeGeometryAnimations[windowId].append(scaleAnim);
             }
         }
     }
@@ -384,7 +422,7 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
         return;
     }
 
-    cancelWindowAnimation(windowId);
+    cancelBirthAnimation(windowId);
 
     if (durationMs <= 0) {
         durationMs = 140;
@@ -415,21 +453,8 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
                                   0,
                                   KWin::FPx2(0.0, 0.0));
 
-    if (scaleAnim != 0) m_activeAnimations[windowId].append(scaleAnim);
-    if (opacityAnim != 0) m_activeAnimations[windowId].append(opacityAnim);
-}
-
-/**
- * @brief Cancela de manera inmediata todas las animaciones activas asociadas a una ventana.
- */
-void RavenEffect::cancelWindowAnimation(const QString &windowId)
-{
-    if (m_activeAnimations.contains(windowId)) {
-        const auto anims = m_activeAnimations.take(windowId);
-        for (quint64 id : anims) {
-            cancel(id);
-        }
-    }
+    if (scaleAnim != 0) m_activeBirthAnimations[windowId].append(scaleAnim);
+    if (opacityAnim != 0) m_activeBirthAnimations[windowId].append(opacityAnim);
 }
 
 /**

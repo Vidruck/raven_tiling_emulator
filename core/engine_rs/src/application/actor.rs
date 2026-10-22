@@ -111,7 +111,11 @@ impl RavenControllerActor {
                     match event {
                         CompositorEvent::WindowDiscovered(window) => {
                             self.controller.handle_delta_change(window);
-                            let _ = self.controller.commit_layout();
+                            if let Ok(cmds) = self.controller.commit_layout() {
+                                if !cmds.is_empty() {
+                                    let _ = out_tx.send(cmds).await;
+                                }
+                            }
                         }
                         CompositorEvent::WindowClosed(window_id) => {
                             self.initialized_pip_windows.remove(&window_id);
@@ -125,7 +129,11 @@ impl RavenControllerActor {
                             engine
                                 .maximized_windows
                                 .retain(|id| id != &window_id);
-                            let _ = self.controller.commit_layout();
+                            if let Ok(cmds) = self.controller.commit_layout() {
+                                if !cmds.is_empty() {
+                                    let _ = out_tx.send(cmds).await;
+                                }
+                            }
                         }
                         CompositorEvent::WindowStateChanged {
                             window_id,
@@ -153,7 +161,11 @@ impl RavenControllerActor {
                                     win.geometry = geom;
                                 }
                             }
-                            let _ = self.controller.commit_layout();
+                            if let Ok(cmds) = self.controller.commit_layout() {
+                                if !cmds.is_empty() {
+                                    let _ = out_tx.send(cmds).await;
+                                }
+                            }
                         }
                         CompositorEvent::WindowFocused(wid) => {
                             self.active_window_id = wid.clone();
@@ -176,7 +188,11 @@ impl RavenControllerActor {
                             }
                             self.current_topology = topology;
                             if !had_workspaces {
-                                let _ = self.controller.commit_layout();
+                                if let Ok(cmds) = self.controller.commit_layout() {
+                                    if !cmds.is_empty() {
+                                        let _ = out_tx.send(cmds).await;
+                                    }
+                                }
                             }
                         }
                         CompositorEvent::ReleaseQuarantine(window_id) => {
@@ -251,12 +267,17 @@ impl RavenControllerActor {
                                     let target_opt = self.controller.get_target_rect_for_window(&window_id);
 
                                     // Comprobamos si la ventana diverge del objetivo calculado por el motor (±2px)
-                                    let diverged = target_opt.is_some_and(|target| {
-                                        (reported.x - target.x).abs() > 2
-                                            || (reported.y - target.y).abs() > 2
-                                            || (reported.width - target.width).abs() > 2
-                                            || (reported.height - target.height).abs() > 2
-                                    });
+                                    // Si target_opt es None significa que la ventana aún no convergió en last_known_layout
+                                    // (sigue en posición inicial/centrada de nacimiento), por lo que DEBE rectificarse.
+                                    let diverged = match target_opt {
+                                        Some(target) => {
+                                            (reported.x - target.x).abs() > 2
+                                                || (reported.y - target.y).abs() > 2
+                                                || (reported.width - target.width).abs() > 2
+                                                || (reported.height - target.height).abs() > 2
+                                        }
+                                        None => true,
+                                    };
 
                                     // Ventana sin ID explícito al nacer (anónima) o sospechosa por ráfagas
                                     let is_anonymous_or_suspicious = win.is_suspicious || win.resource_class.trim().is_empty();

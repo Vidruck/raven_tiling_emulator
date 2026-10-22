@@ -170,8 +170,12 @@ private:
      */
     void loadBorderConfig();
 
+    void cancelGeometryAnimation(const QString &windowId);
+    void cancelBirthAnimation(const QString &windowId);
+
     RavenEffectAdaptor *m_dbusAdaptor;                      ///< Adaptador para exponer métodos en D-Bus
-    QHash<QString, QList<quint64>> m_activeAnimations;      ///< Mapeo de IDs de ventanas a sus animaciones en curso
+    QHash<QString, QList<quint64>> m_activeGeometryAnimations; ///< Mapeo de IDs a animaciones de geometría/traslación
+    QHash<QString, QList<quint64>> m_activeBirthAnimations;    ///< Mapeo de IDs a animaciones de nacimiento (scale/fade)
     QHash<QUuid, KWin::EffectWindow*> m_windowByUuid;       ///< Mapeo rápido O(1) de UUID a EffectWindow
 
     // Configuración y estado de contornos de ventana
