@@ -91,11 +91,5 @@ KCM.SimpleKCM {
     }
 
     property alias cfg_enableGlassmorphism: glassmorphismCheck.checked
-    property real cfg_islandOpacity: opacitySlider.value / 100.0
-
-    Component.onCompleted: {
-        if (Plasmoid.configuration.islandOpacity !== undefined) {
-            opacitySlider.value = Math.round(Plasmoid.configuration.islandOpacity * 100);
-        }
-    }
+    property alias cfg_islandOpacity: opacitySlider.value
 }

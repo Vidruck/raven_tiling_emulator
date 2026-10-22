@@ -19,10 +19,10 @@
       <min>2</min>
       <max>10</max>
     </entry>
-    <entry name="islandOpacity" type="Double">
-      <default>0.28</default>
-      <min>0.05</min>
-      <max>1.0</max>
+    <entry name="islandOpacity" type="Int">
+      <default>28</default>
+      <min>5</min>
+      <max>100</max>
     </entry>
     <entry name="enableGlassmorphism" type="Bool">
       <default>true</default>

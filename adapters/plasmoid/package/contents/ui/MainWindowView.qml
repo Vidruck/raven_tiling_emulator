@@ -2,7 +2,6 @@
  * @file MainWindowView.qml
  * @brief Vista y panel principal unificado de Raven Launcher y Command Hub en KDE Plasma 6.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
  * @license GPL-3.0
  */
 
@@ -31,6 +30,30 @@ Item {
     property bool appletExpanded: false
     property var currentDate: new Date()
     signal appClicked(string appUrl, string execCmd)
+
+    // Configuración reactiva de apariencia y opacidad de islas
+    readonly property real configIslandOpacity: {
+        var val = (typeof Plasmoid !== "undefined" && Plasmoid.configuration && Plasmoid.configuration.islandOpacity !== undefined)
+            ? Plasmoid.configuration.islandOpacity
+            : 28;
+        return Math.max(5, Math.min(val, 100)) / 100.0;
+    }
+    readonly property bool configEnableGlassmorphism: {
+        return (typeof Plasmoid !== "undefined" && Plasmoid.configuration && Plasmoid.configuration.enableGlassmorphism !== undefined)
+            ? Plasmoid.configuration.enableGlassmorphism
+            : true;
+    }
+
+    onConfigIslandOpacityChanged: {
+        RavenPlugin.RavenTheme.islandOpacityOverride = root.configIslandOpacity;
+    }
+    onConfigEnableGlassmorphismChanged: {
+        RavenPlugin.RavenTheme.enableGlassmorphismOverride = root.configEnableGlassmorphism;
+    }
+    Component.onCompleted: {
+        RavenPlugin.RavenTheme.islandOpacityOverride = root.configIslandOpacity;
+        RavenPlugin.RavenTheme.enableGlassmorphismOverride = root.configEnableGlassmorphism;
+    }
 
     Timer {
         interval: 1000

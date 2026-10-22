@@ -35,8 +35,27 @@ QtObject {
     readonly property bool isDark: RavenPlugin.SystemStats.isDarkTheme ///< true si KDE Plasma opera en modo oscuro.
 
     // ── PROPIEDADES DE GLASSMORPHISM Y TRANSLUCIDEZ PREDICTIVA ──
-    readonly property bool enableGlassmorphism: (typeof Plasmoid !== "undefined" && Plasmoid.configuration && Plasmoid.configuration.enableGlassmorphism !== undefined) ? Plasmoid.configuration.enableGlassmorphism : true
-    readonly property real customOpacity: (typeof Plasmoid !== "undefined" && Plasmoid.configuration && Plasmoid.configuration.islandOpacity !== undefined) ? Plasmoid.configuration.islandOpacity : 0.28
+    property real islandOpacityOverride: -1.0
+    property int enableGlassmorphismOverride: -1
+
+    readonly property bool enableGlassmorphism: {
+        if (enableGlassmorphismOverride >= 0) {
+            return enableGlassmorphismOverride === 1;
+        }
+        return (typeof Plasmoid !== "undefined" && Plasmoid.configuration && Plasmoid.configuration.enableGlassmorphism !== undefined) 
+            ? Plasmoid.configuration.enableGlassmorphism 
+            : true;
+    }
+
+    readonly property real customOpacity: {
+        if (islandOpacityOverride >= 0.0) {
+            return islandOpacityOverride;
+        }
+        var raw = (typeof Plasmoid !== "undefined" && Plasmoid.configuration && Plasmoid.configuration.islandOpacity !== undefined) 
+            ? Plasmoid.configuration.islandOpacity 
+            : 28;
+        return (raw > 1.0) ? (raw / 100.0) : raw;
+    }
 
     // ── FONDOS Y SUPERFICIES ADAPTATIVAS SEGÚN KDE PLASMA ──
     readonly property color windowBackground: RavenPlugin.SystemStats.windowBgColor ///< Color de fondo de ventana raíz.
