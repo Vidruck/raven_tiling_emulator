@@ -22,7 +22,7 @@ Rectangle {
     clip: true
     color: RavenPlugin.RavenTheme.cardBackground
     border.width: 1
-    border.color: RavenPlugin.RavenTheme.cardBackground
+    border.color: RavenPlugin.RavenTheme.cardBorder
 
     property alias active: media.active
     property alias hasPlayer: media.hasPlayer

@@ -44,7 +44,8 @@ PlasmoidItem {
         id: centerDialog
         location: PlasmaCore.Types.Floating
         flags: Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
-        backgroundHints: PlasmaCore.Dialog.StandardBackground
+        // Prevenir que el panel Adaptable fuerce un fondo opaco/sólido de Plasma
+        backgroundHints: PlasmaCore.Dialog.NoBackground
         hideOnWindowDeactivate: true
         visible: false
 

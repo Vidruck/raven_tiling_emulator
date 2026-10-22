@@ -53,9 +53,49 @@ KCM.SimpleKCM {
         SpinBox {
             id: gridRowsSpin
             Kirigami.FormData.label: i18n("Filas Visibles (Grilla Apps):")
-            from: 3
-            to: 30
+            from: 2
+            to: 10
             stepSize: 1
+        }
+
+        Item {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Efecto Glassmorphism y Opacidad")
+        }
+
+        CheckBox {
+            id: glassmorphismCheck
+            Kirigami.FormData.label: i18n("Efecto Cristal Glassmorphism:")
+            text: i18n("Preservar translucidez tenue ante panel Adaptable de Plasma")
+        }
+
+        RowLayout {
+            Kirigami.FormData.label: i18n("Opacidad de Islas:")
+            spacing: 8
+
+            Slider {
+                id: opacitySlider
+                Layout.fillWidth: true
+                from: 5
+                to: 100
+                stepSize: 1
+                value: 28
+            }
+
+            Label {
+                text: opacitySlider.value + "%"
+                Layout.preferredWidth: 35
+                horizontalAlignment: Text.AlignRight
+            }
+        }
+    }
+
+    property alias cfg_enableGlassmorphism: glassmorphismCheck.checked
+    property real cfg_islandOpacity: opacitySlider.value / 100.0
+
+    Component.onCompleted: {
+        if (Plasmoid.configuration.islandOpacity !== undefined) {
+            opacitySlider.value = Math.round(Plasmoid.configuration.islandOpacity * 100);
         }
     }
 }

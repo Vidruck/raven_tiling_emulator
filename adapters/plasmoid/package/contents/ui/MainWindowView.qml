@@ -156,7 +156,7 @@ Item {
     // ── Componente de Isla / Tarjeta (Cristal Satinado Esmerilado) ────────────
     component Island : Rectangle {
         color: RavenPlugin.RavenTheme.cardBackground
-        border.color: RavenPlugin.RavenTheme.cardBackground
+        border.color: RavenPlugin.RavenTheme.cardBorder
         border.width: 1
         radius: RavenPlugin.RavenTheme.radiusLg
         clip: true

@@ -34,15 +34,38 @@ QtObject {
     // ── ESTADO DEL TEMA DINÁMICO (LIGHT / DARK AUTOMÁTICO) ──
     readonly property bool isDark: RavenPlugin.SystemStats.isDarkTheme ///< true si KDE Plasma opera en modo oscuro.
 
+    // ── PROPIEDADES DE GLASSMORPHISM Y TRANSLUCIDEZ PREDICTIVA ──
+    readonly property bool enableGlassmorphism: (typeof Plasmoid !== "undefined" && Plasmoid.configuration && Plasmoid.configuration.enableGlassmorphism !== undefined) ? Plasmoid.configuration.enableGlassmorphism : true
+    readonly property real customOpacity: (typeof Plasmoid !== "undefined" && Plasmoid.configuration && Plasmoid.configuration.islandOpacity !== undefined) ? Plasmoid.configuration.islandOpacity : 0.28
+
     // ── FONDOS Y SUPERFICIES ADAPTATIVAS SEGÚN KDE PLASMA ──
     readonly property color windowBackground: RavenPlugin.SystemStats.windowBgColor ///< Color de fondo de ventana raíz.
     readonly property color viewBackground: RavenPlugin.SystemStats.viewBgColor     ///< Color de fondo de vistas y cuadrículas.
-    readonly property color cardBackground: RavenPlugin.SystemStats.cardBackground ///< Color de fondo para tarjetas e islas.
+    
+    // Color de tarjeta con Glassmorphism puro:
+    // Al usar panel Adaptable, Plasma tiende a forzar un fondo opaco/sólido.
+    // Mediante esta fórmula predictiva extraemos los componentes RGB del fondo del sistema
+    // pero imponemos una opacidad calculada tenue (default ~0.28) y un borde cristalino difuso,
+    // garantizando un efecto cristalino de alta gama sin depender de la opacidad de Plasma.
+    readonly property color cardBackground: {
+        var baseColor = RavenPlugin.SystemStats.cardBackground;
+        if (!enableGlassmorphism) {
+            return baseColor;
+        }
+        var op = Math.max(0.05, Math.min(customOpacity, 1.0));
+        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, op);
+    }
+    
     readonly property color buttonBackground: RavenPlugin.SystemStats.buttonBgColor ///< Color de botones nativo de KDE.
     readonly property color buttonTextColor: RavenPlugin.SystemStats.buttonTextColor ///< Color de texto de botones nativo.
-    readonly property color cardBorder: cardBackground ///< Borde del mismo color que el cuerpo para integrarse sin contraste visible.
-    readonly property color hoverBackground: isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07) ///< Fondo al pasar el cursor (Hover).
-    readonly property color surfaceElevated: isDark ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(0, 0, 0, 0.04) ///< Superficie para sub-islas elevadas.
+    
+    // Borde de cristal biselado (Glass border) que perfila la isla con refracción sutil
+    readonly property color cardBorder: enableGlassmorphism 
+        ? (isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.10))
+        : RavenPlugin.SystemStats.cardBackground
+        
+    readonly property color hoverBackground: isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.09) ///< Fondo al pasar el cursor (Hover).
+    readonly property color surfaceElevated: isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05) ///< Superficie para sub-islas elevadas.
 
     // ── TIPOGRAFÍA Y CONTRASTE DEL SISTEMA ──
     readonly property string fontFamily: RavenPlugin.SystemStats.generalFontFamily ///< Familia de fuentes estándar del sistema.

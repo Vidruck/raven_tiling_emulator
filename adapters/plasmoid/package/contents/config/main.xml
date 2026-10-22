@@ -3,7 +3,6 @@
   @file main.xml
   @brief Esquema KConfigXT de persistencia de configuración para el Plasmoide de Raven en KDE Plasma 6.
   @author Alejandro González Hernández (Vidruck)
-  @version 3.4
   @license GPL-3.0
 -->
 <kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
@@ -17,8 +16,16 @@
     </entry>
     <entry name="gridRows" type="Int">
       <default>3</default>
-      <min>3</min>
-      <max>30</max>
+      <min>2</min>
+      <max>10</max>
+    </entry>
+    <entry name="islandOpacity" type="Double">
+      <default>0.28</default>
+      <min>0.05</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="enableGlassmorphism" type="Bool">
+      <default>true</default>
     </entry>
   </group>
 </kcfg>
