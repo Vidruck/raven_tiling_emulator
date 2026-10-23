@@ -37,7 +37,7 @@ RavenController::RavenController(QObject *parent)
     );
 
     m_pollTimer = new QTimer(this);
-    m_pollTimer->setInterval(1500);
+    m_pollTimer->setInterval(4000);
     connect(m_pollTimer, &QTimer::timeout, this, &RavenController::refreshState);
     m_pollTimer->start();
 

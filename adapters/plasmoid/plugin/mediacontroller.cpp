@@ -20,6 +20,25 @@
 #include <QTemporaryFile>
 #include <QDir>
 #include <QFile>
+#include <QDateTime>
+
+/**
+ * @brief Destructor del controlador multimedia MPRIS.
+ */
+MediaController::~MediaController()
+{
+    if (m_posWatcher) {
+        m_posWatcher->deleteLater();
+        m_posWatcher = nullptr;
+    }
+    if (m_cavaProcess) {
+        m_cavaProcess->disconnect(this);
+        m_cavaProcess->terminate();
+        m_cavaProcess->kill();
+        m_cavaProcess->deleteLater();
+        m_cavaProcess = nullptr;
+    }
+}
 
 /**
  * @brief Constructor del controlador multimedia MPRIS.
@@ -106,7 +125,7 @@ void MediaController::findActivePlayer()
         msgStatus << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("PlaybackStatus");
         
         QString status;
-        QDBusReply<QDBusVariant> replyStatus = bus.call(msgStatus, QDBus::Block, 100);
+        QDBusReply<QDBusVariant> replyStatus = bus.call(msgStatus, QDBus::Block, 25);
         if (replyStatus.isValid()) {
             status = replyStatus.value().variant().toString();
         }
@@ -117,7 +136,7 @@ void MediaController::findActivePlayer()
                                                              QStringLiteral("org.freedesktop.DBus.Properties"),
                                                              QStringLiteral("Get"));
         msgMeta << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("Metadata");
-        QDBusReply<QDBusVariant> replyMeta = bus.call(msgMeta, QDBus::Block, 100);
+        QDBusReply<QDBusVariant> replyMeta = bus.call(msgMeta, QDBus::Block, 25);
 
         bool hasTrack = false;
         if (replyMeta.isValid()) {
@@ -212,7 +231,7 @@ void MediaController::connectToPlayer(const QString &service)
                                                           QStringLiteral("org.freedesktop.DBus.Properties"),
                                                           QStringLiteral("Get"));
         msg << QStringLiteral("org.mpris.MediaPlayer2") << QStringLiteral("Identity");
-        QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 100);
+        QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 30);
         if (reply.isValid()) {
             identityName = reply.value().variant().toString().trimmed();
         }
@@ -464,7 +483,7 @@ void MediaController::updateCavaState()
                 QTextStream out(&cfgFile);
                 out << "[general]\n"
                     << "bars = 31\n"
-                    << "framerate = 60\n"
+                    << "framerate = 30\n"
                     << "autosens = 1\n"
                     << "overshoot = 20\n"
                     << "sensitivity = 240\n"
@@ -527,10 +546,9 @@ void MediaController::updateCavaState()
 void MediaController::stopCavaProcess()
 {
     if (m_cavaProcess) {
+        m_cavaProcess->disconnect(this);
         m_cavaProcess->terminate();
-        if (!m_cavaProcess->waitForFinished(100)) {
-            m_cavaProcess->kill();
-        }
+        m_cavaProcess->kill();
         m_cavaProcess->deleteLater();
         m_cavaProcess = nullptr;
     }
@@ -553,6 +571,12 @@ void MediaController::readCavaOutput()
 
     if (latestLine.isEmpty()) return;
 
+    // Estrangular emisiones a la UI para evitar saturación del hilo de render (máximo ~30 fps)
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - m_lastSpectrumEmitMs < 33) {
+        return;
+    }
+
     QList<QByteArray> parts = latestLine.split(';');
     if (parts.isEmpty()) return;
 
@@ -568,6 +592,7 @@ void MediaController::readCavaOutput()
     }
 
     if (hasUpdate) {
+        m_lastSpectrumEmitMs = now;
         emit spectrumChanged();
     }
 }
@@ -728,7 +753,7 @@ void MediaController::refresh()
                                                           QStringLiteral("org.freedesktop.DBus.Properties"),
                                                           QStringLiteral("Get"));
         msg << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("PlaybackStatus");
-        QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 150);
+        QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 40);
         if (reply.isValid()) {
             m_playbackStatus = reply.value().variant().toString();
             if (m_playbackStatus == QLatin1String("Playing") && m_active) {
@@ -746,7 +771,7 @@ void MediaController::refresh()
                                                           QStringLiteral("org.freedesktop.DBus.Properties"),
                                                           QStringLiteral("Get"));
         msg << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("Metadata");
-        QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 150);
+        QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 40);
         if (reply.isValid()) {
             QVariant var = reply.value().variant();
             if (var.canConvert<QDBusArgument>()) {

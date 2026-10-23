@@ -82,6 +82,7 @@ public:
      * @param parent Puntero opcional al objeto padre Qt.
      */
     explicit MediaController(QObject *parent = nullptr);
+    ~MediaController() override;
 
     /** @return true si hay un reproductor MPRIS2 enlazado. */
     bool hasPlayer() const { return m_hasPlayer; }
@@ -236,6 +237,7 @@ private:
 
     QTimer *m_positionTimer = nullptr;         ///< Temporizador de 1s para progreso y extrapolación.
     QTimer *m_discoveryTimer = nullptr;        ///< Temporizador para descubrimiento de reproductores cuando está activo.
+    qint64 m_lastSpectrumEmitMs = 0;           ///< Timestamp para estrangular emisiones de espectro a la UI.
     QDBusPendingCallWatcher *m_posWatcher = nullptr; ///< Observador de llamada asíncrona a D-Bus.
     bool m_userInteracting = false;            ///< Bandera para ignorar consultas obsoletas de posición mientras el usuario salta en la barra.
 };
