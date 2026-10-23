@@ -74,17 +74,7 @@ RavenEffect::RavenEffect()
         for (auto *win : windows) {
             if (win) {
                 m_windowByUuid.insert(win->internalId(), win);
-                connect(win, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
-                connect(win, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
-                connect(win, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
-                if (win->window()) {
-                    connect(win->window(), &KWin::Window::windowClassChanged, win, [this, win]() {
-                        if (m_bordersEnabled) updateBorder(win);
-                    });
-                    connect(win->window(), &KWin::Window::captionChanged, win, [this, win]() {
-                        if (m_bordersEnabled) updateBorder(win);
-                    });
-                }
+                setupWindowConnections(win);
 
                 if (m_bordersEnabled) {
                     updateBorder(win);
@@ -106,15 +96,6 @@ RavenEffect::~RavenEffect()
         disconnect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
         disconnect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &RavenEffect::slotWindowClosed);
         disconnect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &RavenEffect::slotWindowActivated);
-
-        const auto windows = KWin::effects->stackingOrder();
-        for (auto *win : windows) {
-            if (win) {
-                disconnect(win, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
-                disconnect(win, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
-                disconnect(win, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
-            }
-        }
     }
 
     // Limpieza de todos los bordes nativos
@@ -184,6 +165,56 @@ void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
 }
 
 /**
+ * @brief Conecta todos los eventos de ciclo de vida, buffer, maximización y superficie para una ventana.
+ */
+void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
+{
+    if (!w) {
+        return;
+    }
+
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
+    connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
+    connect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
+    connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this, [this, w]() {
+        if (m_bordersEnabled) updateBorder(w);
+    });
+
+    if (w->window()) {
+        connect(w->window(), &KWin::Window::windowClassChanged, this, [this, w]() {
+            if (m_bordersEnabled) updateBorder(w);
+        });
+        connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
+            if (m_bordersEnabled) updateBorder(w);
+        });
+        connect(w->window(), &KWin::Window::readyForPaintingChanged, this, [this, w]() {
+            if (m_bordersEnabled) updateBorder(w);
+        });
+        connect(w->window(), &KWin::Window::surfaceChanged, this, [this, w]() {
+            if (m_bordersEnabled) updateBorder(w);
+        });
+        connect(w->window(), &KWin::Window::bufferGeometryChanged, this, [this, w]() {
+            if (m_bordersEnabled) updateBorder(w);
+        });
+    }
+}
+
+/**
+ * @brief Hook ejecutado antes de pintar cada ventana en el ciclo del compositor.
+ * Garantiza que cualquier ventana apta tenga su OutlinedBorderItem activo sin importar el toolkit.
+ */
+void RavenEffect::prePaintWindow(KWin::RenderView *view, KWin::EffectWindow *w, KWin::WindowPrePaintData &data)
+{
+    if (m_bordersEnabled && w && shouldDrawBorder(w)) {
+        auto it = m_borders.find(w);
+        if (it == m_borders.end() || !it->second.item) {
+            updateBorder(w);
+        }
+    }
+    KWin::AnimationEffect::prePaintWindow(view, w, data);
+}
+
+/**
  * @brief Slot que se ejecuta cuando se añade una nueva ventana al compositor.
  */
 void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
@@ -193,19 +224,7 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
     }
 
     m_windowByUuid.insert(w->internalId(), w);
-
-    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
-    connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
-    connect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
-
-    if (w->window()) {
-        connect(w->window(), &KWin::Window::windowClassChanged, w, [this, w]() {
-            if (m_bordersEnabled) updateBorder(w);
-        });
-        connect(w->window(), &KWin::Window::captionChanged, w, [this, w]() {
-            if (m_bordersEnabled) updateBorder(w);
-        });
-    }
+    setupWindowConnections(w);
 
     if (m_bordersEnabled) {
         updateBorder(w);
@@ -225,23 +244,26 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
     disconnect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
     disconnect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
 
+    QString windowId = w->internalId().toString();
+    if (!windowId.isEmpty()) {
+        m_pendingAnimations.remove(windowId);
+        cancelWindowAnimation(windowId);
+    }
+
+    QString hexId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(w), 0, 16);
+    m_pendingAnimations.remove(hexId);
+    cancelWindowAnimation(hexId);
+
+    QString decId = QString::number(reinterpret_cast<quintptr>(w));
+    m_pendingAnimations.remove(decId);
+    cancelWindowAnimation(decId);
+
     removeBorder(w);
     m_windowByUuid.remove(w->internalId());
 
     if (m_lastActiveWindow == w) {
         m_lastActiveWindow.clear();
     }
-
-    QString windowId = w->internalId().toString();
-    if (!windowId.isEmpty()) {
-        cancelWindowAnimation(windowId);
-    }
-
-    QString hexId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(w), 0, 16);
-    cancelWindowAnimation(hexId);
-
-    QString decId = QString::number(reinterpret_cast<quintptr>(w));
-    cancelWindowAnimation(decId);
 }
 
 /**
@@ -259,6 +281,9 @@ KWin::EffectWindow *RavenEffect::findWindowById(const QString &windowId) const
         auto it = m_windowByUuid.constFind(uuid);
         if (it != m_windowByUuid.cend() && it.value()) {
             return it.value();
+        }
+        if (auto *win = KWin::effects->findWindow(uuid)) {
+            return win;
         }
     }
 
@@ -352,35 +377,35 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
         return;
     }
 
-    // Cancelar únicamente animaciones de traslación/geometría previas,
-    // preservando la animación de nacimiento (scale/opacity) si está en curso
     cancelGeometryAnimation(windowId);
 
     if (durationMs <= 0 || durationMs > 500) {
-        durationMs = 140;
+        durationMs = 130;
     }
+
+    const QRectF currentGeom = w->frameGeometry();
+
+    // Coordinación de procesos: si el script de KWin aún no ha aplicado la geometría objetivo (targetRect),
+    // almacenamos la animación pendiente para que slotWindowGeometryChanged la tome en t=0 exacto
+    if (currentGeom != targetRect) {
+        m_pendingAnimations[windowId] = { startRect, targetRect, durationMs, easingName };
+        return;
+    }
+
+    // La ventana ya está en targetRect en KWin: aplicar FLIP limpio inmediato
+    m_pendingAnimations.remove(windowId);
 
     QEasingCurve curve = parseEasing(easingName);
 
-    // FLIP Robusto:
-    // w->frameGeometry() puede ya ser targetRect (si KWin script ya actualizó la geometría)
-    // o todavía puede ser startRect (si KWin script aún no ha procesado el cambio en el compositor).
-    // Para ser completamente inmune a carreras de sincronización entre D-Bus y el compositor:
-    // Calculamos el offset relativo a la geometría actual G = w->frameGeometry():
-    // Al inicio (t=0), la posición visual es G + from = startRect.
-    // Al final (t=1), la posición visual es G + to = targetRect.
-    const QRectF currentGeom = w->frameGeometry();
     qreal fromX = startRect.x() - currentGeom.x();
     qreal fromY = startRect.y() - currentGeom.y();
-    qreal toX = targetRect.x() - currentGeom.x();
-    qreal toY = targetRect.y() - currentGeom.y();
 
-    if (qAbs(fromX - toX) > 0.5 || qAbs(fromY - toY) > 0.5) {
+    if (qAbs(fromX) > 0.5 || qAbs(fromY) > 0.5) {
         quint64 posAnim = animate(w,
                                   KWin::AnimationEffect::Translation,
                                   0,
                                   std::chrono::milliseconds(durationMs),
-                                  KWin::FPx2(toX, toY),
+                                  KWin::FPx2(0.0, 0.0),
                                   curve,
                                   0,
                                   KWin::FPx2(fromX, fromY));
@@ -398,10 +423,8 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
         
         qreal fromScaleX = startRect.width() / currentGeom.width();
         qreal fromScaleY = startRect.height() / currentGeom.height();
-        qreal toScaleX = targetRect.width() / currentGeom.width();
-        qreal toScaleY = targetRect.height() / currentGeom.height();
 
-        if (qAbs(fromScaleX - toScaleX) > 0.005 || qAbs(fromScaleY - toScaleY) > 0.005) {
+        if (qAbs(fromScaleX - 1.0) > 0.005 || qAbs(fromScaleY - 1.0) > 0.005) {
             uint metaScale = 0;
             setMetaData(SourceAnchor, Anchor::Left | Anchor::Top, metaScale);
 
@@ -409,7 +432,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
                                         KWin::AnimationEffect::Scale,
                                         metaScale,
                                         std::chrono::milliseconds(durationMs),
-                                        KWin::FPx2(toScaleX, toScaleY),
+                                        KWin::FPx2(1.0, 1.0),
                                         curve,
                                         0,
                                         KWin::FPx2(fromScaleX, fromScaleY));
@@ -419,6 +442,8 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
             }
         }
     }
+
+    w->addRepaintFull();
 }
 
 /**
@@ -608,9 +633,11 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
     const QString role = w->windowRole().toLower();
     const QString cap = w->caption().toLower();
 
-    // Si aún no tiene clase ni título (ventana Wayland recién creada), esperar a que se pueblen
+    // Si aún no tiene clase ni título (ventana Wayland recién creada), solo descartar si no es ventana normal ni diálogo
     if (cls.trimmed().isEmpty() && cap.trimmed().isEmpty()) {
-        return false;
+        if (!w->isNormalWindow() && !w->isDialog()) {
+            return false;
+        }
     }
 
     if (cls.contains(QStringLiteral("spectacle"))
@@ -900,6 +927,18 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
             data.captionConnection = connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
                 updateBorder(w);
             });
+            data.readyConnection = connect(w->window(), &KWin::Window::readyForPaintingChanged, this, [this, w]() {
+                updateBorder(w);
+            });
+            data.surfaceConnection = connect(w->window(), &KWin::Window::surfaceChanged, this, [this, w]() {
+                updateBorder(w);
+            });
+            data.bufferConnection = connect(w->window(), &KWin::Window::bufferGeometryChanged, this, [this, w]() {
+                updateBorder(w);
+            });
+            data.maximizeConnection = connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this, [this, w]() {
+                updateBorder(w);
+            });
 #if defined(HAVE_KDECORATION)
             if (auto *decor = w->window()->decoration()) {
                 data.decorationConnection = connect(decor, &KDeco::Decoration::borderRadiusChanged, this, [this, w]() {
@@ -910,6 +949,7 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
         }
         m_borders.emplace(w, std::move(data));
     }
+    w->addRepaintFull();
 #endif
 }
 
@@ -924,10 +964,15 @@ void RavenEffect::removeBorder(KWin::EffectWindow *w)
         disconnect(it->second.classConnection);
         disconnect(it->second.captionConnection);
         disconnect(it->second.decorationConnection);
+        disconnect(it->second.readyConnection);
+        disconnect(it->second.surfaceConnection);
+        disconnect(it->second.bufferConnection);
+        disconnect(it->second.maximizeConnection);
 #ifdef HAVE_KWIN_OUTLINED_BORDER
         it->second.item.reset();
 #endif
         m_borders.erase(it);
+        w->addRepaintFull();
     }
 }
 
@@ -954,10 +999,87 @@ void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
  */
 void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::RectF &oldGeometry)
 {
-    Q_UNUSED(oldGeometry);
+    if (!w) {
+        return;
+    }
+
     if (m_bordersEnabled) {
         updateBorder(w);
     }
+
+    if (w->isUserMove() || w->isUserResize()) {
+        return;
+    }
+
+    const QRectF currentGeom = w->frameGeometry();
+    if (oldGeometry.isEmpty() || currentGeom.isEmpty() || oldGeometry == currentGeom) {
+        return;
+    }
+
+    const QString wid = w->internalId().toString();
+    int durationMs = 130;
+    QString easingName = QStringLiteral("EaseOutCubic");
+    QRectF startRect = oldGeometry;
+
+    auto it = m_pendingAnimations.find(wid);
+    if (it != m_pendingAnimations.end()) {
+        if (!it->startRect.isEmpty()) {
+            startRect = it->startRect;
+        }
+        durationMs = it->durationMs;
+        easingName = it->easing;
+        m_pendingAnimations.erase(it);
+    }
+
+    cancelGeometryAnimation(wid);
+
+    QEasingCurve curve = parseEasing(easingName);
+
+    qreal fromX = startRect.x() - currentGeom.x();
+    qreal fromY = startRect.y() - currentGeom.y();
+
+    if (qAbs(fromX) > 0.5 || qAbs(fromY) > 0.5) {
+        quint64 posAnim = animate(w,
+                                  KWin::AnimationEffect::Translation,
+                                  0,
+                                  std::chrono::milliseconds(durationMs),
+                                  KWin::FPx2(0.0, 0.0),
+                                  curve,
+                                  0,
+                                  KWin::FPx2(fromX, fromY));
+
+        if (posAnim != 0) {
+            m_activeGeometryAnimations[wid].append(posAnim);
+        }
+    }
+
+    if (!m_activeBirthAnimations.contains(wid) &&
+        startRect.width() > 0.0 && startRect.height() > 0.0 &&
+        currentGeom.width() > 0.0 && currentGeom.height() > 0.0) {
+
+        qreal fromScaleX = startRect.width() / currentGeom.width();
+        qreal fromScaleY = startRect.height() / currentGeom.height();
+
+        if (qAbs(fromScaleX - 1.0) > 0.005 || qAbs(fromScaleY - 1.0) > 0.005) {
+            uint metaScale = 0;
+            setMetaData(SourceAnchor, Anchor::Left | Anchor::Top, metaScale);
+
+            quint64 scaleAnim = animate(w,
+                                        KWin::AnimationEffect::Scale,
+                                        metaScale,
+                                        std::chrono::milliseconds(durationMs),
+                                        KWin::FPx2(1.0, 1.0),
+                                        curve,
+                                        0,
+                                        KWin::FPx2(fromScaleX, fromScaleY));
+
+            if (scaleAnim != 0) {
+                m_activeGeometryAnimations[wid].append(scaleAnim);
+            }
+        }
+    }
+
+    w->addRepaintFull();
 }
 
 /**

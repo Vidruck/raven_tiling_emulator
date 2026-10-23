@@ -162,6 +162,12 @@ impl CompositorBackend for KWinBackend {
 
                     KWinBridgeMessage::SyncState { payload_json, reply } => {
                         if let Ok((workspaces, windows, topology)) = parse_payload(&payload_json) {
+                            {
+                                let mut geom_guard = last_known_geoms_clone.write().await;
+                                for win in &windows {
+                                    geom_guard.insert(win.window_id.clone(), win.geometry);
+                                }
+                            }
                             // Emitir cambio de topología universal
                             let _ = event_tx.send(CompositorEvent::TopologyChanged(topology)).await;
 
@@ -177,6 +183,11 @@ impl CompositorBackend for KWinBackend {
 
                     KWinBridgeMessage::SyncWindowDelta { delta_json, reply } => {
                         if let Ok(win) = serde_json::from_str::<KWinWindow>(&delta_json) {
+                            {
+                                let mut geom_guard = last_known_geoms_clone.write().await;
+                                geom_guard.insert(win.id.clone(), Rect::new(win.x, win.y, win.w, win.h));
+                            }
+
                             let ws_id = if !win.ws.is_empty() {
                                 win.ws
                             } else {
@@ -231,6 +242,10 @@ impl CompositorBackend for KWinBackend {
                         geom_guard.insert(window_id, Rect::new(x, y, width, height));
                     }
                     KWinBridgeMessage::WindowClosed { window_id, reply } => {
+                        {
+                            let mut geom_guard = last_known_geoms_clone.write().await;
+                            geom_guard.remove(&window_id);
+                        }
                         let _ = event_tx.send(CompositorEvent::WindowClosed(window_id)).await;
                         let _ = reply.send(Vec::new());
                     }

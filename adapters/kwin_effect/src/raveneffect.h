@@ -35,6 +35,10 @@
 #include <memory>
 #include <unordered_map>
 
+namespace KWin {
+class RenderView;
+}
+
 class RavenEffectAdaptor;
 
 /**
@@ -122,6 +126,11 @@ public:
 
 protected:
     /**
+     * @brief Invocado por KWin antes de pintar cada ventana. Garantiza contorno activo al instante.
+     */
+    void prePaintWindow(KWin::RenderView *view, KWin::EffectWindow *w, KWin::WindowPrePaintData &data) override;
+
+    /**
      * @brief Invocado por KWin cuando una animación concluye de forma natural.
      * @param w Ventana animada.
      * @param a Atributo animado.
@@ -195,6 +204,7 @@ private:
      */
     void loadBorderConfig();
 
+    void setupWindowConnections(KWin::EffectWindow *w);
     void cancelGeometryAnimation(const QString &windowId);
     void cancelBirthAnimation(const QString &windowId);
 
@@ -202,6 +212,14 @@ private:
     QHash<QString, QList<quint64>> m_activeGeometryAnimations; ///< Mapeo de IDs a animaciones de geometría/traslación
     QHash<QString, QList<quint64>> m_activeBirthAnimations;    ///< Mapeo de IDs a animaciones de nacimiento (scale/fade)
     QHash<QUuid, KWin::EffectWindow*> m_windowByUuid;       ///< Mapeo rápido O(1) de UUID a EffectWindow
+
+    struct PendingAnimation {
+        QRectF startRect;
+        QRectF targetRect;
+        int durationMs = 130;
+        QString easing = QStringLiteral("EaseOutCubic");
+    };
+    QHash<QString, PendingAnimation> m_pendingAnimations;   ///< Animaciones FLIP pendientes de sincronizar con geometryChanged
 
     // Configuración y estado de contornos de ventana
     bool m_bordersEnabled = true;                           ///< Habilita el dibujado de contornos
@@ -219,6 +237,10 @@ private:
         QMetaObject::Connection classConnection;
         QMetaObject::Connection captionConnection;
         QMetaObject::Connection decorationConnection;
+        QMetaObject::Connection readyConnection;
+        QMetaObject::Connection surfaceConnection;
+        QMetaObject::Connection bufferConnection;
+        QMetaObject::Connection maximizeConnection;
     };
     std::unordered_map<KWin::EffectWindow*, BorderData> m_borders;       ///< Contornos activos administrados por hardware
 

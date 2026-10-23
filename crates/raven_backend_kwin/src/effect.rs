@@ -70,21 +70,19 @@ impl RavenEffectClient {
 
         let conn_opt = self.connection.read().await.clone();
         if let Some(conn) = conn_opt {
-            tokio::spawn(async move {
-                let call_res = conn
-                    .call_method(
-                        Some("org.kde.kwin.RavenEffect"),
-                        "/Effects/Raven",
-                        Some("org.kde.kwin.RavenEffect"),
-                        "AnimateBatch",
-                        &(json,),
-                    )
-                    .await;
+            let call_res = conn
+                .call_method(
+                    Some("org.kde.kwin.RavenEffect"),
+                    "/Effects/Raven",
+                    Some("org.kde.kwin.RavenEffect"),
+                    "AnimateBatch",
+                    &(json,),
+                )
+                .await;
 
-                if let Err(e) = call_res {
-                    debug!("[EFFECT-CLIENT] Fallo al invocar AnimateBatch (posiblemente efecto inactivo/no cargado): {}", e);
-                }
-            });
+            if let Err(e) = call_res {
+                debug!("[EFFECT-CLIENT] Fallo al invocar AnimateBatch (posiblemente efecto inactivo/no cargado): {}", e);
+            }
         }
     }
 
