@@ -315,8 +315,23 @@ El proyecto está organizado en un **Cargo Workspace** que integra el motor en R
 ## 🛠️ Instalación y Uso
 
 ### Requisitos Previos
-- **KDE Plasma 6** sobre **Wayland**.
-- Compilador de Rust (Cargo) y herramientas base de compilación (`build-essential` / `pkg-config`, `cmake`, `extra-cmake-modules`).
+- **KDE Plasma 6** sobre **Wayland** (Ubuntu 24.10+, Ubuntu 26.04 LTS, Debian Trixie/Sid, Fedora 40+, Arch Linux).
+- Compilador de Rust (Cargo) y herramientas base de compilación (`cmake`, `extra-cmake-modules`).
+
+#### Dependencias según tu distribución:
+- **Debian / Ubuntu (Plasma 6):**
+  ```bash
+  sudo apt update && sudo apt install build-essential cmake extra-cmake-modules cargo rustc pkg-config \
+      kwin-dev libplasma-dev qt6-base-dev qt6-declarative-dev libkf6coreaddons-dev libkf6config-dev libkf6windowsystem-dev libkdecoration3-dev
+  ```
+- **Arch Linux:**
+  ```bash
+  sudo pacman -S --needed base-devel cmake extra-cmake-modules kwin qt6-base qt6-declarative rust
+  ```
+- **Fedora:**
+  ```bash
+  sudo dnf install cmake extra-cmake-modules kwin-devel qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kcoreaddons-devel cargo rust
+  ```
 
 ### Pasos de Instalación y Gestión (TUI Suite)
 ```bash

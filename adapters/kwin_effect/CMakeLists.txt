@@ -33,7 +33,10 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
 )
 
 find_package(KWin REQUIRED)
-find_package(KDecoration3 REQUIRED)
+find_package(KDecoration3 QUIET)
+if(NOT KDecoration3_FOUND)
+    find_package(KDecoration2 QUIET)
+endif()
 
 # Requerido por kcoreaddons_add_plugin / KDECMakeSettings
 if(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
@@ -55,6 +58,13 @@ target_include_directories(kwin4_effect_raven PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/dbus
 )
 
+set(KDECO_LIBRARIES "")
+if(TARGET KDecoration3::KDecoration)
+    list(APPEND KDECO_LIBRARIES KDecoration3::KDecoration)
+elseif(TARGET KDecoration2::KDecoration)
+    list(APPEND KDECO_LIBRARIES KDecoration2::KDecoration)
+endif()
+
 target_link_libraries(kwin4_effect_raven
     PRIVATE
     Qt6::Core
@@ -65,6 +75,6 @@ target_link_libraries(kwin4_effect_raven
     KF6::ConfigCore
     KF6::CoreAddons
     KF6::WindowSystem
-    KDecoration3::KDecoration
+    ${KDECO_LIBRARIES}
     KWin::kwin
 )

@@ -12,7 +12,24 @@
 #include "dbus/raven_effect_adaptor.h"
 #include <effect/effecthandler.h>
 #include <window.h>
+
+#if __has_include(<kdecoration3/decoration.h>)
 #include <kdecoration3/decoration.h>
+namespace KDeco = KDecoration3;
+#define HAVE_KDECORATION 1
+#elif __has_include(<KDecoration3/Decoration>)
+#include <KDecoration3/Decoration>
+namespace KDeco = KDecoration3;
+#define HAVE_KDECORATION 1
+#elif __has_include(<kdecoration2/decoration.h>)
+#include <kdecoration2/decoration.h>
+namespace KDeco = KDecoration2;
+#define HAVE_KDECORATION 1
+#elif __has_include(<KDecoration2/Decoration>)
+#include <KDecoration2/Decoration>
+namespace KDeco = KDecoration2;
+#define HAVE_KDECORATION 1
+#endif
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -106,7 +123,9 @@ RavenEffect::~RavenEffect()
         disconnect(pair.second.classConnection);
         disconnect(pair.second.captionConnection);
         disconnect(pair.second.decorationConnection);
+#ifdef HAVE_KWIN_OUTLINED_BORDER
         pair.second.item.reset();
+#endif
     }
     m_borders.clear();
     m_windowByUuid.clear();
@@ -678,6 +697,10 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
  */
 void RavenEffect::updateBorder(KWin::EffectWindow *w)
 {
+#ifndef HAVE_KWIN_OUTLINED_BORDER
+    Q_UNUSED(w);
+    return;
+#else
     if (!w || !m_bordersEnabled || !shouldDrawBorder(w)) {
         removeBorder(w);
         return;
@@ -699,7 +722,8 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
 
     // Obtener la curvatura real de la ventana reportada nativamente por KWin
     KWin::BorderRadius radius;
-    KDecoration3::Decoration *decor = nullptr;
+#if defined(HAVE_KDECORATION)
+    KDeco::Decoration *decor = nullptr;
     if (w->window()) {
         radius = w->window()->borderRadius();
         decor = w->window()->decoration();
@@ -710,6 +734,11 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
             }
         }
     }
+#else
+    if (w->window()) {
+        radius = w->window()->borderRadius();
+    }
+#endif
 
     KWin::BorderOutline outline(m_borderWidth, color, radius);
     KWin::RectF innerRect(QPointF(0, 0), w->frameGeometry().size());
@@ -720,12 +749,14 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
             it->second.item->setInnerRect(innerRect);
             it->second.item->setOutline(outline);
         }
+#if defined(HAVE_KDECORATION)
         // Reconectar señal de decoración si cambió o se instanció posteriormente
         if (decor && !it->second.decorationConnection) {
-            it->second.decorationConnection = connect(decor, &KDecoration3::Decoration::borderRadiusChanged, this, [this, w]() {
+            it->second.decorationConnection = connect(decor, &KDeco::Decoration::borderRadiusChanged, this, [this, w]() {
                 updateBorder(w);
             });
         }
+#endif
     } else {
         BorderData data;
         data.item = std::make_unique<KWin::OutlinedBorderItem>(innerRect, outline, parentItem);
@@ -739,14 +770,17 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
             data.captionConnection = connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
                 updateBorder(w);
             });
+#if defined(HAVE_KDECORATION)
             if (decor) {
-                data.decorationConnection = connect(decor, &KDecoration3::Decoration::borderRadiusChanged, this, [this, w]() {
+                data.decorationConnection = connect(decor, &KDeco::Decoration::borderRadiusChanged, this, [this, w]() {
                     updateBorder(w);
                 });
             }
+#endif
         }
         m_borders.emplace(w, std::move(data));
     }
+#endif
 }
 
 /**
@@ -760,7 +794,9 @@ void RavenEffect::removeBorder(KWin::EffectWindow *w)
         disconnect(it->second.classConnection);
         disconnect(it->second.captionConnection);
         disconnect(it->second.decorationConnection);
+#ifdef HAVE_KWIN_OUTLINED_BORDER
         it->second.item.reset();
+#endif
         m_borders.erase(it);
     }
 }

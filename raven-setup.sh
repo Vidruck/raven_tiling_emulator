@@ -130,24 +130,155 @@ log_step() {
     echo -e "${MUTED}───────────────────────────────────────────────────────────────────────────────${RESET}"
 }
 
+# --- Detección de Requisitos del Sistema y Multiarch ---
+check_system_prerequisites() {
+    log_step "1" "7" "Validación de Entorno y Sistema"
+
+    # Detección de distribución
+    local distro_id=""
+    local distro_name="Linux Desconocido"
+    if [ -f /etc/os-release ]; then
+        distro_id=$(grep -E '^ID=' /etc/os-release | cut -d= -f2 | tr -d '"')
+        distro_name=$(grep -E '^PRETTY_NAME=' /etc/os-release | cut -d= -f2 | tr -d '"')
+    fi
+    log_info "Distribución detectada: ${distro_name}"
+
+    # Verificación de KDE Plasma
+    if [[ "$XDG_CURRENT_DESKTOP" =~ KDE|Plasma ]] || [[ "$XDG_SESSION_DESKTOP" =~ KDE|Plasma ]] || [ "$KDE_FULL_SESSION" = "true" ]; then
+        local plasma_ver
+        plasma_ver=$(plasmashell --version 2>/dev/null | awk '{print $2}' || true)
+        if [ -n "$plasma_ver" ]; then
+            log_success "Entorno KDE Plasma detectado (v${plasma_ver})"
+            if [[ "$plasma_ver" =~ ^5\. ]]; then
+                log_error "Estás ejecutando KDE Plasma 5 (${plasma_ver}). Raven v4.6+ requiere KDE Plasma 6 sobre Wayland."
+                log_warning "Distribuciones compatibles con Plasma 6: Ubuntu 24.10+, Ubuntu 26.04 LTS, Debian Trixie/Sid, Fedora 40+, Arch Linux."
+                exit 1
+            fi
+        else
+            log_success "Entorno KDE Plasma detectado"
+        fi
+    else
+        log_warning "No se detectó un entorno KDE Plasma activo. Asegúrate de estar corriendo Plasma 6 sobre Wayland."
+    fi
+
+    # Verificación de Cargo / Rust
+    if ! command -v cargo >/dev/null 2>&1; then
+        log_error "Cargo (Rust) no está instalado."
+        case "$distro_id" in
+            ubuntu|debian)
+                log_info "Instálalo en Debian / Ubuntu con: sudo apt install cargo rustc (o vía https://rustup.rs)"
+                ;;
+            arch|manjaro)
+                log_info "Instálalo en Arch Linux con: sudo pacman -S rust"
+                ;;
+            fedora)
+                log_info "Instálalo en Fedora con: sudo dnf install cargo"
+                ;;
+            *)
+                log_info "Instala Rust oficialmente desde: https://rustup.rs"
+                ;;
+        esac
+        exit 1
+    fi
+    log_success "Compilador Rust (Cargo $(cargo --version 2>/dev/null | awk '{print $2}')) disponible"
+
+    # Verificación de herramientas de compilación
+    local missing_tools=()
+    if ! command -v cmake >/dev/null 2>&1; then missing_tools+=("cmake"); fi
+    if ! command -v kpackagetool6 >/dev/null 2>&1; then missing_tools+=("kpackagetool6"); fi
+
+    if [ ${#missing_tools[@]} -gt 0 ]; then
+        log_warning "Herramientas faltantes detectadas: ${missing_tools[*]}"
+        case "$distro_id" in
+            ubuntu|debian)
+                log_info "Para instalar las dependencias necesarias en Debian / Ubuntu ejecuta:"
+                echo -e "   ${ACCENT}sudo apt update && sudo apt install build-essential cmake extra-cmake-modules kwin-dev libplasma-dev qt6-base-dev qt6-declarative-dev libkf6coreaddons-dev libkf6config-dev libkf6windowsystem-dev libkdecoration3-dev${RESET}"
+                ;;
+            arch|manjaro)
+                log_info "Para instalar las dependencias necesarias en Arch Linux ejecuta:"
+                echo -e "   ${ACCENT}sudo pacman -S --needed base-devel cmake extra-cmake-modules kwin qt6-base qt6-declarative${RESET}"
+                ;;
+            fedora)
+                log_info "Para instalar las dependencias necesarias en Fedora ejecuta:"
+                echo -e "   ${ACCENT}sudo dnf install cmake extra-cmake-modules kwin-devel qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kcoreaddons-devel${RESET}"
+                ;;
+        esac
+    fi
+}
+
+# --- Despliegue Robusto Multi-Distribución de Efectos KWin (Arch, Debian, Ubuntu, Fedora) ---
+install_kwin_effect_binary() {
+    local EFFECT_SO="$1"
+    if [ ! -f "$EFFECT_SO" ]; then
+        log_error "No se encontró el binario del efecto: $EFFECT_SO"
+        return 1
+    fi
+
+    log_info "Instalando binario del efecto KWin de forma segura (instalación atómica)..."
+
+    # ── Blindaje anti-crash Plasma 6 ──────────────────────────────────────────
+    # Desactivar temporalmente el efecto en KWin vía D-Bus antes de reemplazarlo
+    qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect kwin4_effect_raven >/dev/null 2>&1 || true
+    kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
+
+    local arch_triplet="$(uname -m)-linux-gnu"
+    local qtpaths_dir="$(qtpaths6 --plugin-dir 2>/dev/null || qtpaths --plugin-dir 2>/dev/null || kf6-config --qt-plugins 2>/dev/null || true)"
+
+    local CANDIDATE_DIRS=()
+    [ -n "$qtpaths_dir" ] && CANDIDATE_DIRS+=("$qtpaths_dir/kwin/effects/plugins")
+    CANDIDATE_DIRS+=(
+        "/usr/lib/${arch_triplet}/qt6/plugins/kwin/effects/plugins"
+        "/usr/lib/x86_64-linux-gnu/qt6/plugins/kwin/effects/plugins"
+        "/usr/lib/aarch64-linux-gnu/qt6/plugins/kwin/effects/plugins"
+        "/usr/lib64/qt6/plugins/kwin/effects/plugins"
+        "/usr/lib/qt6/plugins/kwin/effects/plugins"
+    )
+
+    local installed_system=false
+    for dir in "${CANDIDATE_DIRS[@]}"; do
+        local parent_dir="$(dirname "$dir")"
+        if [ -d "$dir" ] || [ -d "$parent_dir" ]; then
+            if sudo mkdir -p "$dir" 2>/dev/null && sudo install -m 755 "$EFFECT_SO" "$dir/kwin4_effect_raven.so" 2>/dev/null; then
+                installed_system=true
+                log_success "Plugin de efecto instalado en el sistema ($dir/kwin4_effect_raven.so)"
+                break
+            fi
+        fi
+    done
+
+    # Si se instaló en el sistema, remover copias locales para evitar discrepancias
+    if [ "$installed_system" = true ]; then
+        rm -f "$HOME/.local/lib/${arch_triplet}/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
+        rm -f "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
+        rm -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
+    else
+        log_warning "No se pudo instalar con sudo en directorios de sistema. Instalando en ~/.local..."
+        local LOCAL_DIRS=(
+            "$HOME/.local/lib/${arch_triplet}/qt6/plugins/kwin/effects/plugins"
+            "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins"
+            "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
+        )
+        for ldir in "${LOCAL_DIRS[@]}"; do
+            mkdir -p "$ldir" 2>/dev/null || true
+            install -m 755 "$EFFECT_SO" "$ldir/kwin4_effect_raven.so" 2>/dev/null || true
+        done
+        log_success "Plugin de efecto instalado localmente en ~/.local"
+    fi
+
+    # Recargar el efecto dinámicamente en KWin
+    log_info "Recargando efecto en KWin..."
+    qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect kwin4_effect_raven >/dev/null 2>&1 || true
+    log_success "Efecto Nativo de KWin (kwin4_effect_raven) desplegado y habilitado"
+    return 0
+}
+
 # --- Lógica de Instalación ---
 do_install() {
     print_header
     echo -e "${PRIMARY}${BOLD}🚀 Iniciando Instalación Completa de Raven Tiling Emulator...${RESET}\n"
 
-    # 1. Comprobación de Requisitos
-    log_step "1" "7" "Validación de Entorno y Sistema"
-    if [[ "$XDG_CURRENT_DESKTOP" =~ KDE|Plasma ]] || [[ "$XDG_SESSION_DESKTOP" =~ KDE|Plasma ]] || [ "$KDE_FULL_SESSION" = "true" ]; then
-        log_success "Entorno KDE Plasma detectado"
-    else
-        log_warning "No se detectó un entorno KDE Plasma activo. Asegúrate de estar corriendo Plasma 6."
-    fi
-
-    if ! command -v cargo >/dev/null 2>&1; then
-        log_error "Cargo (Rust) no está instalado. Por favor instala Rust: https://rustup.rs"
-        exit 1
-    fi
-    log_success "Compilador Rust (Cargo) disponible"
+    # 1. Comprobación de Requisitos y Plataforma
+    check_system_prerequisites
 
     # 2. Compilación del Motor Rust
     log_step "2" "7" "Compilación del Motor Nativo Rust (Release)"
@@ -240,7 +371,10 @@ EOF
     # Desplegar módulo en rutas locales de QML
     local build_qml_dir="$SOURCE_DIR/adapters/plasmoid/build/plugin/org/kde/plasma/ravenlauncher/plugin"
     if [ -d "$build_qml_dir" ]; then
+        local arch_triplet="$(uname -m)-linux-gnu"
         local qml_paths=(
+            "$HOME/.local/lib/${arch_triplet}/qml/org/kde/plasma/ravenlauncher/plugin"
+            "$HOME/.local/lib/${arch_triplet}/qt6/qml/org/kde/plasma/ravenlauncher/plugin"
             "$HOME/.local/lib/qt6/qml/org/kde/plasma/ravenlauncher/plugin"
             "$HOME/.local/lib64/qt6/qml/org/kde/plasma/ravenlauncher/plugin"
             "$HOME/.local/share/qml/org/kde/plasma/ravenlauncher/plugin"
@@ -251,7 +385,7 @@ EOF
             mkdir -p "$p"
             cp -a "$build_qml_dir"/* "$p/" 2>/dev/null || true
         done
-        local user_qml_path="$HOME/.local/lib/qt6/qml:$HOME/.local/lib64/qt6/qml:$HOME/.local/share/qml"
+        local user_qml_path="$HOME/.local/lib/${arch_triplet}/qml:$HOME/.local/lib/${arch_triplet}/qt6/qml:$HOME/.local/lib/qt6/qml:$HOME/.local/lib64/qt6/qml:$HOME/.local/share/qml"
         systemctl --user set-environment QML2_IMPORT_PATH="$user_qml_path:$QML2_IMPORT_PATH" 2>/dev/null || true
         systemctl --user set-environment QML_IMPORT_PATH="$user_qml_path:$QML_IMPORT_PATH" 2>/dev/null || true
     fi
@@ -266,29 +400,8 @@ EOF
             if [ ! -f "$EFFECT_SO" ] && [ -f "$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so" ]; then
                 EFFECT_SO="$SOURCE_DIR/adapters/kwin_effect/build/kwin4_effect_raven.so"
             fi
-            local SYS_PLUGIN_DIR="/usr/lib64/qt6/plugins/kwin/effects/plugins"
-            local SYS_PLUGIN_DIR_ALT="/usr/lib/qt6/plugins/kwin/effects/plugins"
-
             if [ -f "$EFFECT_SO" ]; then
-                log_info "Instalando binario del efecto KWin de forma segura (instalación atómica)..."
-
-                # ── Blindaje anti-crash Plasma 6 ──────────────────────────────────────────
-                # En Plasma 6 Wayland, invocar 'reconfigure' de KWin o sobrescribir un inode .so en caliente
-                # mientras KWin lo tiene abierto mapeado en memoria (mmap) causa segfaults inmediatos.
-                # 'install' crea un nuevo inode atómicamente para que el proceso en ejecución mantenga su mapeo intacto.
-                kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
-
-                if sudo install -m 755 "$EFFECT_SO" "$SYS_PLUGIN_DIR/kwin4_effect_raven.so" 2>/dev/null || sudo install -m 755 "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/kwin4_effect_raven.so" 2>/dev/null; then
-                    log_success "Plugin de efecto instalado en el sistema ($SYS_PLUGIN_DIR/kwin4_effect_raven.so)"
-                else
-                    log_warning "No se pudo instalar en path del sistema. Instalando en ~/.local..."
-                    mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
-                    install -m 755 "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
-                    install -m 755 "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
-                    log_success "Plugin de efecto instalado localmente en ~/.local"
-                fi
-
-                log_success "Efecto Nativo de KWin (kwin4_effect_raven) desplegado y habilitado en kwinrc"
+                install_kwin_effect_binary "$EFFECT_SO"
             fi
         else
             log_warning "No se pudo compilar el Efecto Nativo de KWin C++ (fallback grácil a animaciones estándar)"
@@ -535,41 +648,7 @@ do_build_kwin_effect() {
         exit 1
     fi
 
-    # ── Blindaje anti-crash Plasma 6 ──────────────────────────────────────────
-    # Desactivar temporalmente el efecto en KWin vía D-Bus antes de reemplazarlo
-    qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect kwin4_effect_raven >/dev/null 2>&1 || true
-
-    kwriteconfig6 --file kwinrc --group Plugins --key kwin4_effect_ravenEnabled true 2>/dev/null || true
-
-    local SYS_PLUGIN_DIR="/usr/lib64/qt6/plugins/kwin/effects/plugins"
-    local SYS_PLUGIN_DIR_ALT="/usr/lib/qt6/plugins/kwin/effects/plugins"
-    local installed_system=false
-
-    # Usar 'install -m 755' para crear un nuevo inodo atómicamente y no corromper la memoria del compositor
-    if sudo install -m 755 "$EFFECT_SO" "$SYS_PLUGIN_DIR/kwin4_effect_raven.so" 2>/dev/null; then
-        installed_system=true
-        log_success "Plugin instalado atómicamente en $SYS_PLUGIN_DIR/kwin4_effect_raven.so"
-    elif sudo install -m 755 "$EFFECT_SO" "$SYS_PLUGIN_DIR_ALT/kwin4_effect_raven.so" 2>/dev/null; then
-        installed_system=true
-        log_success "Plugin instalado atómicamente en $SYS_PLUGIN_DIR_ALT/kwin4_effect_raven.so"
-    fi
-
-    # Si se instaló en el sistema, remover copia obsoleta de ~/.local para evitar discrepancia de versiones
-    if [ "$installed_system" = true ]; then
-        rm -f "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
-        rm -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
-    else
-        log_warning "No se pudo instalar con sudo en /usr/lib. Instalando en ~/.local/lib64..."
-        mkdir -p "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins"
-        install -m 755 "$EFFECT_SO" "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
-        install -m 755 "$EFFECT_SO" "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
-        log_success "Plugin instalado localmente en ~/.local"
-    fi
-
-    # Recargar el efecto dinámicamente en KWin
-    log_info "Recargando efecto en KWin..."
-    qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect kwin4_effect_raven >/dev/null 2>&1 || true
-    log_success "Efecto Nativo de KWin (kwin4_effect_raven) actualizado y recargado dinámicamente"
+    install_kwin_effect_binary "$EFFECT_SO"
 }
 
 # 4. Compilación e Instalación del Plasmoide / Raven Hub
@@ -610,7 +689,10 @@ do_build_plasmoid() {
     # Desplegar módulo en rutas locales de QML
     local build_qml_dir="$SOURCE_DIR/adapters/plasmoid/build/plugin/org/kde/plasma/ravenlauncher/plugin"
     if [ -d "$build_qml_dir" ]; then
+        local arch_triplet="$(uname -m)-linux-gnu"
         local qml_paths=(
+            "$HOME/.local/lib/${arch_triplet}/qml/org/kde/plasma/ravenlauncher/plugin"
+            "$HOME/.local/lib/${arch_triplet}/qt6/qml/org/kde/plasma/ravenlauncher/plugin"
             "$HOME/.local/lib/qt6/qml/org/kde/plasma/ravenlauncher/plugin"
             "$HOME/.local/lib64/qt6/qml/org/kde/plasma/ravenlauncher/plugin"
             "$HOME/.local/share/qml/org/kde/plasma/ravenlauncher/plugin"
@@ -621,7 +703,7 @@ do_build_plasmoid() {
             mkdir -p "$p"
             cp -a "$build_qml_dir"/* "$p/" 2>/dev/null || true
         done
-        local user_qml_path="$HOME/.local/lib/qt6/qml:$HOME/.local/lib64/qt6/qml:$HOME/.local/share/qml"
+        local user_qml_path="$HOME/.local/lib/${arch_triplet}/qml:$HOME/.local/lib/${arch_triplet}/qt6/qml:$HOME/.local/lib/qt6/qml:$HOME/.local/lib64/qt6/qml:$HOME/.local/share/qml"
         systemctl --user set-environment QML2_IMPORT_PATH="$user_qml_path:$QML2_IMPORT_PATH" 2>/dev/null || true
         systemctl --user set-environment QML_IMPORT_PATH="$user_qml_path:$QML_IMPORT_PATH" 2>/dev/null || true
     fi

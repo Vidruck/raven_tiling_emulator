@@ -12,10 +12,20 @@
 #pragma once
 
 #include <effect/animationeffect.h>
+#include <scene/windowitem.h>
+
+#if __has_include(<scene/outlinedborderitem.h>)
+#define HAVE_KWIN_OUTLINED_BORDER 1
 #include <scene/outlinedborderitem.h>
 #include <scene/borderoutline.h>
 #include <scene/borderradius.h>
-#include <scene/windowitem.h>
+#elif __has_include(<kwin/scene/outlinedborderitem.h>)
+#define HAVE_KWIN_OUTLINED_BORDER 1
+#include <kwin/scene/outlinedborderitem.h>
+#include <kwin/scene/borderoutline.h>
+#include <kwin/scene/borderradius.h>
+#endif
+
 #include <QHash>
 #include <QRectF>
 #include <QEasingCurve>
@@ -186,7 +196,9 @@ private:
 
     // Estructura para gestión reactiva de bordes mediante el scene graph nativo de KWin
     struct BorderData {
+#ifdef HAVE_KWIN_OUTLINED_BORDER
         std::unique_ptr<KWin::OutlinedBorderItem> item;
+#endif
         QMetaObject::Connection radiusConnection;
         QMetaObject::Connection classConnection;
         QMetaObject::Connection captionConnection;
