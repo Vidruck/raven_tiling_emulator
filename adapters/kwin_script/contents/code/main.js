@@ -313,7 +313,8 @@ function isWindowNativeFloating(w) {
     var cls = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     var name = w.resourceName ? w.resourceName.toString().toLowerCase() : "";
     var cap = w.caption ? w.caption.toString().toLowerCase() : "";
-    if (cls.indexOf("zuno") !== -1 || name.indexOf("zuno") !== -1 || cap.indexOf("zuno") !== -1) {
+    if (cls.indexOf("zuno") !== -1 || name.indexOf("zuno") !== -1 || cap.indexOf("zuno") !== -1 ||
+        cls.indexOf("raven_gui") !== -1 || name.indexOf("raven_gui") !== -1 || cap.indexOf("raven") !== -1) {
       return true;
     }
 

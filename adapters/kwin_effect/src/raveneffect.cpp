@@ -111,6 +111,7 @@ RavenEffect::~RavenEffect()
     m_borders.clear();
     m_windowByUuid.clear();
     m_borderVerdictCache.clear();
+    m_birthedWindows.clear();
 
     QDBusConnection dbus = QDBusConnection::sessionBus();
     dbus.unregisterObject(QStringLiteral("/Effects/Raven"));
@@ -233,6 +234,27 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
     m_windowByUuid.insert(w->internalId(), w);
     setupWindowConnections(w);
 
+    if (shouldAnimateBirth(w) && !m_birthedWindows.contains(w)) {
+        if (w->window() && !w->window()->readyForPainting()) {
+            const QString wid = w->internalId().toString();
+            QPointer<KWin::Window> winPtr = w->window();
+            auto conn = std::make_shared<QMetaObject::Connection>();
+            *conn = connect(w->window(), &KWin::Window::readyForPaintingChanged, this, [this, wid, winPtr, conn]() {
+                if (winPtr && winPtr->readyForPainting()) {
+                    disconnect(*conn);
+                    KWin::EffectWindow *ew = findWindowById(wid);
+                    if (ew && !m_birthedWindows.contains(ew)) {
+                        m_birthedWindows.insert(ew);
+                        animateWindowBirth(ew, 180);
+                    }
+                }
+            });
+        } else {
+            m_birthedWindows.insert(w);
+            animateWindowBirth(w, 180);
+        }
+    }
+
     if (m_bordersEnabled) {
         updateBorder(w);
     }
@@ -251,6 +273,7 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
     disconnect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
     disconnect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
     invalidateBorderVerdict(w);
+    m_birthedWindows.remove(w);
 
     QString windowId = w->internalId().toString();
     if (!windowId.isEmpty()) {
@@ -498,20 +521,20 @@ void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
 /**
  * @brief Animación de nacimiento controlada (fade-in + zoom elástico) llamada por D-Bus.
  */
-void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
+void RavenEffect::animateWindowBirth(KWin::EffectWindow *w, int durationMs)
 {
-    KWin::EffectWindow *w = findWindowById(windowId);
     if (!w) {
         return;
     }
 
+    const QString windowId = w->internalId().toString();
     cancelBirthAnimation(windowId);
 
     if (durationMs <= 0) {
-        durationMs = 140;
+        durationMs = 180;
     }
 
-    QEasingCurve curve(QEasingCurve::OutElastic);
+    QEasingCurve curve(QEasingCurve::OutBack);
     QEasingCurve opacityCurve(QEasingCurve::OutCubic);
 
     uint metaCenter = 0;
@@ -524,13 +547,13 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
                                 KWin::FPx2(1.0, 1.0),
                                 curve,
                                 0,
-                                KWin::FPx2(0.85, 0.85));
+                                KWin::FPx2(0.88, 0.88));
 
     uint metaOpacity = 0;
     quint64 opacityAnim = animate(w,
                                   KWin::AnimationEffect::Opacity,
                                   metaOpacity,
-                                  std::chrono::milliseconds(static_cast<int>(durationMs * 0.8)),
+                                  std::chrono::milliseconds(static_cast<int>(durationMs * 0.85)),
                                   KWin::FPx2(1.0, 1.0),
                                   opacityCurve,
                                   0,
@@ -538,6 +561,14 @@ void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
 
     if (scaleAnim != 0) m_activeBirthAnimations[windowId].append(scaleAnim);
     if (opacityAnim != 0) m_activeBirthAnimations[windowId].append(opacityAnim);
+}
+
+void RavenEffect::animateWindowBirth(const QString &windowId, int durationMs)
+{
+    KWin::EffectWindow *w = findWindowById(windowId);
+    if (w) {
+        animateWindowBirth(w, durationMs);
+    }
 }
 
 /**
@@ -610,6 +641,68 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
     return verdict;
 }
 
+bool RavenEffect::shouldAnimateBirth(KWin::EffectWindow *w) const
+{
+    if (!w) {
+        return false;
+    }
+
+    if (w->isDeleted()
+        || w->isMinimized()
+        || w->isHidden()
+        || w->isFullScreen()) {
+        return false;
+    }
+
+    // Excluir elementos propios del sistema (paneles, menús de paneles, bloqueo de pantalla)
+    if (w->isLockScreen()
+        || w->isDesktop()
+        || w->isDock()
+        || w->isNotification()
+        || w->isCriticalNotification()
+        || w->isTooltip()
+        || w->isAppletPopup()
+        || w->isOnScreenDisplay()
+        || w->isComboBox()
+        || w->isDNDIcon()
+        || w->isDropdownMenu()
+        || w->isOutline()
+        || w->isInputMethod()
+        || w->isSpecialWindow()
+        || w->isSplash()) {
+        return false;
+    }
+
+    const QString cls = w->windowClass().toLower();
+    const QString role = w->windowRole().toLower();
+
+    static const QStringList kSystemBlacklist = {
+        QStringLiteral("plasmashell"),
+        QStringLiteral("kscreenlocker"),
+        QStringLiteral("kscreenlocker_greet"),
+        QStringLiteral("plasma-lockscreen"),
+        QStringLiteral("plasmalogin"),
+        QStringLiteral("sddm"),
+        QStringLiteral("ksplash"),
+        QStringLiteral("ksplashqml"),
+        QStringLiteral("krunner"),
+        QStringLiteral("org.kde.krunner"),
+        QStringLiteral("kwin_wayland"),
+        QStringLiteral("kwin_x11"),
+        QStringLiteral("xwaylandvideobridge"),
+        QStringLiteral("org.kde.kscreen.osd")
+    };
+
+    for (const QString &sc : kSystemBlacklist) {
+        if (cls.contains(sc) || role.contains(sc)) {
+            return false;
+        }
+    }
+
+    // Apto para cualquier ventana de aplicación (normal, diálogo, flotante, utilitaria o popup de app)
+    return w->isNormalWindow() || w->isDialog() || w->isUtility() || (w->isPopupWindow() && !cls.isEmpty());
+}
+
 /**
  * @brief Computa exhaustivamente las heurísticas de elegibilidad visual de una ventana.
  */
@@ -652,12 +745,10 @@ bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
         || w->isComboBox()
         || w->isDNDIcon()
         || w->isDropdownMenu()
-        || w->isPopupMenu()
         || w->isOutline()
         || w->isInputMethod()
         || w->isSpecialWindow()
-        || w->isSplash()
-        || !w->isManaged()) {
+        || w->isSplash()) {
         return false;
     }
 
@@ -665,17 +756,15 @@ bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
     const QString role = w->windowRole().toLower();
     const QString cap = w->caption().toLower();
 
-    // Si aún no tiene clase ni título (ventana Wayland recién creada), solo descartar si no es ventana normal ni diálogo
+    // Si aún no tiene clase ni título (ventana Wayland recién creada), solo descartar si no es ventana normal, diálogo o utilitaria
     if (cls.trimmed().isEmpty() && cap.trimmed().isEmpty()) {
-        if (!w->isNormalWindow() && !w->isDialog()) {
+        if (!w->isNormalWindow() && !w->isDialog() && !w->isUtility()) {
             return false;
         }
     }
 
-    if (cls.contains(QStringLiteral("spectacle"))
-        || cls.contains(QStringLiteral("flameshot"))
-        || cls.contains(QStringLiteral("ksnip"))
-        || cls.contains(QStringLiteral("plasma-welcome"))
+    // Excluir elementos del sistema: bloqueo, login y paneles
+    if (cls.contains(QStringLiteral("plasma-welcome"))
         || cls.contains(QStringLiteral("plasma.welcome"))
         || cls.contains(QStringLiteral("welcome"))
         || cls.contains(QStringLiteral("plasmashell"))
@@ -684,9 +773,6 @@ bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
         || cls.contains(QStringLiteral("lockscreen"))
         || cls.contains(QStringLiteral("plasmalogin"))
         || cls.contains(QStringLiteral("sddm"))
-        || cls.contains(QStringLiteral("polkit"))
-        || cls.contains(QStringLiteral("desktopdialog"))
-        || role.contains(QStringLiteral("spectacle"))
         || role.contains(QStringLiteral("welcome"))
         || role.contains(QStringLiteral("lockscreen"))
         || role.contains(QStringLiteral("login"))
@@ -702,6 +788,8 @@ bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
+    // Lista negra de componentes exclusivos del entorno KDE/Plasma
+    // Nota: polkits, confirmaciones de autenticación y herramientas de usuario se permiten
     static const QStringList kSystemClasses = {
         QStringLiteral("ksplash"),
         QStringLiteral("ksplashqml"),
@@ -719,15 +807,11 @@ bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
         QStringLiteral("kwin_x11"),
         QStringLiteral("xwaylandvideobridge"),
         QStringLiteral("plasma-interactiveconsole"),
-        QStringLiteral("org.kde.polkit-kde-authentication-agent"),
-        QStringLiteral("polkit-kde-authentication-agent"),
-        QStringLiteral("ksshaskpass"),
         QStringLiteral("kded"),
         QStringLiteral("org.kde.kdeconnect"),
         QStringLiteral("greeter"),
         QStringLiteral("org.kde.plasma.emojier"),
         QStringLiteral("org.kde.kscreen.osd"),
-        QStringLiteral("org.kde.spectacle"),
         QStringLiteral("org.kde.plasma-welcome")
     };
     for (const QString &sc : kSystemClasses) {
@@ -748,15 +832,8 @@ bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
-    if (w->findModal() != nullptr) {
-        return false;
-    }
-
-    if (w->isDialog() && w->transientFor() != nullptr && KWin::effects && KWin::effects->activeWindow() != w) {
-        return false;
-    }
-
-    return w->isNormalWindow() || w->isDialog();
+    // Ventanas normales, diálogos (polkit, confirmaciones, modales), utilitarias o popups de aplicación
+    return w->isNormalWindow() || w->isDialog() || w->isUtility() || (w->isPopupWindow() && !cls.isEmpty());
 }
 
 /**

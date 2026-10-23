@@ -90,7 +90,8 @@ public:
      * @param windowId ID interno (QUuid string) de la ventana.
      * @param durationMs Duración en milisegundos para el efecto de escalado/fade.
      */
-    void animateWindowBirth(const QString &windowId, int durationMs);
+    void animateWindowBirth(const QString &windowId, int durationMs = 180);
+    void animateWindowBirth(KWin::EffectWindow *w, int durationMs = 180);
 
     /**
      * @brief Cancela de manera inmediata cualquier animación activa sobre la ventana especificada.
@@ -245,7 +246,9 @@ private:
     std::unordered_map<KWin::EffectWindow*, BorderData> m_borders;       ///< Contornos activos administrados por hardware
     bool computeShouldDrawBorder(KWin::EffectWindow *w) const;
     void invalidateBorderVerdict(const KWin::EffectWindow *w);
+    bool shouldAnimateBirth(KWin::EffectWindow *w) const;
     mutable QHash<const KWin::EffectWindow*, bool> m_borderVerdictCache; ///< Caché O(1) de elegibilidad para no reevaluar en cada frame
+    QSet<const KWin::EffectWindow*> m_birthedWindows;                   ///< Registro de ventanas nacientes animadas
 
     QPointer<KWin::EffectWindow> m_lastActiveWindow;        ///< Rastreo seguro de la ventana previamente activa
 };
