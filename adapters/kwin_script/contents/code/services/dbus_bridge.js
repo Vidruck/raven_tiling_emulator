@@ -344,6 +344,7 @@ function bindWindow(w) {
 
     if (w.captionChanged !== undefined) {
       w.captionChanged.connect(function () {
+        delete w.__raven_manageable;
         if (w && !w.deleted && !w.__raven_mutating) {
           syncWindowDelta(w);
         }
