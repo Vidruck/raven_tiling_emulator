@@ -57,16 +57,14 @@ Rectangle {
         }
     }
     
-    // Gradient overlay para contraste, profundidad y cuerpo sólido
+    // Gradient overlay para contraste, profundidad y cuerpo de vidrio
     Rectangle {
         anchors.fill: parent
         radius: RavenPlugin.RavenTheme.radiusLg
         gradient: Gradient {
             GradientStop {
                 position: 0.0
-                color: RavenPlugin.RavenTheme.isDark
-                    ? Qt.rgba(RavenPlugin.RavenTheme.cardBackground.r, RavenPlugin.RavenTheme.cardBackground.g, RavenPlugin.RavenTheme.cardBackground.b, 0.50)
-                    : Qt.rgba(RavenPlugin.RavenTheme.cardBackground.r, RavenPlugin.RavenTheme.cardBackground.g, RavenPlugin.RavenTheme.cardBackground.b, 0.50)
+                color: RavenPlugin.RavenTheme.cardBackground
             }
             GradientStop {
                 position: 1.0

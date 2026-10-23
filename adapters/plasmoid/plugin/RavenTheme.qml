@@ -64,15 +64,16 @@ QtObject {
     // Color de tarjeta con Glassmorphism puro:
     // Al usar panel Adaptable, Plasma tiende a forzar un fondo opaco/sólido.
     // Mediante esta fórmula predictiva extraemos los componentes RGB del fondo del sistema
-    // pero imponemos una opacidad calculada tenue (default ~0.28) y un borde cristalino difuso,
-    // garantizando un efecto cristalino de alta gama sin depender de la opacidad de Plasma.
+    // convirtiéndolo explícitamente con Qt.color() para evitar que propiedades .r, .g, .b no definidas
+    // en strings provoquen evaluación a cero (#000000 negro puro), especialmente en temas claros.
     readonly property color cardBackground: {
-        var baseColor = RavenPlugin.SystemStats.cardBackground;
+        var raw = RavenPlugin.SystemStats.cardBackground;
+        var c = Qt.color(raw);
         if (!enableGlassmorphism) {
-            return baseColor;
+            return c;
         }
         var op = Math.max(0.05, Math.min(customOpacity, 1.0));
-        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, op);
+        return Qt.rgba(c.r, c.g, c.b, op);
     }
     
     readonly property color buttonBackground: RavenPlugin.SystemStats.buttonBgColor ///< Color de botones nativo de KDE.
