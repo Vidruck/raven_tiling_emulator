@@ -431,13 +431,25 @@ EOF
     cat <<EOF > "$HOME/.config/systemd/user/raven.service"
 [Unit]
 Description=Raven Tiling Emulator Daemon (Native Rust)
+PartOf=graphical-session.target
 After=graphical-session.target
+StartLimitIntervalSec=30
+StartLimitBurst=5
 
 [Service]
+Type=dbus
+BusName=org.kde.raven.Daemon
 ExecStart=$TARGET_DIR/bin/raven_engine
 WorkingDirectory=$TARGET_DIR
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=1
+Slice=session.slice
+Nice=2
+CPUWeight=100
+MemoryHigh=96M
+MemoryMax=192M
+TasksMax=64
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=graphical-session.target
@@ -779,13 +791,25 @@ EOF
     cat <<EOF > "$HOME/.config/systemd/user/raven.service"
 [Unit]
 Description=Raven Tiling Emulator Daemon (Native Rust)
+PartOf=graphical-session.target
 After=graphical-session.target
+StartLimitIntervalSec=30
+StartLimitBurst=5
 
 [Service]
+Type=dbus
+BusName=org.kde.raven.Daemon
 ExecStart=$TARGET_DIR/bin/raven_engine
 WorkingDirectory=$TARGET_DIR
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=1
+Slice=session.slice
+Nice=2
+CPUWeight=100
+MemoryHigh=96M
+MemoryMax=192M
+TasksMax=64
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=graphical-session.target

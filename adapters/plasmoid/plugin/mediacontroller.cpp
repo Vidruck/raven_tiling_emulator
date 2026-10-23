@@ -117,36 +117,27 @@ void MediaController::findActivePlayer()
             firstFound = service;
         }
 
-        // Consultar estado de reproducción
-        QDBusMessage msgStatus = QDBusMessage::createMethodCall(service,
-                                                               QStringLiteral("/org/mpris/MediaPlayer2"),
-                                                               QStringLiteral("org.freedesktop.DBus.Properties"),
-                                                               QStringLiteral("Get"));
-        msgStatus << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("PlaybackStatus");
-        
-        QString status;
-        QDBusReply<QDBusVariant> replyStatus = bus.call(msgStatus, QDBus::Block, 25);
-        if (replyStatus.isValid()) {
-            status = replyStatus.value().variant().toString();
-        }
-
-        // Consultar metadatos para saber si tiene una canción real
-        QDBusMessage msgMeta = QDBusMessage::createMethodCall(service,
+        // Consultar estado y metadatos de forma atómica en un único viaje D-Bus
+        QDBusMessage msgAll = QDBusMessage::createMethodCall(service,
                                                              QStringLiteral("/org/mpris/MediaPlayer2"),
                                                              QStringLiteral("org.freedesktop.DBus.Properties"),
-                                                             QStringLiteral("Get"));
-        msgMeta << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("Metadata");
-        QDBusReply<QDBusVariant> replyMeta = bus.call(msgMeta, QDBus::Block, 25);
+                                                             QStringLiteral("GetAll"));
+        msgAll << QStringLiteral("org.mpris.MediaPlayer2.Player");
+        QDBusReply<QVariantMap> replyAll = bus.call(msgAll, QDBus::Block, 10);
 
+        QString status;
         bool hasTrack = false;
-        if (replyMeta.isValid()) {
-            QVariant var = replyMeta.value().variant();
+        if (replyAll.isValid()) {
+            const QVariantMap props = replyAll.value();
+            status = props.value(QLatin1String("PlaybackStatus")).toString();
+
+            QVariant metaVar = props.value(QLatin1String("Metadata"));
             QVariantMap metaMap;
-            if (var.canConvert<QDBusArgument>()) {
-                QDBusArgument arg = var.value<QDBusArgument>();
+            if (metaVar.canConvert<QDBusArgument>()) {
+                QDBusArgument arg = metaVar.value<QDBusArgument>();
                 metaMap = qdbus_cast<QVariantMap>(arg);
-            } else if (var.canConvert<QVariantMap>()) {
-                metaMap = var.toMap();
+            } else if (metaVar.canConvert<QVariantMap>()) {
+                metaMap = metaVar.toMap();
             }
             QString title = metaMap.value(QLatin1String("xesam:title")).toString();
             QString art = metaMap.value(QLatin1String("mpris:artUrl")).toString();
@@ -746,41 +737,37 @@ void MediaController::refresh()
 
     QDBusConnection bus = QDBusConnection::sessionBus();
 
-    // Consultar el estado de reproducción (PlaybackStatus)
-    {
-        QDBusMessage msg = QDBusMessage::createMethodCall(m_currentService,
-                                                          QStringLiteral("/org/mpris/MediaPlayer2"),
-                                                          QStringLiteral("org.freedesktop.DBus.Properties"),
-                                                          QStringLiteral("Get"));
-        msg << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("PlaybackStatus");
-        QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 40);
-        if (reply.isValid()) {
-            m_playbackStatus = reply.value().variant().toString();
-            if (m_playbackStatus == QLatin1String("Playing") && m_active) {
-                m_positionTimer->start();
-            } else {
-                m_positionTimer->stop();
-            }
-        }
-    }
+    // Consultar el estado y los metadatos de forma atómica en un único viaje D-Bus (GetAll)
+    QDBusMessage msgAll = QDBusMessage::createMethodCall(m_currentService,
+                                                         QStringLiteral("/org/mpris/MediaPlayer2"),
+                                                         QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                         QStringLiteral("GetAll"));
+    msgAll << QStringLiteral("org.mpris.MediaPlayer2.Player");
+    QDBusReply<QVariantMap> replyAll = bus.call(msgAll, QDBus::Block, 15);
 
-    // Consultar los metadatos (Metadata)
-    {
-        QDBusMessage msg = QDBusMessage::createMethodCall(m_currentService,
-                                                          QStringLiteral("/org/mpris/MediaPlayer2"),
-                                                          QStringLiteral("org.freedesktop.DBus.Properties"),
-                                                          QStringLiteral("Get"));
-        msg << QStringLiteral("org.mpris.MediaPlayer2.Player") << QStringLiteral("Metadata");
-        QDBusReply<QDBusVariant> reply = bus.call(msg, QDBus::Block, 40);
-        if (reply.isValid()) {
-            QVariant var = reply.value().variant();
-            if (var.canConvert<QDBusArgument>()) {
-                QDBusArgument arg = var.value<QDBusArgument>();
-                QVariantMap metaMap = qdbus_cast<QVariantMap>(arg);
-                updateMetadata(metaMap);
-            } else if (var.canConvert<QVariantMap>()) {
-                updateMetadata(var.toMap());
-            }
+    if (replyAll.isValid()) {
+        const QVariantMap props = replyAll.value();
+        m_playbackStatus = props.value(QLatin1String("PlaybackStatus")).toString();
+        if (m_playbackStatus == QLatin1String("Playing") && m_active) {
+            m_positionTimer->start();
+        } else {
+            m_positionTimer->stop();
+        }
+
+        if (props.contains(QLatin1String("CanGoNext"))) {
+            m_canGoNext = props.value(QLatin1String("CanGoNext")).toBool();
+        }
+        if (props.contains(QLatin1String("CanGoPrevious"))) {
+            m_canGoPrevious = props.value(QLatin1String("CanGoPrevious")).toBool();
+        }
+
+        QVariant metaVar = props.value(QLatin1String("Metadata"));
+        if (metaVar.canConvert<QDBusArgument>()) {
+            QDBusArgument arg = metaVar.value<QDBusArgument>();
+            QVariantMap metaMap = qdbus_cast<QVariantMap>(arg);
+            updateMetadata(metaMap);
+        } else if (metaVar.canConvert<QVariantMap>()) {
+            updateMetadata(metaVar.toMap());
         }
     }
 

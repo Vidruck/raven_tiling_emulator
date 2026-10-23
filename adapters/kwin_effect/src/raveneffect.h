@@ -243,6 +243,9 @@ private:
         QMetaObject::Connection maximizeConnection;
     };
     std::unordered_map<KWin::EffectWindow*, BorderData> m_borders;       ///< Contornos activos administrados por hardware
+    bool computeShouldDrawBorder(KWin::EffectWindow *w) const;
+    void invalidateBorderVerdict(const KWin::EffectWindow *w);
+    mutable QHash<const KWin::EffectWindow*, bool> m_borderVerdictCache; ///< Caché O(1) de elegibilidad para no reevaluar en cada frame
 
     QPointer<KWin::EffectWindow> m_lastActiveWindow;        ///< Rastreo seguro de la ventana previamente activa
 };

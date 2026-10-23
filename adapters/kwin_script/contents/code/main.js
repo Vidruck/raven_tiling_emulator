@@ -234,9 +234,20 @@ function getSafeWindowId(w) {
 
 function isManageable(w) {
   try {
-    if (!w || w.deleted || !w.managed) return false;
-    if (w.popupWindow || w.tooltip || w.onScreenDisplay || w.notification || w.specialWindow || w.splash) return false;
-    if (w.desktopWindow || w.dock || w.skipTaskbar || w.skipPager) return false;
+    if (!w || w.deleted) return false;
+    if (w.__raven_manageable !== undefined) return w.__raven_manageable;
+    if (!w.managed) {
+      w.__raven_manageable = false;
+      return false;
+    }
+    if (w.popupWindow || w.tooltip || w.onScreenDisplay || w.notification || w.specialWindow || w.splash) {
+      w.__raven_manageable = false;
+      return false;
+    }
+    if (w.desktopWindow || w.dock || w.skipTaskbar || w.skipPager) {
+      w.__raven_manageable = false;
+      return false;
+    }
 
     const strClass = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     const strName = w.resourceName ? w.resourceName.toString().toLowerCase() : "";
@@ -245,13 +256,17 @@ function isManageable(w) {
     // Filtrar herramientas específicas del sistema solicitadas por el usuario
     if (strClass.indexOf("spectacle") !== -1 || strName.indexOf("spectacle") !== -1 ||
         strClass.indexOf("flameshot") !== -1 || strName.indexOf("flameshot") !== -1 ||
-        strClass.indexOf("ksnip") !== -1 || strName.indexOf("ksnip") !== -1) return false;
+        strClass.indexOf("ksnip") !== -1 || strName.indexOf("ksnip") !== -1) {
+      w.__raven_manageable = false;
+      return false;
+    }
 
     if (strClass.indexOf("plasma-welcome") !== -1 || strClass.indexOf("plasma.welcome") !== -1 ||
         strClass.indexOf("welcome") !== -1 || strName.indexOf("welcome") !== -1 ||
         strName.indexOf("plasma-welcome") !== -1 || strCap.indexOf("centro de bienvenida") !== -1 ||
         strCap.indexOf("welcome center") !== -1 || strCap.indexOf("bienvenida de plasma") !== -1 ||
         strCap.indexOf("bienvenida") !== -1) {
+      w.__raven_manageable = false;
       return false;
     }
 
@@ -263,13 +278,23 @@ function isManageable(w) {
         strCap.indexOf("inicio de sesión") !== -1 || strCap.indexOf("pantalla de inicio de sesión") !== -1 ||
         strCap.indexOf("login screen") !== -1 || strCap.indexOf("bloqueo de pantalla") !== -1 ||
         strCap.indexOf("screen lock") !== -1) {
+      w.__raven_manageable = false;
       return false;
     }
 
-    if (!w.normalWindow && !w.dialog && !w.utility) return false;
-    if (w.transient || w.transientFor != null) return false;
-    if (w.frameGeometry && (w.frameGeometry.width <= 0 || w.frameGeometry.height <= 0)) return false;
+    if (!w.normalWindow && !w.dialog && !w.utility) {
+      w.__raven_manageable = false;
+      return false;
+    }
+    if (w.transient || w.transientFor != null) {
+      w.__raven_manageable = false;
+      return false;
+    }
+    if (w.frameGeometry && (w.frameGeometry.width <= 0 || w.frameGeometry.height <= 0)) {
+      return false; // No cachear si la geometría aún no está inicializada
+    }
 
+    w.__raven_manageable = true;
     return true;
   } catch (e) {
     return false;
@@ -729,6 +754,7 @@ function bindWindow(w) {
 
     if (w.captionChanged !== undefined) {
       w.captionChanged.connect(function () {
+        delete w.__raven_manageable;
         if (w && !w.deleted && !w.__raven_mutating) {
           syncWindowDelta(w);
         }

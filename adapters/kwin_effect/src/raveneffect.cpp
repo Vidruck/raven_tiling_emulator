@@ -110,6 +110,7 @@ RavenEffect::~RavenEffect()
     }
     m_borders.clear();
     m_windowByUuid.clear();
+    m_borderVerdictCache.clear();
 
     QDBusConnection dbus = QDBusConnection::sessionBus();
     dbus.unregisterObject(QStringLiteral("/Effects/Raven"));
@@ -177,14 +178,17 @@ void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
     connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
     connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this, [this, w]() {
+        invalidateBorderVerdict(w);
         if (m_bordersEnabled) updateBorder(w);
     });
 
     if (w->window()) {
         connect(w->window(), &KWin::Window::windowClassChanged, this, [this, w]() {
+            invalidateBorderVerdict(w);
             if (m_bordersEnabled) updateBorder(w);
         });
         connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
+            invalidateBorderVerdict(w);
             if (m_bordersEnabled) updateBorder(w);
         });
         connect(w->window(), &KWin::Window::readyForPaintingChanged, this, [this, w]() {
@@ -202,13 +206,16 @@ void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
 /**
  * @brief Hook ejecutado antes de pintar cada ventana en el ciclo del compositor.
  * Garantiza que cualquier ventana apta tenga su OutlinedBorderItem activo sin importar el toolkit.
+ * Optimizado para cero asignaciones en la ruta caliente del render loop de KWin.
  */
 void RavenEffect::prePaintWindow(KWin::RenderView *view, KWin::EffectWindow *w, KWin::WindowPrePaintData &data)
 {
-    if (m_bordersEnabled && w && shouldDrawBorder(w)) {
+    if (m_bordersEnabled && w) {
         auto it = m_borders.find(w);
         if (it == m_borders.end() || !it->second.item) {
-            updateBorder(w);
+            if (shouldDrawBorder(w)) {
+                updateBorder(w);
+            }
         }
     }
     KWin::AnimationEffect::prePaintWindow(view, w, data);
@@ -243,6 +250,7 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
     disconnect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
     disconnect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
     disconnect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
+    invalidateBorderVerdict(w);
 
     QString windowId = w->internalId().toString();
     if (!windowId.isEmpty()) {
@@ -578,10 +586,34 @@ void RavenEffect::loadBorderConfig()
     }
 }
 
+void RavenEffect::invalidateBorderVerdict(const KWin::EffectWindow *w)
+{
+    if (w) {
+        m_borderVerdictCache.remove(w);
+    }
+}
+
 /**
- * @brief Comprueba si una ventana es apta para recibir contornos visuales.
+ * @brief Comprueba si una ventana es apta para recibir contornos visuales usando caché O(1).
  */
 bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
+{
+    if (!w) {
+        return false;
+    }
+    auto it = m_borderVerdictCache.constFind(w);
+    if (it != m_borderVerdictCache.constEnd()) {
+        return it.value();
+    }
+    bool verdict = computeShouldDrawBorder(w);
+    m_borderVerdictCache.insert(w, verdict);
+    return verdict;
+}
+
+/**
+ * @brief Computa exhaustivamente las heurísticas de elegibilidad visual de una ventana.
+ */
+bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
 {
     if (!w) {
         return false;
@@ -1102,6 +1134,8 @@ void RavenEffect::slotWindowMinimizedChanged(KWin::EffectWindow *w)
         return;
     }
 
+    invalidateBorderVerdict(w);
+
     if (w->isMinimized()) {
         removeBorder(w);
         if (m_lastActiveWindow == w) {
@@ -1115,6 +1149,7 @@ void RavenEffect::slotWindowMinimizedChanged(KWin::EffectWindow *w)
 void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor, double radius)
 {
     m_bordersEnabled = enabled;
+    m_borderVerdictCache.clear();
     m_borderWidth = static_cast<float>(std::clamp(width, 1.0, 6.0));
     if (radius >= -1.0) {
         m_customBorderRadius = radius;
