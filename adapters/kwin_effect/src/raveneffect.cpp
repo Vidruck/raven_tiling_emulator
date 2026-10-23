@@ -60,6 +60,14 @@ RavenEffect::RavenEffect()
                 connect(win, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
                 connect(win, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
                 connect(win, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
+                if (win->window()) {
+                    connect(win->window(), &KWin::Window::windowClassChanged, win, [this, win]() {
+                        if (m_bordersEnabled) updateBorder(win);
+                    });
+                    connect(win->window(), &KWin::Window::captionChanged, win, [this, win]() {
+                        if (m_bordersEnabled) updateBorder(win);
+                    });
+                }
 
                 if (m_bordersEnabled) {
                     updateBorder(win);
@@ -151,6 +159,9 @@ void RavenEffect::animationEnded(KWin::EffectWindow *w, Attribute a, uint meta)
     m_activeBirthAnimations.remove(hexId);
     m_activeGeometryAnimations.remove(decId);
     m_activeBirthAnimations.remove(decId);
+
+    // Repintar la ventana para garantizar que cualquier transformación visual residual sea limpiada
+    w->addRepaintFull();
 }
 
 /**
@@ -167,6 +178,15 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
     connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
+
+    if (w->window()) {
+        connect(w->window(), &KWin::Window::windowClassChanged, w, [this, w]() {
+            if (m_bordersEnabled) updateBorder(w);
+        });
+        connect(w->window(), &KWin::Window::captionChanged, w, [this, w]() {
+            if (m_bordersEnabled) updateBorder(w);
+        });
+    }
 
     if (m_bordersEnabled) {
         updateBorder(w);
@@ -317,27 +337,34 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
     // preservando la animación de nacimiento (scale/opacity) si está en curso
     cancelGeometryAnimation(windowId);
 
-    if (durationMs <= 0 || durationMs > 300) {
-        durationMs = 130;
+    if (durationMs <= 0 || durationMs > 500) {
+        durationMs = 140;
     }
 
     QEasingCurve curve = parseEasing(easingName);
 
-    // 1. Animación de posición: usar Translation (desplazamiento relativo delta -> 0.0)
-    // Técnica FLIP: la ventana ya se encuentra en targetRect, por lo que aplicamos un
-    // offset (startRect - targetRect) y lo interpolamos hasta (0, 0).
-    qreal deltaX = startRect.x() - targetRect.x();
-    qreal deltaY = startRect.y() - targetRect.y();
+    // FLIP Robusto:
+    // w->frameGeometry() puede ya ser targetRect (si KWin script ya actualizó la geometría)
+    // o todavía puede ser startRect (si KWin script aún no ha procesado el cambio en el compositor).
+    // Para ser completamente inmune a carreras de sincronización entre D-Bus y el compositor:
+    // Calculamos el offset relativo a la geometría actual G = w->frameGeometry():
+    // Al inicio (t=0), la posición visual es G + from = startRect.
+    // Al final (t=1), la posición visual es G + to = targetRect.
+    const QRectF currentGeom = w->frameGeometry();
+    qreal fromX = startRect.x() - currentGeom.x();
+    qreal fromY = startRect.y() - currentGeom.y();
+    qreal toX = targetRect.x() - currentGeom.x();
+    qreal toY = targetRect.y() - currentGeom.y();
 
-    if (qAbs(deltaX) > 0.5 || qAbs(deltaY) > 0.5) {
+    if (qAbs(fromX - toX) > 0.5 || qAbs(fromY - toY) > 0.5) {
         quint64 posAnim = animate(w,
                                   KWin::AnimationEffect::Translation,
                                   0,
                                   std::chrono::milliseconds(durationMs),
-                                  KWin::FPx2(0.0, 0.0),
+                                  KWin::FPx2(toX, toY),
                                   curve,
                                   0,
-                                  KWin::FPx2(deltaX, deltaY));
+                                  KWin::FPx2(fromX, fromY));
 
         if (posAnim != 0) {
             m_activeGeometryAnimations[windowId].append(posAnim);
@@ -347,11 +374,15 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
     // 2. Animación de escala por geometría (solo si no hay animación de nacimiento activa con escala central)
     if (!m_activeBirthAnimations.contains(windowId) &&
         targetRect.width() > 0.0 && targetRect.height() > 0.0 &&
-        startRect.width() > 0.0 && startRect.height() > 0.0) {
-        qreal scaleX = startRect.width() / targetRect.width();
-        qreal scaleY = startRect.height() / targetRect.height();
+        startRect.width() > 0.0 && startRect.height() > 0.0 &&
+        currentGeom.width() > 0.0 && currentGeom.height() > 0.0) {
+        
+        qreal fromScaleX = startRect.width() / currentGeom.width();
+        qreal fromScaleY = startRect.height() / currentGeom.height();
+        qreal toScaleX = targetRect.width() / currentGeom.width();
+        qreal toScaleY = targetRect.height() / currentGeom.height();
 
-        if (qAbs(scaleX - 1.0) > 0.005 || qAbs(scaleY - 1.0) > 0.005) {
+        if (qAbs(fromScaleX - toScaleX) > 0.005 || qAbs(fromScaleY - toScaleY) > 0.005) {
             uint metaScale = 0;
             setMetaData(SourceAnchor, Anchor::Left | Anchor::Top, metaScale);
 
@@ -359,10 +390,10 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
                                         KWin::AnimationEffect::Scale,
                                         metaScale,
                                         std::chrono::milliseconds(durationMs),
-                                        KWin::FPx2(1.0, 1.0),
+                                        KWin::FPx2(toScaleX, toScaleY),
                                         curve,
                                         0,
-                                        KWin::FPx2(scaleX, scaleY));
+                                        KWin::FPx2(fromScaleX, fromScaleY));
 
             if (scaleAnim != 0) {
                 m_activeGeometryAnimations[windowId].append(scaleAnim);
