@@ -111,6 +111,19 @@ impl ServiceManager {
                     ])
                     .output();
 
+                let _ = Command::new("busctl")
+                    .args([
+                        "--user",
+                        "call",
+                        "org.kde.kwin.RavenEffect",
+                        "/Effects/Raven",
+                        "org.kde.kwin.RavenEffect",
+                        "SetBorderRadius",
+                        "d",
+                        &clean_config.border_radius.to_string(),
+                    ])
+                    .output();
+
                 if self.is_service_active() {
                     let ok = Command::new("systemctl")
                         .args(["--user", "restart", "raven.service"])

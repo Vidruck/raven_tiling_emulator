@@ -51,6 +51,31 @@ pub fn show(config: &mut RavenConfig, ui: &mut egui::Ui, accent: egui::Color32) 
                     }
                     ui.text_edit_singleline(&mut config.inactive_border_color);
                 });
+
+                ui.add_space(6.0);
+                let mut is_adaptive = config.border_radius < 0.0;
+                if ui.checkbox(&mut is_adaptive, "Curvatura auto-adaptativa inteligente (6px, 8px, 12px)").changed() {
+                    if is_adaptive {
+                        config.border_radius = -1.0;
+                    } else {
+                        config.border_radius = 8.0;
+                    }
+                }
+
+                if is_adaptive {
+                    ui.label(egui::RichText::new("ℹ️ Detecta automáticamente la redondez del tema KDE (Klassy, Darkly, Round-Corners o Breeze).").weak().size(11.0));
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label("Radio de esquina manual (px):");
+                        let mut radius = config.border_radius.max(0.0);
+                        if ui.add(egui::Slider::new(&mut radius, 0.0..=24.0).step_by(1.0).suffix(" px")).changed() {
+                            config.border_radius = radius;
+                        }
+                    });
+                    if config.border_radius == 0.0 {
+                        ui.label(egui::RichText::new("Esquinas rectas a 90 grados.").weak().size(11.0));
+                    }
+                }
             }
         });
     });

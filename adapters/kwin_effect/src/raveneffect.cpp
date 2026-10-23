@@ -543,6 +543,14 @@ void RavenEffect::loadBorderConfig()
             m_inactiveBorderColor = ic;
         }
     }
+    if (obj.contains(QStringLiteral("border_radius"))) {
+        QJsonValue rVal = obj.value(QStringLiteral("border_radius"));
+        if (rVal.isDouble()) {
+            m_customBorderRadius = rVal.toDouble(-1.0);
+        } else if (rVal.isString() && rVal.toString().toLower() == QLatin1String("auto")) {
+            m_customBorderRadius = -1.0;
+        }
+    }
 }
 
 /**
@@ -693,6 +701,145 @@ bool RavenEffect::shouldDrawBorder(KWin::EffectWindow *w) const
 }
 
 /**
+ * @brief Lee de manera segura un valor numérico desde un archivo de configuración INI de KDE.
+ */
+static qreal readKdeConfigValue(const QString &filePath, const QString &targetGroup, const QString &targetKey, qreal defaultVal = -1.0)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return defaultVal;
+    }
+
+    bool inGroup = targetGroup.isEmpty();
+    while (!file.atEnd()) {
+        QString line = QString::fromUtf8(file.readLine()).trimmed();
+        if (line.isEmpty() || line.startsWith(QLatin1Char('#')) || line.startsWith(QLatin1Char(';'))) {
+            continue;
+        }
+        if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+            QString group = line.mid(1, line.length() - 2).trimmed();
+            inGroup = (group.compare(targetGroup, Qt::CaseInsensitive) == 0);
+            continue;
+        }
+        if (inGroup) {
+            int eqIdx = line.indexOf(QLatin1Char('='));
+            if (eqIdx > 0) {
+                QString k = line.left(eqIdx).trimmed();
+                if (k.compare(targetKey, Qt::CaseInsensitive) == 0) {
+                    bool ok = false;
+                    qreal v = line.mid(eqIdx + 1).trimmed().toDouble(&ok);
+                    if (ok) return v;
+                }
+            }
+        }
+    }
+    return defaultVal;
+}
+
+/**
+ * @brief Detecta adaptativamente la curvatura de esquinas configurada en el escritorio Plasma (6px, 8px, 12px, etc.).
+ */
+qreal RavenEffect::detectSystemCornerRadius() const
+{
+    if (m_customBorderRadius >= 0.0) {
+        return m_customBorderRadius;
+    }
+
+    const QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+
+    // 1. Efecto Round-Corners en kwinrc (muy común en KDE Plasma 6 para bordes redondeados globales)
+    qreal roundCornersSize = readKdeConfigValue(configDir + QStringLiteral("/kwinrc"), QStringLiteral("Round-Corners"), QStringLiteral("Size"), -1.0);
+    if (roundCornersSize > 0.0) {
+        return std::clamp(roundCornersSize, 2.0, 32.0);
+    }
+    qreal inactiveRadius = readKdeConfigValue(configDir + QStringLiteral("/kwinrc"), QStringLiteral("Round-Corners"), QStringLiteral("InactiveCornerRadius"), -1.0);
+    if (inactiveRadius > 0.0) {
+        return std::clamp(inactiveRadius, 2.0, 32.0);
+    }
+
+    // 2. Tema Klassy (Windeco -> WindowCornerRadius)
+    qreal klassyRadius = readKdeConfigValue(configDir + QStringLiteral("/klassy/klassyrc"), QStringLiteral("Windeco"), QStringLiteral("WindowCornerRadius"), -1.0);
+    if (klassyRadius > 0.0) {
+        return std::clamp(klassyRadius, 2.0, 32.0);
+    }
+
+    // 3. Tema Darkly (Common -> CornerRadius, Windeco -> OtherCornerRadius)
+    qreal darklyRadius = readKdeConfigValue(configDir + QStringLiteral("/darklyrc"), QStringLiteral("Common"), QStringLiteral("CornerRadius"), -1.0);
+    if (darklyRadius > 0.0) {
+        return std::clamp(darklyRadius, 2.0, 32.0);
+    }
+    qreal darklyOtherRadius = readKdeConfigValue(configDir + QStringLiteral("/darklyrc"), QStringLiteral("Windeco"), QStringLiteral("OtherCornerRadius"), -1.0);
+    if (darklyOtherRadius > 0.0) {
+        return std::clamp(darklyOtherRadius, 2.0, 32.0);
+    }
+
+    // 4. Valor por defecto estándar en KDE Plasma 6 (Breeze)
+    return 8.0;
+}
+
+/**
+ * @brief Resuelve adaptativamente el radio de curvatura exacto para el contorno de una ventana.
+ */
+KWin::BorderRadius RavenEffect::resolveAdaptiveBorderRadius(KWin::EffectWindow *w) const
+{
+#ifndef HAVE_KWIN_OUTLINED_BORDER
+    Q_UNUSED(w);
+    return KWin::BorderRadius();
+#else
+    if (m_customBorderRadius >= 0.0) {
+        return KWin::BorderRadius(m_customBorderRadius);
+    }
+
+    // 1. Reporte nativo de KWin (si el cliente Wayland o el decorador informan radio real)
+    if (w && w->window()) {
+        const KWin::BorderRadius nativeRadius = w->window()->borderRadius();
+        if (!nativeRadius.isNull() && (nativeRadius.topLeft() > 0.0 || nativeRadius.topRight() > 0.0 ||
+                                       nativeRadius.bottomLeft() > 0.0 || nativeRadius.bottomRight() > 0.0)) {
+            if (nativeRadius.bottomLeft() == 0.0 && nativeRadius.bottomRight() == 0.0 && nativeRadius.topLeft() > 0.0) {
+                qreal sysR = detectSystemCornerRadius();
+                if (sysR > 0.0) {
+                    return KWin::BorderRadius(nativeRadius.topLeft(), nativeRadius.topRight(), sysR, sysR);
+                }
+            }
+            return nativeRadius;
+        }
+
+#if defined(HAVE_KDECORATION)
+        if (auto *decor = w->window()->decoration()) {
+            const auto decorRadius = KWin::BorderRadius::from(decor->borderRadius());
+            if (!decorRadius.isNull() && (decorRadius.topLeft() > 0.0 || decorRadius.topRight() > 0.0 ||
+                                          decorRadius.bottomLeft() > 0.0 || decorRadius.bottomRight() > 0.0)) {
+                if (decorRadius.bottomLeft() == 0.0 && decorRadius.bottomRight() == 0.0 && decorRadius.topLeft() > 0.0) {
+                    qreal sysR = detectSystemCornerRadius();
+                    if (sysR > 0.0) {
+                        return KWin::BorderRadius(decorRadius.topLeft(), decorRadius.topRight(), sysR, sysR);
+                    }
+                }
+                return decorRadius;
+            }
+        }
+#endif
+    }
+
+    // 2. Resolver radio adaptativo del entorno de escritorio (Round-Corners 12px, Klassy 8px, Darkly 6/12px, Breeze 8px)
+    qreal adaptiveR = detectSystemCornerRadius();
+
+    // 3. Heurística contextual por clase de aplicación para clientes GTK4 / Libadwaita
+    if (w && adaptiveR <= 8.0) {
+        QString cls = w->windowClass().toLower();
+        if (cls.contains(QStringLiteral("nautilus"))
+            || cls.contains(QStringLiteral("gnome-"))
+            || cls.contains(QStringLiteral("pavucontrol"))
+            || cls.contains(QStringLiteral("adwaita"))) {
+            adaptiveR = 12.0;
+        }
+    }
+
+    return KWin::BorderRadius(adaptiveR);
+#endif
+}
+
+/**
  * @brief Crea o actualiza el OutlinedBorderItem de la ventana respetando su radio de curvatura.
  */
 void RavenEffect::updateBorder(KWin::EffectWindow *w)
@@ -720,25 +867,8 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
         return;
     }
 
-    // Obtener la curvatura real de la ventana reportada nativamente por KWin
-    KWin::BorderRadius radius;
-#if defined(HAVE_KDECORATION)
-    KDeco::Decoration *decor = nullptr;
-    if (w->window()) {
-        radius = w->window()->borderRadius();
-        decor = w->window()->decoration();
-        if (radius.isNull() && decor) {
-            const auto decorRadius = KWin::BorderRadius::from(decor->borderRadius());
-            if (!decorRadius.isNull()) {
-                radius = decorRadius;
-            }
-        }
-    }
-#else
-    if (w->window()) {
-        radius = w->window()->borderRadius();
-    }
-#endif
+    // Obtener la curvatura real o adaptativa de la ventana
+    KWin::BorderRadius radius = resolveAdaptiveBorderRadius(w);
 
     KWin::BorderOutline outline(m_borderWidth, color, radius);
     KWin::RectF innerRect(QPointF(0, 0), w->frameGeometry().size());
@@ -750,8 +880,8 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
             it->second.item->setOutline(outline);
         }
 #if defined(HAVE_KDECORATION)
-        // Reconectar señal de decoración si cambió o se instanció posteriormente
-        if (decor && !it->second.decorationConnection) {
+        if (w->window() && w->window()->decoration() && !it->second.decorationConnection) {
+            auto *decor = w->window()->decoration();
             it->second.decorationConnection = connect(decor, &KDeco::Decoration::borderRadiusChanged, this, [this, w]() {
                 updateBorder(w);
             });
@@ -771,7 +901,7 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
                 updateBorder(w);
             });
 #if defined(HAVE_KDECORATION)
-            if (decor) {
+            if (auto *decor = w->window()->decoration()) {
                 data.decorationConnection = connect(decor, &KDeco::Decoration::borderRadiusChanged, this, [this, w]() {
                     updateBorder(w);
                 });
@@ -860,13 +990,13 @@ void RavenEffect::slotWindowMinimizedChanged(KWin::EffectWindow *w)
     }
 }
 
-/**
- * @brief Actualiza la configuración de bordes y refresca todas las ventanas en tiempo real.
- */
-void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor)
+void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor, double radius)
 {
     m_bordersEnabled = enabled;
     m_borderWidth = static_cast<float>(std::clamp(width, 1.0, 6.0));
+    if (radius >= -1.0) {
+        m_customBorderRadius = radius;
+    }
 
     QColor ac(activeColor);
     if (ac.isValid()) {
@@ -878,6 +1008,22 @@ void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &
         m_inactiveBorderColor = ic;
     }
 
+    if (KWin::effects) {
+        const auto windows = KWin::effects->stackingOrder();
+        for (auto *win : windows) {
+            if (win) {
+                updateBorder(win);
+            }
+        }
+    }
+}
+
+/**
+ * @brief Modifica el radio de curvatura de esquinas (-1.0 = auto-adaptativo).
+ */
+void RavenEffect::setBorderRadius(double radius)
+{
+    m_customBorderRadius = radius;
     if (KWin::effects) {
         const auto windows = KWin::effects->stackingOrder();
         for (auto *win : windows) {

@@ -101,3 +101,13 @@ void RavenEffectAdaptor::UpdateBorderConfig(bool enabled, double width, const QS
     }
 }
 
+/**
+ * @brief Define dinámicamente el radio de curvatura de esquinas (-1.0 = auto-adaptativo).
+ */
+void RavenEffectAdaptor::SetBorderRadius(double radius)
+{
+    if (m_effect) {
+        m_effect->setBorderRadius(radius);
+    }
+}
+

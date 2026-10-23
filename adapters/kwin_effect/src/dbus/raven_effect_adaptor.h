@@ -65,6 +65,11 @@ public Q_SLOTS:
      */
     void UpdateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor);
 
+    /**
+     * @brief Define dinámicamente el radio de curvatura de esquinas (-1.0 = auto-adaptativo).
+     */
+    void SetBorderRadius(double radius);
+
 Q_SIGNALS:
     /**
      * @brief Señal emitida cuando el efecto detecta y comienza la animación de nacimiento de una ventana.

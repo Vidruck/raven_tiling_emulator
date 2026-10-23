@@ -70,12 +70,17 @@ pub struct RavenConfig {
     /// Color del contorno para las ventanas inactivas (código hexadecimal #RRGGBB o #RRGGBBAA).
     #[serde(default = "default_inactive_border_color")]
     pub inactive_border_color: String,
+    /// Radio de curvatura de las esquinas del contorno en píxeles.
+    /// Valor negativo (-1.0) activa la detección adaptativa inteligente (6px, 8px, 12px, según tema/decoración).
+    #[serde(default = "default_border_radius")]
+    pub border_radius: f32,
 }
 
 pub fn default_borders_enabled() -> bool { true }
 pub fn default_border_width() -> f32 { 2.0 }
 pub fn default_active_border_color() -> String { "#3daee9".to_string() }
 pub fn default_inactive_border_color() -> String { "#31363b".to_string() }
+pub fn default_border_radius() -> f32 { -1.0 }
 
 pub fn default_quarantine() -> Vec<String> {
     vec![
@@ -139,6 +144,7 @@ impl RavenConfig {
             border_width: default_border_width(),
             active_border_color: default_active_border_color(),
             inactive_border_color: default_inactive_border_color(),
+            border_radius: default_border_radius(),
         }
     }
 

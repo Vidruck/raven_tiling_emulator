@@ -97,7 +97,22 @@ public:
     /**
      * @brief Actualiza la configuración de los contornos activo/inactivo en tiempo real.
      */
-    void updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor);
+    void updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor, double radius = -1.0);
+
+    /**
+     * @brief Modifica el radio de curvatura de las esquinas (-1.0 = auto-adaptativo).
+     */
+    void setBorderRadius(double radius);
+
+    /**
+     * @brief Detecta adaptativamente la curvatura de esquinas configurada en el sistema (6px, 8px, 12px, etc.).
+     */
+    qreal detectSystemCornerRadius() const;
+
+    /**
+     * @brief Resuelve la curvatura final para una ventana (reporte nativo o adaptativo global).
+     */
+    KWin::BorderRadius resolveAdaptiveBorderRadius(KWin::EffectWindow *w) const;
 
     /**
      * @brief Comprueba si este efecto debe permanecer activo en el ciclo de dibujado.
@@ -193,6 +208,7 @@ private:
     float m_borderWidth = 2.0f;                             ///< Grosor del contorno (px)
     QColor m_activeBorderColor = QColor(61, 174, 233, 230); ///< Color del contorno en la ventana enfocada
     QColor m_inactiveBorderColor = QColor(90, 101, 114, 160);///< Color del contorno en ventanas inactivas
+    qreal m_customBorderRadius = -1.0;                      ///< Radio manual (-1.0 = auto-adaptativo)
 
     // Estructura para gestión reactiva de bordes mediante el scene graph nativo de KWin
     struct BorderData {
