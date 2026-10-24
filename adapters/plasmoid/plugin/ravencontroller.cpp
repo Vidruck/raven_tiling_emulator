@@ -39,9 +39,29 @@ RavenController::RavenController(QObject *parent)
     m_pollTimer = new QTimer(this);
     m_pollTimer->setInterval(4000);
     connect(m_pollTimer, &QTimer::timeout, this, &RavenController::refreshState);
-    m_pollTimer->start();
+    if (m_active) {
+        m_pollTimer->start();
+    }
 
     refreshState();
+}
+
+/**
+ * @brief Activa o suspende el sondeo periódico de estado D-Bus según la visibilidad del plasmoide.
+ */
+void RavenController::setActive(bool active)
+{
+    if (m_active == active) {
+        return;
+    }
+    m_active = active;
+    if (m_active) {
+        refreshState();
+        m_pollTimer->start();
+    } else {
+        m_pollTimer->stop();
+    }
+    Q_EMIT activeChanged();
 }
 
 /**

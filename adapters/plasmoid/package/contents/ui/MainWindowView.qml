@@ -55,6 +55,7 @@ Item {
         RavenPlugin.RavenTheme.islandOpacityOverride = root.configIslandOpacity;
         RavenPlugin.RavenTheme.enableGlassmorphismOverride = root.configEnableGlassmorphism;
         RavenPlugin.SystemStats.active = root.appletExpanded;
+        RavenPlugin.RavenController.active = root.appletExpanded;
         if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.active = root.appletExpanded;
     }
 
@@ -69,10 +70,10 @@ Item {
     }
     onAppletExpandedChanged: {
         RavenPlugin.SystemStats.active = root.appletExpanded;
+        RavenPlugin.RavenController.active = root.appletExpanded;
         if (RavenPlugin.GPUStats) RavenPlugin.GPUStats.active = root.appletExpanded;
         if (root.appletExpanded) {
             root.currentDate = new Date();
-            RavenPlugin.RavenController.refreshState();
             if (appGridView) {
                 appGridView.resetSearch();
             }

@@ -228,20 +228,18 @@ private:
     QColor m_activeBorderColor = QColor(61, 174, 233, 230); ///< Color del contorno en la ventana enfocada
     QColor m_inactiveBorderColor = QColor(90, 101, 114, 160);///< Color del contorno en ventanas inactivas
     qreal m_customBorderRadius = -1.0;                      ///< Radio manual (-1.0 = auto-adaptativo)
+    mutable qreal m_cachedSystemCornerRadius = -1.0;        ///< Caché en memoria del radio de esquina del sistema
 
     // Estructura para gestión reactiva de bordes mediante el scene graph nativo de KWin
     struct BorderData {
 #ifdef HAVE_KWIN_OUTLINED_BORDER
         std::unique_ptr<KWin::OutlinedBorderItem> item;
 #endif
+        QSizeF lastSize;
+        QColor lastColor;
+        float lastWidth = 0.0f;
         QMetaObject::Connection radiusConnection;
-        QMetaObject::Connection classConnection;
-        QMetaObject::Connection captionConnection;
         QMetaObject::Connection decorationConnection;
-        QMetaObject::Connection readyConnection;
-        QMetaObject::Connection surfaceConnection;
-        QMetaObject::Connection bufferConnection;
-        QMetaObject::Connection maximizeConnection;
     };
     std::unordered_map<KWin::EffectWindow*, BorderData> m_borders;       ///< Contornos activos administrados por hardware
     bool computeShouldDrawBorder(KWin::EffectWindow *w) const;

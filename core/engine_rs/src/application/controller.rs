@@ -197,6 +197,8 @@ impl RavenController {
             &windows,
             self.active_window_id.clone(),
         )?;
+        // Almacenar siempre la geometría objetivo calculada por el motor como fuente de verdad
+        self.last_known_layout = new_layout.clone();
         let mut commands = Vec::new();
 
         for (wid, rect) in &new_layout {
@@ -310,26 +312,6 @@ impl RavenController {
                 SaturationState::Fluid => {}
             }
         }
-
-        // --- Closed-Loop Revalidation (Verificación de Bucle Cerrado) ---
-        // Registramos en last_known_layout únicamente aquellas ventanas cuya geometría física reportada
-        // por KWin ya converge con el objetivo calculado por Rust. Si una ventana no alcanzó su tamaño,
-        // no se marca como 'confirmada' en caché, garantizando que el motor revalide y reenvíe la orden.
-        let mut confirmed_layout = HashMap::new();
-        for (wid, rect) in &new_layout {
-            if let Some(win_node) = windows.iter().find(|w| &w.window_id == wid) {
-                let dx = (win_node.geometry.x - rect.x).abs();
-                let dy = (win_node.geometry.y - rect.y).abs();
-                let dw = (win_node.geometry.width - rect.width).abs();
-                let dh = (win_node.geometry.height - rect.height).abs();
-
-                // Tolerancia de 2px para redondeos enteros de gaps
-                if dx <= 2 && dy <= 2 && dw <= 2 && dh <= 2 {
-                    confirmed_layout.insert(wid.clone(), *rect);
-                }
-            }
-        }
-        self.last_known_layout = confirmed_layout;
 
         self.engine.current_workspaces = workspaces.clone();
 

@@ -51,10 +51,10 @@ function initDBusBridge() {
   });
 
   workspace.windowRemoved.connect(function (w) {
-    // Blindaje: sincronizar si la ventana eliminada era manejable o ya estaba vinculada
+    // Blindaje: notificar cierre inmediato al motor Rust o sincronizar si era subventana/diálogo
     if (w) {
       var safeId = getSafeWindowId(w);
-      if (safeId) {
+      if (safeId && w.__raven_bound) {
         try {
           callDBus(
             "org.kde.raven.Daemon",
@@ -66,6 +66,7 @@ function initDBusBridge() {
               if (response && response !== "[]") applyCommands(response);
             }
           );
+          return;
         } catch (e) {}
       }
       if (w.__raven_bound || w.normalWindow || w.dialog || w.utility) {

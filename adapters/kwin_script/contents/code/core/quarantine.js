@@ -26,7 +26,6 @@ function processNewWindow(w) {
   }
 
   bindWindow(w);
-  syncWindowDelta(w);
   requestStateSync();
 }
 

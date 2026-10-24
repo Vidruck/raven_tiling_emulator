@@ -1,5 +1,5 @@
 [Unit]
-Description=Raven Tiling Emulator Daemon
+Description=Raven Tiling Emulator Daemon (Native Rust)
 PartOf=graphical-session.target
 After=graphical-session.target
 StartLimitIntervalSec=30
@@ -8,11 +8,13 @@ StartLimitBurst=5
 [Service]
 Type=dbus
 BusName=org.kde.raven.Daemon
-ExecStart=/usr/bin/env raven_engine
+ExecStart=%h/.local/share/raven/bin/raven_engine
+WorkingDirectory=%h/.local/share/raven
 Restart=on-failure
-RestartSec=1
+RestartSec=2
 Slice=session.slice
-CPUWeight=200
+Nice=2
+CPUWeight=100
 MemoryHigh=96M
 MemoryMax=192M
 TasksMax=64

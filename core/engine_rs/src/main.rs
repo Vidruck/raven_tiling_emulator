@@ -50,7 +50,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Iniciar el actor en un hilo en background
     tokio::spawn(actor.run());
 
-    // Inicializar listener de Wayland nativo para recepción directa de topología de pantallas y eventos universales
+    // Inicializar e intermediar primero el bridge D-Bus de KWin (org.kde.raven.Daemon)
+    // para satisfacer de inmediato la activación Type=dbus de systemd sin bloqueos.
+    let actor_tx_kwin = actor_tx.clone();
+    kwin_backend.start_bridge(actor_tx_kwin).await?;
+
+    // Inicializar listener de Wayland nativo para recepción directa de topología de pantallas
     let wayland_backend = raven_backend_wayland::WaylandBackend::new();
     let (wl_tx, mut wl_rx) = tokio::sync::mpsc::channel(128);
     let actor_tx_wl = actor_tx.clone();
@@ -72,9 +77,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else {
         info!("🚀 Listener nativo Wayland conectado y escuchando socket exitosamente.");
     }
-
-    // Inicializar e intermediar el bridge actual de KWin mediante el crate modular raven_backend_kwin
-    kwin_backend.start_bridge(actor_tx).await?;
 
     info!("✅ Raven está operando con éxito con KWinBackend (actuador) y WaylandBackend (topología nativa).");
 

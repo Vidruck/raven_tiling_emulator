@@ -101,8 +101,6 @@ RavenEffect::~RavenEffect()
     // Limpieza de todos los bordes nativos
     for (auto &pair : m_borders) {
         disconnect(pair.second.radiusConnection);
-        disconnect(pair.second.classConnection);
-        disconnect(pair.second.captionConnection);
         disconnect(pair.second.decorationConnection);
 #ifdef HAVE_KWIN_OUTLINED_BORDER
         pair.second.item.reset();
@@ -193,12 +191,6 @@ void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
             if (m_bordersEnabled) updateBorder(w);
         });
         connect(w->window(), &KWin::Window::readyForPaintingChanged, this, [this, w]() {
-            if (m_bordersEnabled) updateBorder(w);
-        });
-        connect(w->window(), &KWin::Window::surfaceChanged, this, [this, w]() {
-            if (m_bordersEnabled) updateBorder(w);
-        });
-        connect(w->window(), &KWin::Window::bufferGeometryChanged, this, [this, w]() {
             if (m_bordersEnabled) updateBorder(w);
         });
     }
@@ -881,36 +873,46 @@ qreal RavenEffect::detectSystemCornerRadius() const
         return m_customBorderRadius;
     }
 
+    if (m_cachedSystemCornerRadius > 0.0) {
+        return m_cachedSystemCornerRadius;
+    }
+
     const QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
 
     // 1. Efecto Round-Corners en kwinrc (muy común en KDE Plasma 6 para bordes redondeados globales)
     qreal roundCornersSize = readKdeConfigValue(configDir + QStringLiteral("/kwinrc"), QStringLiteral("Round-Corners"), QStringLiteral("Size"), -1.0);
     if (roundCornersSize > 0.0) {
-        return std::clamp(roundCornersSize, 2.0, 32.0);
+        m_cachedSystemCornerRadius = std::clamp(roundCornersSize, 2.0, 32.0);
+        return m_cachedSystemCornerRadius;
     }
     qreal inactiveRadius = readKdeConfigValue(configDir + QStringLiteral("/kwinrc"), QStringLiteral("Round-Corners"), QStringLiteral("InactiveCornerRadius"), -1.0);
     if (inactiveRadius > 0.0) {
-        return std::clamp(inactiveRadius, 2.0, 32.0);
+        m_cachedSystemCornerRadius = std::clamp(inactiveRadius, 2.0, 32.0);
+        return m_cachedSystemCornerRadius;
     }
 
     // 2. Tema Klassy (Windeco -> WindowCornerRadius)
     qreal klassyRadius = readKdeConfigValue(configDir + QStringLiteral("/klassy/klassyrc"), QStringLiteral("Windeco"), QStringLiteral("WindowCornerRadius"), -1.0);
     if (klassyRadius > 0.0) {
-        return std::clamp(klassyRadius, 2.0, 32.0);
+        m_cachedSystemCornerRadius = std::clamp(klassyRadius, 2.0, 32.0);
+        return m_cachedSystemCornerRadius;
     }
 
     // 3. Tema Darkly (Common -> CornerRadius, Windeco -> OtherCornerRadius)
     qreal darklyRadius = readKdeConfigValue(configDir + QStringLiteral("/darklyrc"), QStringLiteral("Common"), QStringLiteral("CornerRadius"), -1.0);
     if (darklyRadius > 0.0) {
-        return std::clamp(darklyRadius, 2.0, 32.0);
+        m_cachedSystemCornerRadius = std::clamp(darklyRadius, 2.0, 32.0);
+        return m_cachedSystemCornerRadius;
     }
     qreal darklyOtherRadius = readKdeConfigValue(configDir + QStringLiteral("/darklyrc"), QStringLiteral("Windeco"), QStringLiteral("OtherCornerRadius"), -1.0);
     if (darklyOtherRadius > 0.0) {
-        return std::clamp(darklyOtherRadius, 2.0, 32.0);
+        m_cachedSystemCornerRadius = std::clamp(darklyOtherRadius, 2.0, 32.0);
+        return m_cachedSystemCornerRadius;
     }
 
     // 4. Valor por defecto estándar en KDE Plasma 6 (Breeze)
-    return 8.0;
+    m_cachedSystemCornerRadius = 8.0;
+    return m_cachedSystemCornerRadius;
 }
 
 /**
@@ -1007,13 +1009,22 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
     KWin::BorderRadius radius = resolveAdaptiveBorderRadius(w);
 
     KWin::BorderOutline outline(m_borderWidth, color, radius);
-    KWin::RectF innerRect(QPointF(0, 0), w->frameGeometry().size());
+    const QSizeF currentSize = w->frameGeometry().size();
+    KWin::RectF innerRect(QPointF(0, 0), currentSize);
 
     auto it = m_borders.find(w);
     if (it != m_borders.end()) {
-        if (it->second.item) {
+        const bool changed = (it->second.lastSize != currentSize)
+            || (it->second.lastColor != color)
+            || (std::abs(it->second.lastWidth - m_borderWidth) > 0.01f);
+
+        if (it->second.item && changed) {
             it->second.item->setInnerRect(innerRect);
             it->second.item->setOutline(outline);
+            it->second.lastSize = currentSize;
+            it->second.lastColor = color;
+            it->second.lastWidth = m_borderWidth;
+            w->addRepaintFull();
         }
 #if defined(HAVE_KDECORATION)
         if (w->window() && w->window()->decoration() && !it->second.decorationConnection) {
@@ -1026,39 +1037,30 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
     } else {
         BorderData data;
         data.item = std::make_unique<KWin::OutlinedBorderItem>(innerRect, outline, parentItem);
+        data.lastSize = currentSize;
+        data.lastColor = color;
+        data.lastWidth = m_borderWidth;
         if (w->window()) {
             data.radiusConnection = connect(w->window(), &KWin::Window::borderRadiusChanged, this, [this, w]() {
-                updateBorder(w);
-            });
-            data.classConnection = connect(w->window(), &KWin::Window::windowClassChanged, this, [this, w]() {
-                updateBorder(w);
-            });
-            data.captionConnection = connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
-                updateBorder(w);
-            });
-            data.readyConnection = connect(w->window(), &KWin::Window::readyForPaintingChanged, this, [this, w]() {
-                updateBorder(w);
-            });
-            data.surfaceConnection = connect(w->window(), &KWin::Window::surfaceChanged, this, [this, w]() {
-                updateBorder(w);
-            });
-            data.bufferConnection = connect(w->window(), &KWin::Window::bufferGeometryChanged, this, [this, w]() {
-                updateBorder(w);
-            });
-            data.maximizeConnection = connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this, [this, w]() {
+                if (auto borderIt = m_borders.find(w); borderIt != m_borders.end()) {
+                    borderIt->second.lastWidth = -1.0f;
+                }
                 updateBorder(w);
             });
 #if defined(HAVE_KDECORATION)
             if (auto *decor = w->window()->decoration()) {
                 data.decorationConnection = connect(decor, &KDeco::Decoration::borderRadiusChanged, this, [this, w]() {
+                    if (auto borderIt = m_borders.find(w); borderIt != m_borders.end()) {
+                        borderIt->second.lastWidth = -1.0f;
+                    }
                     updateBorder(w);
                 });
             }
 #endif
         }
         m_borders.emplace(w, std::move(data));
+        w->addRepaintFull();
     }
-    w->addRepaintFull();
 #endif
 }
 
@@ -1070,13 +1072,7 @@ void RavenEffect::removeBorder(KWin::EffectWindow *w)
     auto it = m_borders.find(w);
     if (it != m_borders.end()) {
         disconnect(it->second.radiusConnection);
-        disconnect(it->second.classConnection);
-        disconnect(it->second.captionConnection);
         disconnect(it->second.decorationConnection);
-        disconnect(it->second.readyConnection);
-        disconnect(it->second.surfaceConnection);
-        disconnect(it->second.bufferConnection);
-        disconnect(it->second.maximizeConnection);
 #ifdef HAVE_KWIN_OUTLINED_BORDER
         it->second.item.reset();
 #endif
@@ -1227,6 +1223,7 @@ void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &
 {
     m_bordersEnabled = enabled;
     m_borderVerdictCache.clear();
+    m_cachedSystemCornerRadius = -1.0;
     m_borderWidth = static_cast<float>(std::clamp(width, 1.0, 6.0));
     if (radius >= -1.0) {
         m_customBorderRadius = radius;
@@ -1240,6 +1237,10 @@ void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &
     QColor ic(inactiveColor);
     if (ic.isValid()) {
         m_inactiveBorderColor = ic;
+    }
+
+    for (auto &pair : m_borders) {
+        pair.second.lastWidth = -1.0f;
     }
 
     if (KWin::effects) {
@@ -1258,6 +1259,10 @@ void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &
 void RavenEffect::setBorderRadius(double radius)
 {
     m_customBorderRadius = radius;
+    m_cachedSystemCornerRadius = -1.0;
+    for (auto &pair : m_borders) {
+        pair.second.lastWidth = -1.0f;
+    }
     if (KWin::effects) {
         const auto windows = KWin::effects->stackingOrder();
         for (auto *win : windows) {

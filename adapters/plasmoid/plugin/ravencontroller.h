@@ -55,6 +55,9 @@ class RavenController : public QObject
     /** @brief Etiqueta textual localizada del escritorio virtual en foco. */
     Q_PROPERTY(QString desktopStatus READ desktopStatus NOTIFY desktopStatusChanged)
 
+    /** @brief Bandera de activación para suspender el sondeo D-Bus cuando el popup del plasmoide está cerrado. */
+    Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
+
 public:
     /**
      * @brief Constructor principal. Inicializa las conexiones D-Bus y el temporizador de sondeo de estado.
@@ -97,6 +100,12 @@ public:
     
     /** @return Descripción del estado del escritorio. */
     QString desktopStatus() const { return m_desktopStatus; }
+
+    /** @return true si el sondeo periódico D-Bus está activo. */
+    bool active() const { return m_active; }
+
+    /** @brief Activa o suspende el temporizador de sondeo D-Bus según visibilidad del plasmoide. */
+    void setActive(bool active);
 
 public Q_SLOTS:
     /** @brief Sincroniza y actualiza todas las propiedades locales consultando al demonio Rust por D-Bus. */
@@ -184,6 +193,9 @@ Q_SIGNALS:
     /** @brief Emitida al transicionar de escritorio virtual. */
     void desktopStatusChanged();
 
+    /** @brief Emitida al cambiar el estado de activación del sondeo D-Bus. */
+    void activeChanged();
+
 private:
     /**
      * @brief Invoca un atajo global registrado en KWin vía org.kde.kglobalaccel.
@@ -214,6 +226,7 @@ private:
     int m_prevDesktop = 1;                      ///< Escritorio previo.
     int m_nextDesktop = 1;                      ///< Escritorio próximo.
     QString m_desktopStatus = QStringLiteral("Escritorio 1"); ///< Texto descriptivo del escritorio.
+    bool m_active = false;                      ///< Bandera de visibilidad activa del plasmoide.
 
     QDBusInterface *m_dbusInterface = nullptr;  ///< Interfaz D-Bus persistente hacia org.kde.raven.Daemon.
     QTimer *m_pollTimer = nullptr;              ///< Temporizador de sondeo periódico de estado.

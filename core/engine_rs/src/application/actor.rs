@@ -45,6 +45,7 @@ pub struct RavenControllerActor {
     quarantine_manager: QuarantineManager,
     initialized_pip_windows: std::collections::HashSet<String>,
     rectify_retries: std::collections::HashMap<String, u8>,
+    audit_retries: std::collections::HashMap<String, u8>,
     rx: mpsc::Receiver<RavenMessage>,
 }
 
@@ -67,6 +68,7 @@ impl RavenControllerActor {
             quarantine_manager,
             initialized_pip_windows: std::collections::HashSet::new(),
             rectify_retries: std::collections::HashMap::new(),
+            audit_retries: std::collections::HashMap::new(),
             rx,
         }
     }
@@ -120,6 +122,7 @@ impl RavenControllerActor {
                         CompositorEvent::WindowClosed(window_id) => {
                             self.initialized_pip_windows.remove(&window_id);
                             self.rectify_retries.remove(&window_id);
+                            self.audit_retries.remove(&window_id);
                             let engine = self.controller.get_engine_mut();
                             engine.current_windows.remove(&window_id);
                             engine.window_history.retain(|id| id != &window_id);
@@ -176,23 +179,11 @@ impl RavenControllerActor {
                         }
                         CompositorEvent::TopologyChanged(topology) => {
                             info!("[WAYLAND] Topología actualizada recibida de Wayland: {} salidas descubiertas", topology.output_nodes.len());
-                            let engine = self.controller.get_engine_mut();
-                            let had_workspaces = !engine.current_workspaces.is_empty();
-
-                            // Solo registrar geometrías de salida física si KWin aún no ha reportado ningún workspace con clientArea
-                            if !had_workspaces {
-                                for node in &topology.output_nodes {
-                                    let default_ws = format!("{}||default", node.name);
-                                    engine.current_workspaces.entry(default_ws).or_insert(node.rect);
-                                }
-                            }
-                            self.current_topology = topology;
-                            if !had_workspaces {
-                                if let Ok(cmds) = self.controller.commit_layout() {
-                                    if !cmds.is_empty() {
-                                        let _ = out_tx.send(cmds).await;
-                                    }
-                                }
+                            // Preservar los identificadores de escritorios virtuales ya reportados por KWin
+                            // y actualizar únicamente los nodos físicos de salida de Wayland.
+                            self.current_topology.output_nodes = topology.output_nodes;
+                            if self.current_topology.outputs.is_empty() {
+                                self.current_topology.outputs = topology.outputs;
                             }
                         }
                         CompositorEvent::ReleaseQuarantine(window_id) => {
@@ -344,9 +335,9 @@ impl RavenControllerActor {
                         let (mut workspaces, mut windows, topology) = parse_payload(&payload_json)
                             .unwrap_or_else(|_| (HashMap::new(), Vec::new(), Topology::default()));
 
-                        // Si KWin no envía geometrías de pantalla o vienen incompletas,
-                        // las complementamos automáticamente con la topología autoritativa de Wayland
-                        if !self.current_topology.output_nodes.is_empty() {
+                        // Si KWin aún no ha reportado ningún área de trabajo en screens,
+                        // usar como respaldo la topología física de Wayland para los escritorios conocidos
+                        if workspaces.is_empty() && !self.current_topology.output_nodes.is_empty() {
                             let desks = if !topology.desktops.is_empty() {
                                 topology.desktops.clone()
                             } else {
@@ -559,6 +550,7 @@ impl RavenControllerActor {
                     KWinBridgeMessage::WindowClosed { window_id, reply } => {
                         self.initialized_pip_windows.remove(&window_id);
                         self.rectify_retries.remove(&window_id);
+                        self.audit_retries.remove(&window_id);
                         self.controller.clear_window_flapping(&window_id);
                         let engine = self.controller.get_engine_mut();
                         engine.current_windows.remove(&window_id);
@@ -833,6 +825,18 @@ impl RavenControllerActor {
                         let _ = reply.send(saved);
                     }
                     KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height } => {
+                        let applied_rect = raven_core::geometry::Rect::new(x, y, width, height);
+
+                        // Sincronizar la geometría física real reportada por KWin en el estado interno
+                        if let Some(win) = self
+                            .controller
+                            .get_engine_mut()
+                            .current_windows
+                            .get_mut(&window_id)
+                        {
+                            win.geometry = applied_rect;
+                        }
+
                         // Auditoría de geometría aplicada: comparar con target calculado
                         let is_special_mode = self.controller.get_engine().maximized_windows.contains(&window_id)
                             || self.controller.get_engine().dynamic_floating_windows.contains(&window_id)
@@ -846,19 +850,26 @@ impl RavenControllerActor {
                                     && (target.height - height).abs() <= 2;
 
                                 if !matches {
-                                    tracing::info!(
-                                        "[AUDIT] Geometría divergente en '{}' (Esperado: {}x{}+{}+{}, Aplicado: {}x{}+{}+{}). Rectificando...",
-                                        window_id, target.width, target.height, target.x, target.y, width, height, x, y
-                                    );
-                                    if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
-                                        if !rectify_cmds.is_empty() {
-                                            let backend = self.backend.clone();
-                                            tokio::spawn(async move {
-                                                let _ = backend.apply_actions(rectify_cmds).await;
-                                            });
+                                    let attempts = self.audit_retries.entry(window_id.clone()).or_insert(0);
+                                    if *attempts < 1 {
+                                        *attempts += 1;
+                                        tracing::info!(
+                                            "[AUDIT] Geometría divergente en '{}' (Esperado: {}x{}+{}+{}, Aplicado: {}x{}+{}+{}). Rectificando (intento {})...",
+                                            window_id, target.width, target.height, target.x, target.y, width, height, x, y, *attempts
+                                        );
+                                        if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
+                                            if !rectify_cmds.is_empty() {
+                                                let _ = out_tx.send(rectify_cmds).await;
+                                            }
                                         }
+                                    } else {
+                                        tracing::debug!(
+                                            "[AUDIT] Límite de rectificación alcanzado para '{}'; respetando restricción geométrica del cliente.",
+                                            window_id
+                                        );
                                     }
                                 } else {
+                                    self.audit_retries.remove(&window_id);
                                     tracing::debug!("[AUDIT] Geometría verificada correctamente para '{}'.", window_id);
                                 }
                             }

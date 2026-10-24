@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::debug;
 use wayland_client::protocol::wl_output::{self, WlOutput};
 use wayland_client::protocol::wl_registry;
 use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, WEnum};
@@ -135,19 +135,9 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
                     state.outputs.insert(out, OutputInfo::default());
                     debug!("[WAYLAND-BACKEND] Descubierto wl_output id: {}", name);
                 }
-                "zwlr_foreign_toplevel_manager_v1" => {
-                    let mgr = registry.bind::<ZwlrForeignToplevelManagerV1, _, _>(
-                        name,
-                        version.min(3),
-                        qh,
-                        (),
-                    );
-                    state.toplevel_manager = Some(mgr);
-                    info!(
-                        "[WAYLAND-BACKEND] Vinculado zwlr_foreign_toplevel_manager_v1 id: {}",
-                        name
-                    );
-                }
+                // Nota: zwlr_foreign_toplevel_manager_v1 no se vincula cuando se usa con KWin
+                // para evitar que identificadores efímeros (wlr_toplevel_*) colisionen con los
+                // UUIDs autoritativos de KWin o sobreescriban el foco activo.
                 _ => {}
             }
         }
