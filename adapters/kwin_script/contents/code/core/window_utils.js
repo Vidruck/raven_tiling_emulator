@@ -85,14 +85,15 @@ function isWindowNativeFloating(w) {
     if (w.specialWindow || w.modal || w.transient || w.transientFor != null) return true;
     if (w.dialog || w.utility) return true;
     if (w.fullScreen) return false;
-    if (w.maximizeMode === 3) return true;
     if (w.resizeable === false) return true;
 
     var cls = w.resourceClass ? w.resourceClass.toString().toLowerCase() : "";
     var name = w.resourceName ? w.resourceName.toString().toLowerCase() : "";
     var cap = w.caption ? w.caption.toString().toLowerCase() : "";
     if (cls.indexOf("zuno") !== -1 || name.indexOf("zuno") !== -1 || cap.indexOf("zuno") !== -1 ||
-        cls.indexOf("raven_gui") !== -1 || name.indexOf("raven_gui") !== -1 || cap.indexOf("raven") !== -1) {
+        cls === "raven_gui" || cls === "raven-gui" || name === "raven_gui" || name === "raven-gui" ||
+        cap.indexOf("raven control center") !== -1 || cap.indexOf("raven config") !== -1 ||
+        cap.indexOf("configuración de raven") !== -1) {
       return true;
     }
 

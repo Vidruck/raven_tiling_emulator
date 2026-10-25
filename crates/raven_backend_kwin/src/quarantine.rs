@@ -84,6 +84,7 @@ impl QuarantineCategory {
         let heavy_executables = [
             "code", "code-oss", "vscodium", 
             "cursor", 
+            "antigravity", "antigravity-ide",
             "discord", "discordcanary", 
             "slack", 
             "steam", 
@@ -326,7 +327,8 @@ impl KWinQuarantineManager {
 
         // 1. Reglas personalizadas de usuario
         for rule in rules {
-            if !rule.class.is_empty() && (cls_lower.contains(&rule.class.to_lowercase()) || name_lower.contains(&rule.class.to_lowercase()))
+            if !rule.class.is_empty() && (cls_lower.contains(&rule.class.to_lowercase()) 
+            || name_lower.contains(&rule.class.to_lowercase()))
                 && (rule.action == "float" || rule.pip) {
                     return true;
                 }
@@ -362,24 +364,33 @@ impl KWinQuarantineManager {
         }
 
         // 4. Títulos comunes de diálogos nativos, portapapeles, selectores y ventanas auxiliares
-        let floating_captions = [
-            "clipboard", "portapapeles", "clipboard history", "historial del portapapeles",
-            "borrar historial", "clear history", "delete history",
-            "color picker", "selector de color", "mini player", "mini-player",
-            "miniplayer", "zuno widget", "zuno", "now playing widget", "quick view",
-            "raven control center", "open file", "save file", "abrir archivo",
-            "guardar archivo", "select folder", "seleccionar carpeta", "browse", "examinar",
-            "preferences", "preferencias", "settings", "configuración", "opciones",
-            "about ", "acerca de ", "dialog", "diálogo", "confirm", "confirmar",
-            "alert", "alerta", "prompt", "aviso",
-            // Diálogos y ventanas auxiliares de JetBrains / Android Studio / Java IDEs
-            "splash", "welcome to", "find in files", "search everywhere", "buscar en todas partes",
-            "git branches", "branches", "commit changes", "push commits", "merge",
-            "project structure", "run/debug configurations", "tip of the day",
-            "win32/win64 assistant", "emulator", "device manager", "logcat filter",
-        ];
-        if floating_captions.iter().any(|&c| cap_lower == c || cap_lower.starts_with(c) || cap_lower.contains(c)) {
-            return true;
+        let is_known_tiling_app = [
+            "antigravity", "antigravity-ide", "code", "code-oss", "vscodium", "cursor",
+            "firefox", "zen", "chromium", "google-chrome", "brave", "kate", "alacritty", "kitty", "konsole"
+        ].iter().any(|&app| cls_lower.contains(app) || name_lower.contains(app));
+
+        if !is_known_tiling_app {
+            let floating_captions = [
+                "clipboard", "portapapeles", "clipboard history", "historial del portapapeles",
+                "borrar historial", "clear history", "delete history",
+                "color picker", "selector de color", "mini player", "mini-player",
+                "miniplayer", "zuno widget", "zuno", "now playing widget", "quick view",
+                "raven control center", "open file", "save file", "abrir archivo",
+                "guardar archivo", "select folder", "seleccionar carpeta", "browse", "examinar",
+                "preferences", "preferencias", "settings", "configuración", "opciones",
+                "about ", "acerca de ", "dialog", "diálogo", "confirm", "confirmar",
+                "alert", "alerta", "prompt", "aviso",
+                // Diálogos y ventanas auxiliares de JetBrains / Android Studio / Java IDEs
+                "splash", "welcome to", "find in files", "search everywhere", "buscar en todas partes",
+                "git branches", "branches", "commit changes", "push commits", "merge",
+                "project structure", "run/debug configurations", "tip of the day",
+                "win32/win64 assistant", "emulator", "device manager", "logcat filter",
+            ];
+            if floating_captions.iter().any(|&c| cap_lower == c 
+                || cap_lower.starts_with(&(c.to_string() + " -")) 
+                || cap_lower.starts_with(&(c.to_string() + ":"))) {
+                return true;
+            }
         }
 
         // 5. Ventanas con dimensiones fijas (min_size == max_size) o widgets pequeños
