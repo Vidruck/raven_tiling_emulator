@@ -235,7 +235,7 @@ install_kwin_effect_binary() {
     )
 
     local installed_system=false
-    # Intentar instalación a nivel sistema si somos root o tenemos sudo sin contraseña
+    # KDE Plasma 6 requiere instalar los efectos nativos en directorios de sistema
     if [ "$EUID" -eq 0 ]; then
         for dir in "${CANDIDATE_DIRS[@]}"; do
             local parent_dir="$(dirname "$dir")"
@@ -247,17 +247,20 @@ install_kwin_effect_binary() {
                 fi
             fi
         done
-    elif sudo -n true 2>/dev/null; then
-        for dir in "${CANDIDATE_DIRS[@]}"; do
-            local parent_dir="$(dirname "$dir")"
-            if [ -d "$dir" ] || [ -d "$parent_dir" ]; then
-                if sudo -n mkdir -p "$dir" 2>/dev/null && sudo -n install -m 755 "$EFFECT_SO" "$dir/kwin4_effect_raven.so" 2>/dev/null; then
-                    installed_system=true
-                    log_success "Plugin de efecto instalado en el sistema ($dir/kwin4_effect_raven.so)"
-                    break
+    else
+        log_info "KWin en Plasma 6 requiere instalar el efecto en directorios de sistema. Solicitando permisos sudo..."
+        if sudo -v; then
+            for dir in "${CANDIDATE_DIRS[@]}"; do
+                local parent_dir="$(dirname "$dir")"
+                if [ -d "$dir" ] || [ -d "$parent_dir" ]; then
+                    if sudo mkdir -p "$dir" && sudo install -m 755 "$EFFECT_SO" "$dir/kwin4_effect_raven.so"; then
+                        installed_system=true
+                        log_success "Plugin de efecto instalado en el sistema ($dir/kwin4_effect_raven.so)"
+                        break
+                    fi
                 fi
-            fi
-        done
+            done
+        fi
     fi
 
     # Si se instaló en el sistema, remover copias locales para evitar discrepancias
@@ -266,7 +269,7 @@ install_kwin_effect_binary() {
         rm -f "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
         rm -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
     else
-        log_info "Desplegando plugin de efecto en directorios locales de usuario (~/.local)..."
+        log_warning "No se pudo instalar con sudo en directorios de sistema. KWin podría no cargar el efecto desde ~/.local."
         local LOCAL_DIRS=(
             "$HOME/.local/lib/${arch_triplet}/qt6/plugins/kwin/effects/plugins"
             "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins"
@@ -278,7 +281,7 @@ install_kwin_effect_binary() {
         done
         local user_plugin_path="$HOME/.local/lib/${arch_triplet}/qt6/plugins:$HOME/.local/lib64/qt6/plugins:$HOME/.local/lib/qt6/plugins"
         systemctl --user set-environment QT_PLUGIN_PATH="$user_plugin_path:${QT_PLUGIN_PATH:-/usr/lib/qt6/plugins}" 2>/dev/null || true
-        log_success "Plugin de efecto instalado localmente en ~/.local y registrado en entorno de sesión"
+        log_info "Plugin de efecto copiado como respaldo en ~/.local"
     fi
 
     # Recargar el efecto dinámicamente en KWin

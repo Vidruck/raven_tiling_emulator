@@ -314,24 +314,56 @@ El proyecto está organizado en un **Cargo Workspace** que integra el motor en R
 
 ## 🛠️ Instalación y Uso
 
-### Requisitos Previos
-- **KDE Plasma 6** sobre **Wayland** (Ubuntu 24.10+, Ubuntu 26.04 LTS, Debian Trixie/Sid, Fedora 40+, Arch Linux).
-- Compilador de Rust (Cargo) y herramientas base de compilación (`cmake`, `extra-cmake-modules`).
+### Requisitos del Sistema y Dependencias
 
-#### Dependencias según tu distribución:
-- **Debian / Ubuntu (Plasma 6):**
+Para compilar y ejecutar Raven Tiling Emulator con su motor nativo Rust, plugin C++/QML de Raven Hub y el Efecto Nativo de KWin, se requieren los siguientes componentes:
+
+1. **Entorno de Escritorio**: **KDE Plasma 6** ejecutándose sobre sesión **Wayland** (Arch Linux, Fedora 40+, Ubuntu 24.10 / 26.04+, Debian Trixie/Sid).
+2. **Cadena de herramientas de Rust**: Compilador `rustc` y `cargo` (1.75+).
+3. **Herramientas de Compilación C++**: `cmake` (3.20+), `extra-cmake-modules` (ECM), compilador C++20 (`gcc` o `clang`).
+4. **Desarrollo de KWin y Plasma 6**: `kwin` / `kwin-dev` / `kwin-devel`, `libplasma` / `libplasma-dev`.
+5. **Qt 6**: `qt6-base`, `qt6-declarative` (QML), `qt6-wayland`.
+6. **KDE Frameworks 6**: `kf6-kcoreaddons`, `kf6-kconfig`, `kf6-kwindowsystem`, `kdecoration` / `libkdecoration3`.
+7. **Vulkan Headers**: `vulkan-headers` (o `libvulkan-dev`). **Requisito obligatorio** exigido por la configuración de CMake de KWin (`KWinConfig.cmake`) para compilar el efecto C++.
+8. **Utilidades del Sistema**: `pkg-config` / `pkgconf`, `kpackagetool6`, `qdbus6` / `qdbus`.
+9. **Opcionales**:
+   - `cava`: Para activar el visualizador de espectro de audio reactivo en el plasmoide Raven Hub.
+
+#### Comandos de instalación según tu distribución:
+
+- **Arch Linux / Manjaro:**
+  ```bash
+  sudo pacman -S --needed base-devel cmake extra-cmake-modules kwin qt6-base qt6-declarative vulkan-headers rust pkgconf
+  # Opcional (Audio visualizer reactivo en Raven Hub):
+  sudo pacman -S cava
+  ```
+
+- **Debian Trixie / Sid / Ubuntu (24.10+ / 26.04+ con Plasma 6):**
   ```bash
   sudo apt update && sudo apt install build-essential cmake extra-cmake-modules cargo rustc pkg-config \
-      kwin-dev libplasma-dev qt6-base-dev qt6-declarative-dev libkf6coreaddons-dev libkf6config-dev libkf6windowsystem-dev libkdecoration3-dev
+      kwin-dev libplasma-dev qt6-base-dev qt6-declarative-dev libkf6coreaddons-dev libkf6config-dev \
+      libkf6windowsystem-dev libkdecoration3-dev libvulkan-dev vulkan-headers
+  # Opcional:
+  sudo apt install cava
   ```
-- **Arch Linux:**
+
+- **Fedora (40+):**
   ```bash
-  sudo pacman -S --needed base-devel cmake extra-cmake-modules kwin qt6-base qt6-declarative rust
+  sudo dnf install cmake extra-cmake-modules kwin-devel libplasma-devel qt6-qtbase-devel \
+      qt6-qtdeclarative-devel kf6-kcoreaddons-devel vulkan-headers cargo rust pkgconf-pkg-config
+  # Opcional:
+  sudo dnf install cava
   ```
-- **Fedora:**
-  ```bash
-  sudo dnf install cmake extra-cmake-modules kwin-devel qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kcoreaddons-devel cargo rust
-  ```
+
+---
+
+> [!IMPORTANT]
+> ### ⚠️ Requisito de Privilegios de Administrador (`sudo`) para el Efecto KWin
+> En **KDE Plasma 6 (especialmente en Arch Linux)**, el compositor KWin restringe la carga de efectos compilados en C++ y **únicamente reconoce los plugins instalados en los directorios de sistema** (`/usr/lib/qt6/plugins/kwin/effects/plugins/` o `/usr/lib64/qt6/plugins/kwin/effects/plugins/`).
+>
+> Una instalación confinada exclusivamente al espacio de usuario (`~/.local/...`) impedirá que KWin descubra o pinte el efecto de contornos y animaciones. Por esta razón, el instalador `./raven-setup.sh` (opciones `[1]` y `[5]`) **solicitará permisos `sudo`** al momento de desplegar el binario `kwin4_effect_raven.so` en el sistema.
+
+---
 
 ### Pasos de Instalación y Gestión (TUI Suite)
 ```bash
