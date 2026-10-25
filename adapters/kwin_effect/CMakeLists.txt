@@ -11,7 +11,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(ECM 0.0.11 REQUIRED NO_MODULE)
-set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${ECM_MODULE_PATH})
+include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/cmake/include)
 
 include(KDEInstallDirs)
 include(KDECMakeSettings)

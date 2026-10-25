@@ -196,7 +196,7 @@ check_system_prerequisites() {
                 ;;
             arch|manjaro)
                 log_info "Para instalar las dependencias necesarias en Arch Linux ejecuta:"
-                echo -e "   ${ACCENT}sudo pacman -S --needed base-devel cmake extra-cmake-modules kwin qt6-base qt6-declarative${RESET}"
+                echo -e "   ${ACCENT}sudo pacman -S --needed base-devel cmake extra-cmake-modules kwin qt6-base qt6-declarative vulkan-headers${RESET}"
                 ;;
             fedora)
                 log_info "Para instalar las dependencias necesarias en Fedora ejecuta:"
@@ -235,16 +235,30 @@ install_kwin_effect_binary() {
     )
 
     local installed_system=false
-    for dir in "${CANDIDATE_DIRS[@]}"; do
-        local parent_dir="$(dirname "$dir")"
-        if [ -d "$dir" ] || [ -d "$parent_dir" ]; then
-            if sudo mkdir -p "$dir" 2>/dev/null && sudo install -m 755 "$EFFECT_SO" "$dir/kwin4_effect_raven.so" 2>/dev/null; then
-                installed_system=true
-                log_success "Plugin de efecto instalado en el sistema ($dir/kwin4_effect_raven.so)"
-                break
+    # Intentar instalación a nivel sistema si somos root o tenemos sudo sin contraseña
+    if [ "$EUID" -eq 0 ]; then
+        for dir in "${CANDIDATE_DIRS[@]}"; do
+            local parent_dir="$(dirname "$dir")"
+            if [ -d "$dir" ] || [ -d "$parent_dir" ]; then
+                if mkdir -p "$dir" 2>/dev/null && install -m 755 "$EFFECT_SO" "$dir/kwin4_effect_raven.so" 2>/dev/null; then
+                    installed_system=true
+                    log_success "Plugin de efecto instalado en el sistema ($dir/kwin4_effect_raven.so)"
+                    break
+                fi
             fi
-        fi
-    done
+        done
+    elif sudo -n true 2>/dev/null; then
+        for dir in "${CANDIDATE_DIRS[@]}"; do
+            local parent_dir="$(dirname "$dir")"
+            if [ -d "$dir" ] || [ -d "$parent_dir" ]; then
+                if sudo -n mkdir -p "$dir" 2>/dev/null && sudo -n install -m 755 "$EFFECT_SO" "$dir/kwin4_effect_raven.so" 2>/dev/null; then
+                    installed_system=true
+                    log_success "Plugin de efecto instalado en el sistema ($dir/kwin4_effect_raven.so)"
+                    break
+                fi
+            fi
+        done
+    fi
 
     # Si se instaló en el sistema, remover copias locales para evitar discrepancias
     if [ "$installed_system" = true ]; then
@@ -252,7 +266,7 @@ install_kwin_effect_binary() {
         rm -f "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
         rm -f "$HOME/.local/lib/qt6/plugins/kwin/effects/plugins/kwin4_effect_raven.so" 2>/dev/null || true
     else
-        log_warning "No se pudo instalar con sudo en directorios de sistema. Instalando en ~/.local..."
+        log_info "Desplegando plugin de efecto en directorios locales de usuario (~/.local)..."
         local LOCAL_DIRS=(
             "$HOME/.local/lib/${arch_triplet}/qt6/plugins/kwin/effects/plugins"
             "$HOME/.local/lib64/qt6/plugins/kwin/effects/plugins"
@@ -262,7 +276,9 @@ install_kwin_effect_binary() {
             mkdir -p "$ldir" 2>/dev/null || true
             install -m 755 "$EFFECT_SO" "$ldir/kwin4_effect_raven.so" 2>/dev/null || true
         done
-        log_success "Plugin de efecto instalado localmente en ~/.local"
+        local user_plugin_path="$HOME/.local/lib/${arch_triplet}/qt6/plugins:$HOME/.local/lib64/qt6/plugins:$HOME/.local/lib/qt6/plugins"
+        systemctl --user set-environment QT_PLUGIN_PATH="$user_plugin_path:${QT_PLUGIN_PATH:-/usr/lib/qt6/plugins}" 2>/dev/null || true
+        log_success "Plugin de efecto instalado localmente en ~/.local y registrado en entorno de sesión"
     fi
 
     # Recargar el efecto dinámicamente en KWin
@@ -649,7 +665,13 @@ do_build_kwin_effect() {
 
     local num_cores=$(nproc 2>/dev/null || echo 2)
     log_info "Configurando CMake para kwin4_effect_raven..."
-    cmake -B "$SOURCE_DIR/adapters/kwin_effect/build" -S "$SOURCE_DIR/adapters/kwin_effect" -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 || true
+    local cmake_log="/tmp/kwin_effect_cmake_config.log"
+    if ! cmake -B "$SOURCE_DIR/adapters/kwin_effect/build" -S "$SOURCE_DIR/adapters/kwin_effect" -DCMAKE_BUILD_TYPE=Release >"$cmake_log" 2>&1; then
+        echo -ne "\r\033[K"
+        log_error "Fallo en la configuración de CMake para el efecto KWin:"
+        tail -n 25 "$cmake_log"
+        exit 1
+    fi
 
     log_info "Compilando módulo C++..."
     if cmake --build "$SOURCE_DIR/adapters/kwin_effect/build" -j"$num_cores" 2>&1 | while read -r line; do
