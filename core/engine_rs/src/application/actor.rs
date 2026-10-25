@@ -479,6 +479,20 @@ impl RavenControllerActor {
                             let was_min = self.controller.get_engine().minimized_windows.contains(&wid);
                             let is_min = win_node.is_minimized;
 
+                            let is_tiled = !win_node.is_floating && !win_node.is_minimized;
+                            let reported = win_node.geometry;
+                            let is_quarantine_app = {
+                                let policy = crate::application::quarantine::QuarantinePolicy::from_class(
+                                    &win_node.resource_class,
+                                    &win_node.resource_name,
+                                );
+                                matches!(
+                                    policy,
+                                    crate::application::quarantine::QuarantinePolicy::Browser
+                                        | crate::application::quarantine::QuarantinePolicy::Heavy
+                                )
+                            };
+
                             if win_node.is_pip && self.initialized_pip_windows.insert(wid.clone()) {
                                 tracing::info!(
                                     "[ACTOR] Asignando propiedad 'encima de todas las ventanas' (keepAbove) inicial a PiP delta {}",
@@ -492,10 +506,30 @@ impl RavenControllerActor {
                             
                             self.controller.handle_delta_change(win_node);
 
-                            // Recalcular layout únicamente si el estado de minimizado cambió estructuralmente
+                            // Recalcular layout si el estado de minimizado cambió estructuralmente
                             if was_min != is_min {
                                 if let Ok(recalc_cmds) = self.controller.commit_layout() {
                                     commands.extend(recalc_cmds);
+                                }
+                            } else if is_tiled {
+                                if let Some(target) = self.controller.get_target_rect_for_window(&wid) {
+                                    let dx = (reported.x - target.x).abs();
+                                    let dy = (reported.y - target.y).abs();
+                                    let dw = (reported.width - target.width).abs();
+                                    let dh = (reported.height - target.height).abs();
+                                    if dx > 2 || dy > 2 || dw > 2 || dh > 2 {
+                                        commands.push(RavenAction::RectifyWindow {
+                                            window_id: wid.clone(),
+                                            x: target.x,
+                                            y: target.y,
+                                            width: target.width,
+                                            height: target.height,
+                                        });
+                                    }
+                                } else if is_quarantine_app {
+                                    if let Ok(recalc_cmds) = self.controller.commit_layout() {
+                                        commands.extend(recalc_cmds);
+                                    }
                                 }
                             }
                         }
