@@ -197,6 +197,7 @@ impl RavenController {
             &windows,
             self.active_window_id.clone(),
         )?;
+        let previous_layout = std::mem::take(&mut self.last_known_layout);
         // Almacenar siempre la geometría objetivo calculada por el motor como fuente de verdad
         self.last_known_layout = new_layout.clone();
         let mut commands = Vec::new();
@@ -220,7 +221,7 @@ impl RavenController {
                 .map(|w| w.is_quarantined || w.strict_birth)
                 .unwrap_or(false);
 
-            let needs_move = match self.last_known_layout.get(wid) {
+            let needs_move = match previous_layout.get(wid) {
                 Some(old_rect) => old_rect != rect || win_rect_differs || is_quarantined_or_strict,
                 None => true,
             };
@@ -543,6 +544,49 @@ impl RavenController {
                 if let Some(wid) = target_wid {
                     self.flap_guard.remove(&wid);
                     self.last_known_layout.remove(&wid);
+                    let target_ws = self
+                        .engine
+                        .current_windows
+                        .get(&wid)
+                        .map(|w| w.workspace_id.clone());
+                    self.engine.minimized_windows.insert(wid.clone());
+                    if let Some(win) = self.engine.current_windows.get_mut(&wid) {
+                        win.is_minimized = true;
+                    }
+
+                    let next_focus_id = self
+                        .engine
+                        .window_history
+                        .iter()
+                        .rev()
+                        .find(|&id| {
+                            id != &wid
+                                && self.engine.current_windows.get(id).map_or(false, |w| {
+                                    !w.is_minimized
+                                        && !w.is_floating
+                                        && !w.is_pip
+                                        && (target_ws.is_none()
+                                            || Some(&w.workspace_id) == target_ws.as_ref())
+                                })
+                        })
+                        .cloned()
+                        .or_else(|| {
+                            self.engine
+                                .current_windows
+                                .values()
+                                .find(|w| {
+                                    w.window_id != wid
+                                        && !w.is_minimized
+                                        && !w.is_floating
+                                        && !w.is_pip
+                                        && (target_ws.is_none()
+                                            || Some(&w.workspace_id) == target_ws.as_ref())
+                                })
+                                .map(|w| w.window_id.clone())
+                        });
+
+                    self.active_window_id = next_focus_id.clone();
+
                     commands.push(RavenAction::MinimizeWindow {
                         window_id: wid.clone(),
                     });
@@ -563,6 +607,15 @@ impl RavenController {
                 if let Some(wid) = target_wid {
                     self.flap_guard.remove(&wid);
                     self.last_known_layout.remove(&wid);
+                    self.engine.current_windows.remove(&wid);
+                    self.engine.window_history.retain(|id| id != &wid);
+                    self.engine.spatial_order.retain(|id| id != &wid);
+                    self.engine.dynamic_floating_windows.remove(&wid);
+                    self.engine.maximized_windows.remove(&wid);
+                    self.engine.minimized_windows.remove(&wid);
+                    if self.active_window_id.as_deref() == Some(wid.as_str()) {
+                        self.active_window_id = self.engine.window_history.back().cloned();
+                    }
                     commands.push(RavenAction::CloseWindow {
                         window_id: wid.clone(),
                     });

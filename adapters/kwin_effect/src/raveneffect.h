@@ -151,6 +151,11 @@ private Q_SLOTS:
     void slotWindowClosed(KWin::EffectWindow *w);
 
     /**
+     * @brief Slot conectado a KWin::effects->windowDeleted para liberación definitiva de referencias en el scene graph.
+     */
+    void slotWindowDeleted(KWin::EffectWindow *w);
+
+    /**
      * @brief Slot conectado a KWin::effects->windowActivated para actualizar estilos de foco de contornos.
      */
     void slotWindowActivated(KWin::EffectWindow *w);
@@ -229,11 +234,13 @@ private:
     QColor m_inactiveBorderColor = QColor(90, 101, 114, 160);///< Color del contorno en ventanas inactivas
     qreal m_customBorderRadius = -1.0;                      ///< Radio manual (-1.0 = auto-adaptativo)
     mutable qreal m_cachedSystemCornerRadius = -1.0;        ///< Caché en memoria del radio de esquina del sistema
+    mutable qreal m_cachedRoundCornersRadius = -2.0;        ///< Caché en memoria del efecto global Round-Corners (-2.0 = no leído)
 
     // Estructura para gestión reactiva de bordes mediante el scene graph nativo de KWin
     struct BorderData {
 #ifdef HAVE_KWIN_OUTLINED_BORDER
         std::unique_ptr<KWin::OutlinedBorderItem> item;
+        KWin::BorderRadius lastRadius;
 #endif
         QSizeF lastSize;
         QColor lastColor;
@@ -241,6 +248,7 @@ private:
         QMetaObject::Connection radiusConnection;
         QMetaObject::Connection decorationConnection;
     };
+    QHash<KWin::EffectWindow*, QList<QMetaObject::Connection>> m_windowConnections; ///< Conexiones de ciclo de vida propias de RavenEffect
     std::unordered_map<KWin::EffectWindow*, BorderData> m_borders;       ///< Contornos activos administrados por hardware
     bool computeShouldDrawBorder(KWin::EffectWindow *w) const;
     void invalidateBorderVerdict(const KWin::EffectWindow *w);

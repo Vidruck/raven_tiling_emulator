@@ -68,6 +68,7 @@ RavenEffect::RavenEffect()
     if (KWin::effects) {
         connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
         connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &RavenEffect::slotWindowClosed);
+        connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, &RavenEffect::slotWindowDeleted);
         connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &RavenEffect::slotWindowActivated);
 
         const auto windows = KWin::effects->stackingOrder();
@@ -95,6 +96,7 @@ RavenEffect::~RavenEffect()
     if (KWin::effects) {
         disconnect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &RavenEffect::slotWindowAdded);
         disconnect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &RavenEffect::slotWindowClosed);
+        disconnect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, &RavenEffect::slotWindowDeleted);
         disconnect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &RavenEffect::slotWindowActivated);
     }
 
@@ -106,6 +108,12 @@ RavenEffect::~RavenEffect()
         pair.second.item.reset();
 #endif
     }
+    for (auto it = m_windowConnections.begin(); it != m_windowConnections.end(); ++it) {
+        for (const auto &conn : it.value()) {
+            disconnect(conn);
+        }
+    }
+    m_windowConnections.clear();
     m_borders.clear();
     m_windowByUuid.clear();
     m_borderVerdictCache.clear();
@@ -173,26 +181,85 @@ void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
         return;
     }
 
-    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
-    connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
-    connect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
-    connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this, [this, w]() {
+    auto &conns = m_windowConnections[w];
+    for (const auto &c : conns) {
+        disconnect(c);
+    }
+    conns.clear();
+
+    conns.append(connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged));
+    conns.append(connect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized));
+    conns.append(connect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged));
+    conns.append(connect(w, &KWin::EffectWindow::windowHiddenChanged, this, [this, w]() {
+        invalidateBorderVerdict(w);
+        if (w->isHidden() || !w->isVisible() || w->isDeleted()) {
+            const QString wid = w->internalId().toString();
+            if (!wid.isEmpty()) {
+                m_pendingAnimations.remove(wid);
+                cancelWindowAnimation(wid);
+            }
+            removeBorder(w);
+        } else if (m_bordersEnabled) {
+            updateBorder(w);
+        }
+    }));
+    conns.append(connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this, [this, w]() {
         invalidateBorderVerdict(w);
         if (m_bordersEnabled) updateBorder(w);
-    });
+    }));
+    conns.append(connect(w, &KWin::EffectWindow::windowDecorationChanged, this, [this, w]() {
+        if (auto borderIt = m_borders.find(w); borderIt != m_borders.end()) {
+            disconnect(borderIt->second.decorationConnection);
+            borderIt->second.lastWidth = -1.0f;
+        }
+        if (m_bordersEnabled) updateBorder(w);
+    }));
 
     if (w->window()) {
-        connect(w->window(), &KWin::Window::windowClassChanged, this, [this, w]() {
+        conns.append(connect(w->window(), &KWin::Window::closed, this, [this, w]() {
+            slotWindowClosed(w);
+        }));
+        conns.append(connect(w->window(), &KWin::Window::decorationChanged, this, [this, w]() {
+            if (auto borderIt = m_borders.find(w); borderIt != m_borders.end()) {
+                disconnect(borderIt->second.decorationConnection);
+                borderIt->second.lastWidth = -1.0f;
+            }
+            if (m_bordersEnabled) updateBorder(w);
+        }));
+        conns.append(connect(w->window(), &KWin::Window::decorationPolicyChanged, this, [this, w]() {
+            if (auto borderIt = m_borders.find(w); borderIt != m_borders.end()) {
+                disconnect(borderIt->second.decorationConnection);
+                borderIt->second.lastWidth = -1.0f;
+            }
+            if (m_bordersEnabled) updateBorder(w);
+        }));
+        conns.append(connect(w->window(), &KWin::Window::surfaceChanged, this, [this, w]() {
+            if (w->window() && !w->window()->surface()) {
+                const QString wid = w->internalId().toString();
+                if (!wid.isEmpty()) {
+                    m_pendingAnimations.remove(wid);
+                    cancelWindowAnimation(wid);
+                }
+                removeBorder(w);
+            } else if (m_bordersEnabled) {
+                updateBorder(w);
+            }
+        }));
+        conns.append(connect(w->window(), &KWin::Window::transientChanged, this, [this, w]() {
             invalidateBorderVerdict(w);
             if (m_bordersEnabled) updateBorder(w);
-        });
-        connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
+        }));
+        conns.append(connect(w->window(), &KWin::Window::windowClassChanged, this, [this, w]() {
             invalidateBorderVerdict(w);
             if (m_bordersEnabled) updateBorder(w);
-        });
-        connect(w->window(), &KWin::Window::readyForPaintingChanged, this, [this, w]() {
+        }));
+        conns.append(connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
+            invalidateBorderVerdict(w);
             if (m_bordersEnabled) updateBorder(w);
-        });
+        }));
+        conns.append(connect(w->window(), &KWin::Window::readyForPaintingChanged, this, [this, w]() {
+            if (m_bordersEnabled) updateBorder(w);
+        }));
     }
 }
 
@@ -203,11 +270,18 @@ void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
  */
 void RavenEffect::prePaintWindow(KWin::RenderView *view, KWin::EffectWindow *w, KWin::WindowPrePaintData &data)
 {
-    if (m_bordersEnabled && w) {
-        auto it = m_borders.find(w);
-        if (it == m_borders.end() || !it->second.item) {
-            if (shouldDrawBorder(w)) {
-                updateBorder(w);
+    if (w) {
+        if (w->isDeleted() || w->isHidden() || w->isMinimized()) {
+            auto it = m_borders.find(w);
+            if (it != m_borders.end()) {
+                removeBorder(w);
+            }
+        } else if (m_bordersEnabled) {
+            auto it = m_borders.find(w);
+            if (it == m_borders.end() || !it->second.item) {
+                if (shouldDrawBorder(w)) {
+                    updateBorder(w);
+                }
             }
         }
     }
@@ -232,22 +306,22 @@ void RavenEffect::slotWindowAdded(KWin::EffectWindow *w)
             QPointer<KWin::Window> winPtr = w->window();
             auto conn = std::make_shared<QMetaObject::Connection>();
             *conn = connect(w->window(), &KWin::Window::readyForPaintingChanged, this, [this, wid, winPtr, conn]() {
-                if (winPtr && winPtr->readyForPainting()) {
+                if (winPtr && winPtr->readyForPainting() && !winPtr->isDeleted()) {
                     disconnect(*conn);
                     KWin::EffectWindow *ew = findWindowById(wid);
-                    if (ew && !m_birthedWindows.contains(ew)) {
+                    if (ew && !ew->isDeleted() && !m_birthedWindows.contains(ew)) {
                         m_birthedWindows.insert(ew);
                         animateWindowBirth(ew, 180);
                     }
                 }
             });
-        } else {
+        } else if (!w->isDeleted()) {
             m_birthedWindows.insert(w);
             animateWindowBirth(w, 180);
         }
     }
 
-    if (m_bordersEnabled) {
+    if (m_bordersEnabled && !w->isDeleted()) {
         updateBorder(w);
     }
 }
@@ -261,11 +335,43 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
         return;
     }
 
-    disconnect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, &RavenEffect::slotWindowGeometryChanged);
-    disconnect(w, &KWin::EffectWindow::windowStepUserMovedResized, this, &RavenEffect::slotWindowStepUserMovedResized);
-    disconnect(w, &KWin::EffectWindow::minimizedChanged, this, &RavenEffect::slotWindowMinimizedChanged);
+    auto connIt = m_windowConnections.find(w);
+    if (connIt != m_windowConnections.end()) {
+        for (const auto &c : connIt.value()) {
+            disconnect(c);
+        }
+        m_windowConnections.erase(connIt);
+    }
     invalidateBorderVerdict(w);
     m_birthedWindows.remove(w);
+
+    // Si la ventana que se cierra tenía diálogos, notificaciones o confirmaciones hijas (transients),
+    // cancelar de inmediato sus animaciones y purgar sus bordes para evitar que queden fantasma en el scene graph.
+    const auto allWindows = KWin::effects ? KWin::effects->stackingOrder() : QList<KWin::EffectWindow *>();
+    for (auto *child : allWindows) {
+        if (!child || child == w) {
+            continue;
+        }
+        bool isTransientChild = (child->transientFor() == w) || child->mainWindows().contains(w);
+        if (!isTransientChild && w->window() && child->window()) {
+            isTransientChild = (child->window()->transientFor() == w->window())
+                || w->window()->hasTransient(child->window(), true);
+        }
+        if (isTransientChild) {
+            invalidateBorderVerdict(child);
+            m_birthedWindows.remove(child);
+            const QString childId = child->internalId().toString();
+            if (!childId.isEmpty()) {
+                m_pendingAnimations.remove(childId);
+                cancelWindowAnimation(childId);
+            }
+            removeBorder(child);
+            child->addRepaintFull();
+            if (KWin::effects) {
+                KWin::effects->addRepaint(child->expandedGeometry());
+            }
+        }
+    }
 
     QString windowId = w->internalId().toString();
     if (!windowId.isEmpty()) {
@@ -287,6 +393,19 @@ void RavenEffect::slotWindowClosed(KWin::EffectWindow *w)
     if (m_lastActiveWindow == w) {
         m_lastActiveWindow.clear();
     }
+
+    w->addRepaintFull();
+    if (KWin::effects) {
+        KWin::effects->addRepaint(w->expandedGeometry());
+    }
+}
+
+/**
+ * @brief Slot que se ejecuta cuando una ventana es destruida definitivamente del compositor.
+ */
+void RavenEffect::slotWindowDeleted(KWin::EffectWindow *w)
+{
+    slotWindowClosed(w);
 }
 
 /**
@@ -396,7 +515,7 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
                                         int durationMs, const QString &easingName)
 {
     KWin::EffectWindow *w = findWindowById(windowId);
-    if (!w) {
+    if (!w || w->isDeleted() || w->isHidden() || w->isMinimized()) {
         return;
     }
 
@@ -431,7 +550,9 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
                                   KWin::FPx2(0.0, 0.0),
                                   curve,
                                   0,
-                                  KWin::FPx2(fromX, fromY));
+                                  KWin::FPx2(fromX, fromY),
+                                  false,
+                                  false);
 
         if (posAnim != 0) {
             m_activeGeometryAnimations[windowId].append(posAnim);
@@ -458,7 +579,9 @@ void RavenEffect::animateWindowGeometry(const QString &windowId, const QRectF &s
                                         KWin::FPx2(1.0, 1.0),
                                         curve,
                                         0,
-                                        KWin::FPx2(fromScaleX, fromScaleY));
+                                        KWin::FPx2(fromScaleX, fromScaleY),
+                                        false,
+                                        false);
 
             if (scaleAnim != 0) {
                 m_activeGeometryAnimations[windowId].append(scaleAnim);
@@ -515,7 +638,7 @@ void RavenEffect::animateBatchGeometry(const QString &jsonPayload)
  */
 void RavenEffect::animateWindowBirth(KWin::EffectWindow *w, int durationMs)
 {
-    if (!w) {
+    if (!w || w->isDeleted() || w->isHidden() || w->isMinimized()) {
         return;
     }
 
@@ -539,7 +662,9 @@ void RavenEffect::animateWindowBirth(KWin::EffectWindow *w, int durationMs)
                                 KWin::FPx2(1.0, 1.0),
                                 curve,
                                 0,
-                                KWin::FPx2(0.88, 0.88));
+                                KWin::FPx2(0.88, 0.88),
+                                false,
+                                false);
 
     uint metaOpacity = 0;
     quint64 opacityAnim = animate(w,
@@ -549,7 +674,9 @@ void RavenEffect::animateWindowBirth(KWin::EffectWindow *w, int durationMs)
                                   KWin::FPx2(1.0, 1.0),
                                   opacityCurve,
                                   0,
-                                  KWin::FPx2(0.0, 0.0));
+                                  KWin::FPx2(0.0, 0.0),
+                                  false,
+                                  false);
 
     if (scaleAnim != 0) m_activeBirthAnimations[windowId].append(scaleAnim);
     if (opacityAnim != 0) m_activeBirthAnimations[windowId].append(opacityAnim);
@@ -646,6 +773,14 @@ bool RavenEffect::shouldAnimateBirth(KWin::EffectWindow *w) const
         return false;
     }
 
+    // Si es una ventana hija/transitoria (diálogo de confirmación, alerta, notificación modal)
+    // cuya ventana madre ya se cerró o está oculta, no animar ni retener su textura.
+    if (KWin::EffectWindow *parent = w->transientFor()) {
+        if (parent->isDeleted() || parent->isHidden() || !parent->isVisible()) {
+            return false;
+        }
+    }
+
     // Excluir elementos propios del sistema (paneles, menús de paneles, bloqueo de pantalla)
     if (w->isLockScreen()
         || w->isDesktop()
@@ -658,6 +793,8 @@ bool RavenEffect::shouldAnimateBirth(KWin::EffectWindow *w) const
         || w->isComboBox()
         || w->isDNDIcon()
         || w->isDropdownMenu()
+        || w->isPopupMenu()
+        || w->isPopupWindow()
         || w->isOutline()
         || w->isInputMethod()
         || w->isSpecialWindow()
@@ -691,8 +828,14 @@ bool RavenEffect::shouldAnimateBirth(KWin::EffectWindow *w) const
         }
     }
 
-    // Apto para cualquier ventana de aplicación (normal, diálogo, flotante, utilitaria o popup de app)
-    return w->isNormalWindow() || w->isDialog() || w->isUtility() || (w->isPopupWindow() && !cls.isEmpty());
+    // Apto únicamente para ventanas principales independientes (excluyendo diálogos, modales y subventanas transitorias)
+    if (w->isDialog() || w->isUtility() || w->isModal() || w->transientFor() != nullptr) {
+        return false;
+    }
+    if (w->window() && (w->window()->isTransient() || w->window()->isModal())) {
+        return false;
+    }
+    return w->isNormalWindow();
 }
 
 /**
@@ -709,6 +852,21 @@ bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
         || w->isHidden()
         || !w->isVisible()
         || w->isFullScreen()) {
+        return false;
+    }
+
+    // Si es una ventana hija/transitoria (ej. confirmación o notificación de aplicación)
+    // cuya ventana madre ya fue cerrada, descartar el contorno de inmediato.
+    if (KWin::EffectWindow *parent = w->transientFor()) {
+        if (parent->isDeleted() || parent->isHidden() || !parent->isVisible()) {
+            return false;
+        }
+    }
+    if (w->findModal() != nullptr && w->findModal() != w) {
+        return false;
+    }
+    if ((w->isDialog() || w->isUtility() || w->isModal() || w->transientFor() != nullptr)
+        && KWin::effects && KWin::effects->activeWindow() != w) {
         return false;
     }
 
@@ -737,6 +895,8 @@ bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
         || w->isComboBox()
         || w->isDNDIcon()
         || w->isDropdownMenu()
+        || w->isPopupMenu()
+        || w->isPopupWindow()
         || w->isOutline()
         || w->isInputMethod()
         || w->isSpecialWindow()
@@ -824,8 +984,8 @@ bool RavenEffect::computeShouldDrawBorder(KWin::EffectWindow *w) const
         return false;
     }
 
-    // Ventanas normales, diálogos (polkit, confirmaciones, modales), utilitarias o popups de aplicación
-    return w->isNormalWindow() || w->isDialog() || w->isUtility() || (w->isPopupWindow() && !cls.isEmpty());
+    // Ventanas normales, diálogos (polkit, confirmaciones, modales) o utilitarias
+    return w->isNormalWindow() || w->isDialog() || w->isUtility();
 }
 
 /**
@@ -928,16 +1088,35 @@ KWin::BorderRadius RavenEffect::resolveAdaptiveBorderRadius(KWin::EffectWindow *
         return KWin::BorderRadius(m_customBorderRadius);
     }
 
-    // 1. Reporte nativo de KWin (si el cliente Wayland o el decorador informan radio real)
-    if (w && w->window()) {
+    if (!w) {
+        return KWin::BorderRadius();
+    }
+
+    // 1. Si el efecto global Round-Corners está activo en kwinrc, redondea todas las ventanas independientemente de la decoración
+    if (m_cachedRoundCornersRadius < -1.5) {
+        const QString configDir = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation);
+        qreal rcSize = readKdeConfigValue(configDir + QStringLiteral("/kwinrc"), QStringLiteral("Round-Corners"), QStringLiteral("Size"), -1.0);
+        if (rcSize <= 0.0) {
+            rcSize = readKdeConfigValue(configDir + QStringLiteral("/kwinrc"), QStringLiteral("Round-Corners"), QStringLiteral("InactiveCornerRadius"), -1.0);
+        }
+        m_cachedRoundCornersRadius = (rcSize > 0.0) ? std::clamp(rcSize, 2.0, 32.0) : -1.0;
+    }
+
+    // 2. Comprobar el estado real de la decoración de ventana (SSD) y el reporte nativo de KWin
+    const bool hasServerDeco = w->hasDecoration() || (w->window() && w->window()->isDecorated() && !w->window()->noBorder());
+
+    if (w->window()) {
         const KWin::BorderRadius nativeRadius = w->window()->borderRadius();
         if (!nativeRadius.isNull() && (nativeRadius.topLeft() > 0.0 || nativeRadius.topRight() > 0.0 ||
                                        nativeRadius.bottomLeft() > 0.0 || nativeRadius.bottomRight() > 0.0)) {
-            if (nativeRadius.bottomLeft() == 0.0 && nativeRadius.bottomRight() == 0.0 && nativeRadius.topLeft() > 0.0) {
+            if (hasServerDeco) {
                 qreal sysR = detectSystemCornerRadius();
-                if (sysR > 0.0) {
-                    return KWin::BorderRadius(nativeRadius.topLeft(), nativeRadius.topRight(), sysR, sysR);
-                }
+                qreal maxCorner = std::max({nativeRadius.topLeft(), nativeRadius.topRight(), nativeRadius.bottomRight(), nativeRadius.bottomLeft(), sysR});
+                qreal topL = nativeRadius.topLeft() > 0.0 ? nativeRadius.topLeft() : maxCorner;
+                qreal topR = nativeRadius.topRight() > 0.0 ? nativeRadius.topRight() : maxCorner;
+                qreal botR = nativeRadius.bottomRight() > 0.0 ? nativeRadius.bottomRight() : maxCorner;
+                qreal botL = nativeRadius.bottomLeft() > 0.0 ? nativeRadius.bottomLeft() : maxCorner;
+                return KWin::BorderRadius(topL, topR, botR, botL);
             }
             return nativeRadius;
         }
@@ -947,33 +1126,41 @@ KWin::BorderRadius RavenEffect::resolveAdaptiveBorderRadius(KWin::EffectWindow *
             const auto decorRadius = KWin::BorderRadius::from(decor->borderRadius());
             if (!decorRadius.isNull() && (decorRadius.topLeft() > 0.0 || decorRadius.topRight() > 0.0 ||
                                           decorRadius.bottomLeft() > 0.0 || decorRadius.bottomRight() > 0.0)) {
-                if (decorRadius.bottomLeft() == 0.0 && decorRadius.bottomRight() == 0.0 && decorRadius.topLeft() > 0.0) {
-                    qreal sysR = detectSystemCornerRadius();
-                    if (sysR > 0.0) {
-                        return KWin::BorderRadius(decorRadius.topLeft(), decorRadius.topRight(), sysR, sysR);
-                    }
-                }
-                return decorRadius;
+                qreal sysR = detectSystemCornerRadius();
+                qreal maxCorner = std::max({decorRadius.topLeft(), decorRadius.topRight(), decorRadius.bottomRight(), decorRadius.bottomLeft(), sysR});
+                qreal topL = decorRadius.topLeft() > 0.0 ? decorRadius.topLeft() : maxCorner;
+                qreal topR = decorRadius.topRight() > 0.0 ? decorRadius.topRight() : maxCorner;
+                qreal botR = decorRadius.bottomRight() > 0.0 ? decorRadius.bottomRight() : maxCorner;
+                qreal botL = decorRadius.bottomLeft() > 0.0 ? decorRadius.bottomLeft() : maxCorner;
+                return KWin::BorderRadius(topL, topR, botR, botL);
             }
         }
 #endif
     }
 
-    // 2. Resolver radio adaptativo del entorno de escritorio (Round-Corners 12px, Klassy 8px, Darkly 6/12px, Breeze 8px)
-    qreal adaptiveR = detectSystemCornerRadius();
-
-    // 3. Heurística contextual por clase de aplicación para clientes GTK4 / Libadwaita
-    if (w && adaptiveR <= 8.0) {
-        QString cls = w->windowClass().toLower();
-        if (cls.contains(QStringLiteral("nautilus"))
-            || cls.contains(QStringLiteral("gnome-"))
-            || cls.contains(QStringLiteral("pavucontrol"))
-            || cls.contains(QStringLiteral("adwaita"))) {
-            adaptiveR = 12.0;
-        }
+    // 3. Si la ventana TIENE decoración de KDE activa (SSD), aplicar el radio del tema de decoración (ej. 8px en Breeze/Klassy/Darkly).
+    if (hasServerDeco) {
+        return KWin::BorderRadius(detectSystemCornerRadius());
     }
 
-    return KWin::BorderRadius(adaptiveR);
+    // 4. La ventana NO tiene decoración de KDE (noBorder == true / sin barra de título SSD):
+    //    Si hay un shader global como Round-Corners activo, respetarlo.
+    if (m_cachedRoundCornersRadius > 0.0) {
+        return KWin::BorderRadius(m_cachedRoundCornersRadius);
+    }
+
+    //    Excepción para clientes CSD puros (GTK4 / Libadwaita) que dibujan sus propias esquinas redondeadas sin SSD de KWin
+    const QString cls = w->windowClass().toLower();
+    if (cls.contains(QStringLiteral("nautilus"))
+        || cls.contains(QStringLiteral("gnome-"))
+        || cls.contains(QStringLiteral("pavucontrol"))
+        || cls.contains(QStringLiteral("adwaita"))
+        || cls.contains(QStringLiteral("org.gnome."))) {
+        return KWin::BorderRadius(12.0);
+    }
+
+    //    Para cualquier ventana sin decoración de KDE (ángulos rectos de 90°), el contorno debe ser cuadrado (0px).
+    return KWin::BorderRadius(0.0);
 #endif
 }
 
@@ -1016,6 +1203,7 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
     if (it != m_borders.end()) {
         const bool changed = (it->second.lastSize != currentSize)
             || (it->second.lastColor != color)
+            || (it->second.lastRadius != radius)
             || (std::abs(it->second.lastWidth - m_borderWidth) > 0.01f);
 
         if (it->second.item && changed) {
@@ -1023,6 +1211,7 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
             it->second.item->setOutline(outline);
             it->second.lastSize = currentSize;
             it->second.lastColor = color;
+            it->second.lastRadius = radius;
             it->second.lastWidth = m_borderWidth;
             w->addRepaintFull();
         }
@@ -1030,6 +1219,9 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
         if (w->window() && w->window()->decoration() && !it->second.decorationConnection) {
             auto *decor = w->window()->decoration();
             it->second.decorationConnection = connect(decor, &KDeco::Decoration::borderRadiusChanged, this, [this, w]() {
+                if (auto borderIt = m_borders.find(w); borderIt != m_borders.end()) {
+                    borderIt->second.lastWidth = -1.0f;
+                }
                 updateBorder(w);
             });
         }
@@ -1039,6 +1231,7 @@ void RavenEffect::updateBorder(KWin::EffectWindow *w)
         data.item = std::make_unique<KWin::OutlinedBorderItem>(innerRect, outline, parentItem);
         data.lastSize = currentSize;
         data.lastColor = color;
+        data.lastRadius = radius;
         data.lastWidth = m_borderWidth;
         if (w->window()) {
             data.radiusConnection = connect(w->window(), &KWin::Window::borderRadiusChanged, this, [this, w]() {
@@ -1074,10 +1267,19 @@ void RavenEffect::removeBorder(KWin::EffectWindow *w)
         disconnect(it->second.radiusConnection);
         disconnect(it->second.decorationConnection);
 #ifdef HAVE_KWIN_OUTLINED_BORDER
-        it->second.item.reset();
+        if (it->second.item) {
+            it->second.item->setVisible(false);
+            it->second.item->setParentItem(nullptr);
+            it->second.item.reset();
+        }
 #endif
         m_borders.erase(it);
-        w->addRepaintFull();
+        if (w) {
+            w->addRepaintFull();
+            if (KWin::effects) {
+                KWin::effects->addRepaint(w->expandedGeometry());
+            }
+        }
     }
 }
 
@@ -1091,10 +1293,16 @@ void RavenEffect::slotWindowActivated(KWin::EffectWindow *w)
     }
 
     if (m_lastActiveWindow && m_lastActiveWindow != w) {
+        invalidateBorderVerdict(m_lastActiveWindow);
         updateBorder(m_lastActiveWindow);
     }
     if (w) {
+        invalidateBorderVerdict(w);
         updateBorder(w);
+        if (KWin::EffectWindow *parent = w->transientFor()) {
+            invalidateBorderVerdict(parent);
+            updateBorder(parent);
+        }
     }
     m_lastActiveWindow = w;
 }
@@ -1108,11 +1316,23 @@ void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::R
         return;
     }
 
+    if (w->isDeleted() || w->isHidden() || w->isMinimized()) {
+        removeBorder(w);
+        return;
+    }
+
     if (m_bordersEnabled) {
         updateBorder(w);
     }
 
     if (w->isUserMove() || w->isUserResize()) {
+        return;
+    }
+
+    if (!w->isNormalWindow() || w->isDialog() || w->isUtility() || w->isModal() || w->transientFor() != nullptr) {
+        return;
+    }
+    if (w->window() && (w->window()->isTransient() || w->window()->isModal())) {
         return;
     }
 
@@ -1151,7 +1371,9 @@ void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::R
                                   KWin::FPx2(0.0, 0.0),
                                   curve,
                                   0,
-                                  KWin::FPx2(fromX, fromY));
+                                  KWin::FPx2(fromX, fromY),
+                                  false,
+                                  false);
 
         if (posAnim != 0) {
             m_activeGeometryAnimations[wid].append(posAnim);
@@ -1176,7 +1398,9 @@ void RavenEffect::slotWindowGeometryChanged(KWin::EffectWindow *w, const KWin::R
                                         KWin::FPx2(1.0, 1.0),
                                         curve,
                                         0,
-                                        KWin::FPx2(fromScaleX, fromScaleY));
+                                        KWin::FPx2(fromScaleX, fromScaleY),
+                                        false,
+                                        false);
 
             if (scaleAnim != 0) {
                 m_activeGeometryAnimations[wid].append(scaleAnim);
@@ -1210,9 +1434,18 @@ void RavenEffect::slotWindowMinimizedChanged(KWin::EffectWindow *w)
     invalidateBorderVerdict(w);
 
     if (w->isMinimized()) {
+        const QString wid = w->internalId().toString();
+        if (!wid.isEmpty()) {
+            m_pendingAnimations.remove(wid);
+            cancelWindowAnimation(wid);
+        }
         removeBorder(w);
         if (m_lastActiveWindow == w) {
             m_lastActiveWindow.clear();
+        }
+        w->addRepaintFull();
+        if (KWin::effects) {
+            KWin::effects->addRepaint(w->expandedGeometry());
         }
     } else {
         updateBorder(w);
@@ -1224,6 +1457,7 @@ void RavenEffect::updateBorderConfig(bool enabled, double width, const QString &
     m_bordersEnabled = enabled;
     m_borderVerdictCache.clear();
     m_cachedSystemCornerRadius = -1.0;
+    m_cachedRoundCornersRadius = -2.0;
     m_borderWidth = static_cast<float>(std::clamp(width, 1.0, 6.0));
     if (radius >= -1.0) {
         m_customBorderRadius = radius;
@@ -1260,6 +1494,7 @@ void RavenEffect::setBorderRadius(double radius)
 {
     m_customBorderRadius = radius;
     m_cachedSystemCornerRadius = -1.0;
+    m_cachedRoundCornersRadius = -2.0;
     for (auto &pair : m_borders) {
         pair.second.lastWidth = -1.0f;
     }

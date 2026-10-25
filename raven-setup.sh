@@ -509,8 +509,29 @@ do_inject_shortcuts() {
     log_info "Configurando combinación de teclas predeterminadas para Raven en [kwin]..."
 
     if command -v kwriteconfig6 >/dev/null 2>&1; then
+        # Desvincular combinaciones duplicadas en acciones nativas de KWin / Plasma para evitar colisiones dobles
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Window Minimize" "Meta+PgDown,Meta+PgDown,Minimizar la ventana" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Window Maximize" "Meta+PgUp,Meta+PgUp,Maximizar la ventana" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Window Close" "Alt+F4,Alt+F4,Cerrar la ventana" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Window Quick Tile Left" "none,Meta+Left,Situar la ventana en mosaico a la izquierda" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Window Quick Tile Right" "none,Meta+Right,Situar la ventana en mosaico a la derecha" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Window Quick Tile Top" "none,Meta+Up,Situar la ventana en mosaico en la parte superior" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Window Quick Tile Bottom" "none,Meta+Down,Situar la ventana en mosaico en la parte inferior" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Switch Window Left" "none,Meta+Alt+Left,Cambiar a la ventana a la izquierda" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Switch Window Right" "none,Meta+Alt+Right,Cambiar a la ventana a la derecha" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Switch Window Up" "none,Meta+Alt+Up,Cambiar a la ventana superior" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Switch Window Down" "none,Meta+Alt+Down,Cambiar a la ventana anterior" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Window to Next Screen" "none,Meta+Shift+Right,Mover ventana a la pantalla siguiente" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "Window to Previous Screen" "none,Meta+Shift+Left,Mover ventana a la pantalla anterior" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "view_zoom_in" "Meta++,Meta++\tMeta+=,Ampliar" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "view_zoom_out" "none,Meta+-,Reducir" 2>/dev/null || true
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "ksmserver" --key "Lock Session" "Screensaver,Screensaver\tMeta+L,Bloquear la sesión" 2>/dev/null || true
+
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenToggleTiling" "Meta+Space,none,Raven: Alternar Mosaico (On/Off)"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenToggleFloating" "Meta+Shift+F,none,Raven: Alternar Ventana Flotante Dinámica"
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenToggleMaximize" "Meta+F,none,Raven: Alternar Maximizar Ventana"
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenMinimizeActive" "Meta+X,none,Raven: Minimizar Ventana"
+        kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenCloseActive" "Meta+Q,none,Raven: Cerrar Ventana"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenFocusNext" "Meta+J,none,Raven: Siguiente Ventana"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenFocusPrev" "Meta+K,none,Raven: Ventana Anterior"
         kwriteconfig6 --file "$SHORTCUTS_FILE" --group "kwin" --key "RavenFocusLeft" "Meta+Left,none,Raven: Foco Izquierda"

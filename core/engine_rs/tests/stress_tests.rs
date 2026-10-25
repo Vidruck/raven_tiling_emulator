@@ -1263,6 +1263,22 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
         }
         _ => panic!("Esperado MinimizeWindow"),
     }
+    assert!(
+        controller
+            .get_engine()
+            .current_windows
+            .get("win-1")
+            .unwrap()
+            .is_minimized
+    );
+    let recalc_cmds = controller.commit_layout().unwrap();
+    assert!(
+        !recalc_cmds.iter().any(|cmd| matches!(
+            cmd,
+            raven_core::action::RavenAction::MoveWindow { window_id, .. } if window_id == "win-1"
+        )),
+        "commit_layout no debe emitir MoveWindow para una ventana recién minimizada"
+    );
 
     // Meta+Q (closeActive)
     let (recalc, cmds) = controller
@@ -1281,6 +1297,14 @@ async fn test_all_keyboard_shortcuts_execution_and_effects() {
         }
         _ => panic!("Esperado CloseWindow"),
     }
+    let recalc_cmds = controller.commit_layout().unwrap();
+    assert!(
+        !recalc_cmds.iter().any(|cmd| matches!(
+            cmd,
+            raven_core::action::RavenAction::MoveWindow { window_id, .. } if window_id == "win-2"
+        )),
+        "commit_layout no debe emitir MoveWindow para una ventana recién cerrada"
+    );
 }
 
 #[tokio::test]

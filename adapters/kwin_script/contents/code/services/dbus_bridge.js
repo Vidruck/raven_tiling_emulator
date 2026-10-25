@@ -149,6 +149,22 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
 }
 
 /**
+ * @brief Comprueba si una ventana madre tiene actualmente un diálogo, confirmación o hija transitoria abierta.
+ */
+function hasActiveTransientOrModalChild(parentWin, allWindows) {
+  if (!parentWin || parentWin.deleted) return false;
+  const list = allWindows || workspace.windowList();
+  for (let i = 0; i < list.length; i++) {
+    const child = list[i];
+    if (!child || child === parentWin || child.deleted || child.minimized || child.hidden) continue;
+    if (child.transientFor === parentWin) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * @brief Aplica las acciones calculadas por Rust en KWin.
  */
 function applyCommands(commandsJson) {
@@ -209,7 +225,8 @@ function applyCommands(commandsJson) {
         case "rectify_window":
           if (w.minimized || w.interactiveMove || w.interactiveResize || w.fullScreen) break;
           if (w.maximized || (w.maximizeMode !== undefined && w.maximizeMode === 3)) break;
-          if (w.transientChildren && w.transientChildren.length > 0) break;
+          if (!w.normalWindow || w.transient || w.transientFor != null || w.modal || w.dialog || w.utility) break;
+          if (hasActiveTransientOrModalChild(w, windows)) break;
 
           // Si la ventana tiene maximización parcial (ej. Teams con MAXIMIZED_VERT),
           // desmarcarla en KWin para que acepte libremente la nueva geometría
@@ -235,6 +252,10 @@ function applyCommands(commandsJson) {
           (function (cw, tgt, wid) {
             setKWinTimeout(function () {
               if (!cw || cw.deleted) return;
+              if (cw.minimized) {
+                cw.__raven_mutating = false;
+                return;
+              }
               try {
                 var cur = cw.frameGeometry;
                 if (cur && (Math.abs(cur.x - tgt.x) > 2 || Math.abs(cur.y - tgt.y) > 2 ||
@@ -264,35 +285,45 @@ function applyCommands(commandsJson) {
           break;
 
         case "focus":
-          if (workspace.activeWindow !== w && (!workspace.activeWindow || !workspace.activeWindow.popupWindow)) {
+          if (!w.minimized && workspace.activeWindow !== w &&
+              (!workspace.activeWindow || (!workspace.activeWindow.popupWindow && !workspace.activeWindow.modal && !workspace.activeWindow.dialog && !workspace.activeWindow.transient && workspace.activeWindow.transientFor == null)) &&
+              !hasActiveTransientOrModalChild(w, windows)) {
             workspace.activeWindow = w;
           }
           break;
 
         case "minimize":
-          w.__raven_mutating = true;
-          w.minimized = true;
-          (function (cw) {
-            setKWinTimeout(function () {
-              if (cw && !cw.deleted) {
-                cw.__raven_mutating = false;
-                requestStateSync();
-              }
-            }, 60);
-          })(w);
+          if (!w.minimized) {
+            w.__raven_mutating = true;
+            try {
+              w.minimized = true;
+            } catch (eMin) {}
+            (function (cw) {
+              setKWinTimeout(function () {
+                if (cw && !cw.deleted) {
+                  cw.__raven_mutating = false;
+                  requestStateSync();
+                }
+              }, 60);
+            })(w);
+          }
           break;
 
         case "unminimize":
-          w.__raven_mutating = true;
-          w.minimized = false;
-          (function (cw) {
-            setKWinTimeout(function () {
-              if (cw && !cw.deleted) {
-                cw.__raven_mutating = false;
-                requestStateSync();
-              }
-            }, 60);
-          })(w);
+          if (w.minimized) {
+            w.__raven_mutating = true;
+            try {
+              w.minimized = false;
+            } catch (eUnmin) {}
+            (function (cw) {
+              setKWinTimeout(function () {
+                if (cw && !cw.deleted) {
+                  cw.__raven_mutating = false;
+                  requestStateSync();
+                }
+              }, 60);
+            })(w);
+          }
           break;
 
         case "close":
@@ -352,6 +383,18 @@ function bindWindow(w) {
     w.minimizedChanged.connect(onStateChange);
     w.maximizedChanged.connect(onStateChange);
     if (w.fullScreenChanged !== undefined) w.fullScreenChanged.connect(onStateChange);
+    if (w.transientChanged !== undefined) {
+      w.transientChanged.connect(function () {
+        delete w.__raven_manageable;
+        requestStateSync();
+      });
+    }
+    if (w.modalChanged !== undefined) {
+      w.modalChanged.connect(function () {
+        delete w.__raven_manageable;
+        requestStateSync();
+      });
+    }
 
     if (w.captionChanged !== undefined) {
       w.captionChanged.connect(function () {
@@ -390,7 +433,7 @@ function bindWindow(w) {
         return;
       }
       if (w.__raven_mutating || w.__raven_ui_migrating) return;
-      if (w.transientChildren && w.transientChildren.length > 0) return;
+      if (hasActiveTransientOrModalChild(w, null)) return;
 
       syncWindowDelta(w);
     });

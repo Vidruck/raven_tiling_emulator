@@ -122,7 +122,7 @@ impl TilingEngine {
         // Evaluación y Arbitraje de Ventanas en Rust (Jerarquía de Precedencia Estricta)
         let effective_windows: Vec<WindowNode> = windows
             .iter()
-            .filter(|w| !self.minimized_windows.contains(&w.window_id))
+            .filter(|w| !w.is_minimized && !self.minimized_windows.contains(&w.window_id))
             .map(|w| {
                 let mut cloned = w.clone();
                 let class_lower = cloned.resource_class.to_lowercase();

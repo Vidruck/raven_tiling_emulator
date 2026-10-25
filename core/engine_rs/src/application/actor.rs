@@ -352,8 +352,14 @@ impl RavenControllerActor {
                             }
                         }
 
-                        // Sincronizar la bandera de flotación dinámica y maximización
+                        // Sincronizar la bandera de minimización, maximización y flotación dinámica
                         for win in &mut windows {
+                            if win.is_minimized {
+                                self.controller.get_engine_mut().minimized_windows.insert(win.window_id.clone());
+                            } else {
+                                self.controller.get_engine_mut().minimized_windows.remove(&win.window_id);
+                            }
+
                             if win.is_maximized {
                                 self.controller.get_engine_mut().maximized_windows.insert(win.window_id.clone());
                                 win.is_floating = true;
@@ -369,9 +375,12 @@ impl RavenControllerActor {
                                 .contains(&win.window_id)
                             {
                                 win.is_floating = true;
-                            } else if !win.is_maximized && !win.is_pip {
-                                // Forzar re-evaluación a mosaico si no hay razón explícita para flotar
-                                win.is_floating = false;
+                            } else if win.is_maximized || win.is_pip {
+                                // Si está maximizada ya se fijó is_floating = true arriba;
+                                // si es PiP, el motor la maneja en el overlay PiP (is_floating = false).
+                                if win.is_pip {
+                                    win.is_floating = false;
+                                }
                             }
                             
                             // Blindaje de Idempotencia: Solo agendar cuarentena si la ventana NO existe
@@ -436,12 +445,18 @@ impl RavenControllerActor {
                                 self.controller.get_engine_mut().maximized_windows.remove(&win_node.window_id);
                             }
 
+                            if win_node.is_minimized {
+                                self.controller.get_engine_mut().minimized_windows.insert(win_node.window_id.clone());
+                            } else {
+                                self.controller.get_engine_mut().minimized_windows.remove(&win_node.window_id);
+                            }
+
                             let is_dynamic_float = self
                                 .controller
                                 .get_engine()
                                 .dynamic_floating_windows
                                 .contains(&win_node.window_id);
-                            win_node.is_floating = is_dynamic_float || is_max;
+                            win_node.is_floating = win_node.is_floating || is_dynamic_float || is_max;
 
                             let already_released = self
                                 .controller
@@ -515,6 +530,8 @@ impl RavenControllerActor {
                             effective_active_id,
                             &self.current_topology,
                         ) {
+                            // Sincronizar active_window_id si el controlador lo reasignó (ej. al minimizar la ventana activa)
+                            self.active_window_id = self.controller.active_window_id.clone();
                             all_commands.extend(cmds);
 
                             if needs_recalc {
@@ -522,6 +539,9 @@ impl RavenControllerActor {
                                     all_commands.extend(recalc_cmds);
                                 }
                             }
+                        }
+                        if !all_commands.is_empty() {
+                            let _ = out_tx.send(all_commands.clone()).await;
                         }
                         let _ = reply.send(all_commands);
                     }

@@ -21,7 +21,7 @@ function isManageable(w) {
       w.__raven_manageable = false;
       return false;
     }
-    if (w.popupWindow || w.tooltip || w.onScreenDisplay || w.notification || w.specialWindow || w.splash) {
+    if (w.popupWindow || w.tooltip || w.onScreenDisplay || w.notification || w.criticalNotification || w.appletPopup || w.specialWindow || w.splash) {
       w.__raven_manageable = false;
       return false;
     }
@@ -67,10 +67,7 @@ function isManageable(w) {
       w.__raven_manageable = false;
       return false;
     }
-    if (w.transient || w.transientFor != null) {
-      w.__raven_manageable = false;
-      return false;
-    }
+
     if (w.frameGeometry && (w.frameGeometry.width <= 0 || w.frameGeometry.height <= 0)) {
       return false; // No cachear si la geometría aún no está inicializada
     }

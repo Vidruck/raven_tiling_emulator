@@ -307,6 +307,11 @@ impl CompositorBackend for KWinBackend {
             let mut geom_guard = self.last_known_geometries.write().await;
             for action in &actions {
                 match action {
+                    RavenAction::CloseWindow { window_id }
+                    | RavenAction::MinimizeWindow { window_id } => {
+                        self.effect_client.cancel_animation(window_id).await;
+                        geom_guard.remove(window_id);
+                    }
                     RavenAction::ReleaseQuarantine { window_id } => {
                         // 140ms de animación de nacimiento reactiva con zoom y elastic
                         self.effect_client.animate_birth(window_id, 140).await;
