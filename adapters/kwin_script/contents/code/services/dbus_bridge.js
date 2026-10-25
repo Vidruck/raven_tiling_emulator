@@ -275,40 +275,18 @@ function applyCommands(commandsJson) {
                   Math.round(fgApplied.x),
                   Math.round(fgApplied.y),
                   Math.round(fgApplied.width),
-                  Math.round(fgApplied.height)
+                  Math.round(fgApplied.height),
+                  function (response) {
+                    if (response && response !== "[]") {
+                      applyCommands(response);
+                    }
+                  }
                 );
               } catch (eAudit) { }
 
               cw.__raven_mutating = false;
             }, 60);
           })(w, targetGeom, cmd.window_id);
-
-          // Segundo pase para clientes basados en Gecko (Floorp, Zen, Firefox, Librewolf)
-          // que retrasan su resize CSD Wayland entre 120ms y 180ms
-          var isGecko = false;
-          try {
-            var cLower = (w.resourceClass || "").toString().toLowerCase();
-            var nLower = (w.resourceName || "").toString().toLowerCase();
-            isGecko = cLower.indexOf("firefox") !== -1 || cLower.indexOf("zen") !== -1 ||
-                      cLower.indexOf("floorp") !== -1 || cLower.indexOf("librewolf") !== -1 ||
-                      cLower.indexOf("waterfox") !== -1 || nLower.indexOf("navigator") !== -1 ||
-                      cLower.indexOf("gecko") !== -1 || nLower.indexOf("gecko") !== -1;
-          } catch (eG) { }
-
-          if (isGecko) {
-            (function (cw, tgt) {
-              setKWinTimeout(function () {
-                if (!cw || cw.deleted || cw.minimized) return;
-                try {
-                  var cur = cw.frameGeometry;
-                  if (cur && (Math.abs(cur.x - tgt.x) > 2 || Math.abs(cur.y - tgt.y) > 2 ||
-                    Math.abs(cur.width - tgt.width) > 2 || Math.abs(cur.height - tgt.height) > 2)) {
-                    cw.frameGeometry = tgt;
-                  }
-                } catch (eGReapply) { }
-              }, 160);
-            })(w, targetGeom);
-          }
           break;
 
         case "focus":

@@ -43,6 +43,7 @@ pub enum KWinBridgeMessage {
         y: i32,
         width: i32,
         height: i32,
+        reply: oneshot::Sender<Vec<RavenAction>>,
     },
     GetQuarantineClasses {
         reply: oneshot::Sender<String>,
@@ -218,16 +219,26 @@ impl KWinDbusService {
         let _ = self.tx.send(KWinBridgeMessage::WindowActivated { window_id: val }).await;
     }
 
-    /// Reporta la geometría física asumida por una ventana tras un comando de movimiento para auditoría.
+    /// Reporta la geometría física asumida por una ventana tras un comando de movimiento para auditoría y rectificación en Rust.
     #[zbus(name = "commandAppliedState")]
-    async fn command_applied_state(&self, window_id: String, x: i32, y: i32, width: i32, height: i32) {
-        let _ = self.tx.send(KWinBridgeMessage::CommandAppliedState {
+    async fn command_applied_state(&self, window_id: String, x: i32, y: i32, width: i32, height: i32) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = KWinBridgeMessage::CommandAppliedState {
             window_id,
             x,
             y,
             width,
             height,
-        }).await;
+            reply: reply_tx,
+        };
+
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        actions_to_kwin_json(actions)
     }
 
     /// Alterna el modo flotante temporal (Quick Peek) para la ventana activa o la especificada.

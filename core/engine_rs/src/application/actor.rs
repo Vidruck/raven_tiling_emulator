@@ -872,8 +872,9 @@ impl RavenControllerActor {
 
                         let _ = reply.send(saved);
                     }
-                    KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height } => {
+                    KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height, reply } => {
                         let applied_rect = raven_core::geometry::Rect::new(x, y, width, height);
+                        let mut commands = Vec::new();
 
                         // Sincronizar la geometría física real reportada por KWin en el estado interno
                         if let Some(win) = self
@@ -899,16 +900,14 @@ impl RavenControllerActor {
 
                                 if !matches {
                                     let attempts = self.audit_retries.entry(window_id.clone()).or_insert(0);
-                                    if *attempts < 1 {
+                                    if *attempts < 2 {
                                         *attempts += 1;
                                         tracing::info!(
-                                            "[AUDIT] Geometría divergente en '{}' (Esperado: {}x{}+{}+{}, Aplicado: {}x{}+{}+{}). Rectificando (intento {})...",
+                                            "[AUDIT] Geometría divergente en '{}' (Esperado: {}x{}+{}+{}, Aplicado: {}x{}+{}+{}). Rectificando en Rust (intento {})...",
                                             window_id, target.width, target.height, target.x, target.y, width, height, x, y, *attempts
                                         );
                                         if let Ok(rectify_cmds) = self.controller.commit_layout_as_rectify(Some(&window_id)) {
-                                            if !rectify_cmds.is_empty() {
-                                                let _ = out_tx.send(rectify_cmds).await;
-                                            }
+                                            commands.extend(rectify_cmds);
                                         }
                                     } else {
                                         tracing::debug!(
@@ -922,6 +921,8 @@ impl RavenControllerActor {
                                 }
                             }
                         }
+
+                        let _ = reply.send(commands);
                     }
                 },
             }

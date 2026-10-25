@@ -237,9 +237,10 @@ impl CompositorBackend for KWinBackend {
                     KWinBridgeMessage::GetMonitorCount { reply } => {
                         let _ = reply.send(1);
                     }
-                    KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height } => {
+                    KWinBridgeMessage::CommandAppliedState { window_id, x, y, width, height, reply } => {
                         let mut geom_guard = last_known_geoms_clone.write().await;
                         geom_guard.insert(window_id, Rect::new(x, y, width, height));
+                        let _ = reply.send(Vec::new());
                     }
                     KWinBridgeMessage::WindowClosed { window_id, reply } => {
                         {
