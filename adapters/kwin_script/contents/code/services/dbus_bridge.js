@@ -130,8 +130,8 @@ function migrateWindow(win, target_output_name, target_desktop_id) {
       const outputs = workspace.screens || [];
       for (let i = 0; i < outputs.length; i++) {
         if (outputs[i] && outputs[i].name === target_output_name) {
-          try { if (typeof workspace.sendClientToScreen === "function") workspace.sendClientToScreen(win, outputs[i]); } catch (err) {}
-          try { win.output = outputs[i]; } catch (errOut) {}
+          try { if (typeof workspace.sendClientToScreen === "function") workspace.sendClientToScreen(win, outputs[i]); } catch (err) { }
+          try { win.output = outputs[i]; } catch (errOut) { }
           break;
         }
       }
@@ -210,7 +210,7 @@ function applyCommands(commandsJson) {
           try {
             const shouldMax = Boolean(cmd.maximized !== undefined ? cmd.maximized : cmd.floating);
             w.setMaximize(shouldMax, shouldMax);
-          } catch (eMax) {}
+          } catch (eMax) { }
           (function (cw) {
             setKWinTimeout(function () {
               if (cw && !cw.deleted) {
@@ -233,7 +233,7 @@ function applyCommands(commandsJson) {
           if (w.maximizeMode !== undefined && w.maximizeMode !== 0) {
             try {
               w.setMaximize(false, false);
-            } catch (eUnmax) {}
+            } catch (eUnmax) { }
           }
 
           const targetGeom = {
@@ -259,10 +259,10 @@ function applyCommands(commandsJson) {
               try {
                 var cur = cw.frameGeometry;
                 if (cur && (Math.abs(cur.x - tgt.x) > 2 || Math.abs(cur.y - tgt.y) > 2 ||
-                            Math.abs(cur.width - tgt.width) > 2 || Math.abs(cur.height - tgt.height) > 2)) {
+                  Math.abs(cur.width - tgt.width) > 2 || Math.abs(cur.height - tgt.height) > 2)) {
                   cw.frameGeometry = tgt;
                 }
-              } catch (eReapply) {}
+              } catch (eReapply) { }
 
               try {
                 var fgApplied = cw.frameGeometry || tgt;
@@ -277,7 +277,7 @@ function applyCommands(commandsJson) {
                   Math.round(fgApplied.width),
                   Math.round(fgApplied.height)
                 );
-              } catch (eAudit) {}
+              } catch (eAudit) { }
 
               cw.__raven_mutating = false;
             }, 60);
@@ -286,8 +286,8 @@ function applyCommands(commandsJson) {
 
         case "focus":
           if (!w.minimized && workspace.activeWindow !== w &&
-              (!workspace.activeWindow || (!workspace.activeWindow.popupWindow && !workspace.activeWindow.modal && !workspace.activeWindow.dialog && !workspace.activeWindow.transient && workspace.activeWindow.transientFor == null)) &&
-              !hasActiveTransientOrModalChild(w, windows)) {
+            (!workspace.activeWindow || (!workspace.activeWindow.popupWindow && !workspace.activeWindow.modal && !workspace.activeWindow.dialog && !workspace.activeWindow.transient && workspace.activeWindow.transientFor == null)) &&
+            !hasActiveTransientOrModalChild(w, windows)) {
             workspace.activeWindow = w;
           }
           break;
@@ -297,7 +297,7 @@ function applyCommands(commandsJson) {
             w.__raven_mutating = true;
             try {
               w.minimized = true;
-            } catch (eMin) {}
+            } catch (eMin) { }
 
             try {
               if (workspace.activeWindow === w) {
@@ -313,7 +313,7 @@ function applyCommands(commandsJson) {
                   workspace.activeWindow = nextWin;
                 }
               }
-            } catch (eFoc) {}
+            } catch (eFoc) { }
 
             (function (cw) {
               setKWinTimeout(function () {
@@ -331,7 +331,7 @@ function applyCommands(commandsJson) {
             w.__raven_mutating = true;
             try {
               w.minimized = false;
-            } catch (eUnmin) {}
+            } catch (eUnmin) { }
             (function (cw) {
               setKWinTimeout(function () {
                 if (cw && !cw.deleted) {
@@ -347,7 +347,7 @@ function applyCommands(commandsJson) {
             if (typeof w.closeWindow === "function") {
               w.closeWindow();
             }
-          } catch (eClose) {}
+          } catch (eClose) { }
           break;
 
         case "migrate_to_output":
@@ -387,8 +387,7 @@ function applyCommands(commandsJson) {
  */
 function bindWindow(w) {
   try {
-    if (!isManageable(w) 
-      || w.__raven_bound) return;
+    if (!isManageable(w) || w.__raven_bound) return;
     w.__raven_bound = true;
 
     const onStateChange = function () {
@@ -423,9 +422,7 @@ function bindWindow(w) {
     }
 
     const onOutputOrDesktop = function () {
-      if (!w 
-        || w.deleted 
-        || w.__raven_mutating) return;
+      if (!w || w.deleted || w.__raven_mutating) return;
       if (!w.interactiveMove && !w.interactiveResize) {
         w.__raven_ui_migrating = true;
         (function (cw) {
@@ -441,11 +438,8 @@ function bindWindow(w) {
     w.desktopsChanged.connect(onOutputOrDesktop);
 
     w.frameGeometryChanged.connect(function () {
-      if (!w 
-        || w.deleted 
-        || w.minimized) return;
-      if (w.interactiveMove 
-        || w.interactiveResize) {
+      if (!w || w.deleted || w.minimized) return;
+      if (w.interactiveMove || w.interactiveResize) {
         w.__was_interacting = true;
         return;
       }
@@ -454,8 +448,7 @@ function bindWindow(w) {
         requestStateSync();
         return;
       }
-      if (w.__raven_mutating 
-        || w.__raven_ui_migrating) return;
+      if (w.__raven_mutating || w.__raven_ui_migrating) return;
       if (hasActiveTransientOrModalChild(w, null)) return;
 
       syncWindowDelta(w);
