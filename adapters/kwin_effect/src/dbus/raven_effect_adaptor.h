@@ -56,6 +56,26 @@ public Q_SLOTS:
     void CancelAnimation(const QString &windowId);
 
     /**
+     * @brief Minimiza nativamente una ventana en KWin.
+     */
+    void MinimizeWindow(const QString &windowId);
+
+    /**
+     * @brief Desminimiza/restaura nativamente una ventana en KWin.
+     */
+    void UnminimizeWindow(const QString &windowId);
+
+    /**
+     * @brief Cierra nativamente una ventana en KWin.
+     */
+    void CloseWindow(const QString &windowId);
+
+    /**
+     * @brief Activa y otorga foco de entrada nativamente a una ventana en KWin.
+     */
+    void ActivateWindow(const QString &windowId);
+
+    /**
      * @brief Consulta el estado de activación y capacidades del efecto.
      */
     bool IsActive() const;

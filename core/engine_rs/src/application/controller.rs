@@ -590,6 +590,11 @@ impl RavenController {
                     commands.push(RavenAction::MinimizeWindow {
                         window_id: wid.clone(),
                     });
+                    if let Some(ref next_id) = next_focus_id {
+                        commands.push(RavenAction::FocusWindow {
+                            window_id: next_id.clone(),
+                        });
+                    }
                     self.send_osd_notification("Ventana", "Minimizar");
                     needs_recalc = true;
                 }
@@ -619,6 +624,11 @@ impl RavenController {
                     commands.push(RavenAction::CloseWindow {
                         window_id: wid.clone(),
                     });
+                    if let Some(ref next_id) = self.active_window_id {
+                        commands.push(RavenAction::FocusWindow {
+                            window_id: next_id.clone(),
+                        });
+                    }
                     self.send_osd_notification("Ventana", "Cerrar");
                     needs_recalc = true;
                 }

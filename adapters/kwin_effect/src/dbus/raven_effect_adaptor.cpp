@@ -81,6 +81,34 @@ void RavenEffectAdaptor::CancelAnimation(const QString &windowId)
     m_effect->cancelWindowAnimation(windowId);
 }
 
+void RavenEffectAdaptor::MinimizeWindow(const QString &windowId)
+{
+    if (m_effect) {
+        m_effect->minimizeWindow(windowId);
+    }
+}
+
+void RavenEffectAdaptor::UnminimizeWindow(const QString &windowId)
+{
+    if (m_effect) {
+        m_effect->unminimizeWindow(windowId);
+    }
+}
+
+void RavenEffectAdaptor::CloseWindow(const QString &windowId)
+{
+    if (m_effect) {
+        m_effect->closeWindow(windowId);
+    }
+}
+
+void RavenEffectAdaptor::ActivateWindow(const QString &windowId)
+{
+    if (m_effect) {
+        m_effect->activateWindow(windowId);
+    }
+}
+
 /**
  * @brief Indica si el efecto está actualmente instanciado y activo.
  * 

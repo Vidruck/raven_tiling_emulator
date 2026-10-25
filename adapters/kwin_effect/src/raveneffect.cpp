@@ -508,6 +508,48 @@ void RavenEffect::cancelWindowAnimation(const QString &windowId)
     cancelBirthAnimation(windowId);
 }
 
+void RavenEffect::minimizeWindow(const QString &windowId)
+{
+    KWin::EffectWindow *w = findWindowById(windowId);
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    cancelWindowAnimation(windowId);
+    removeBorder(w);
+    w->minimize();
+}
+
+void RavenEffect::unminimizeWindow(const QString &windowId)
+{
+    KWin::EffectWindow *w = findWindowById(windowId);
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    w->unminimize();
+    if (KWin::effects) {
+        KWin::effects->activateWindow(w);
+    }
+}
+
+void RavenEffect::closeWindow(const QString &windowId)
+{
+    KWin::EffectWindow *w = findWindowById(windowId);
+    if (!w || w->isDeleted()) {
+        return;
+    }
+    cancelWindowAnimation(windowId);
+    removeBorder(w);
+    w->closeWindow();
+}
+
+void RavenEffect::activateWindow(const QString &windowId)
+{
+    KWin::EffectWindow *w = findWindowById(windowId);
+    if (w && !w->isDeleted() && KWin::effects) {
+        KWin::effects->activateWindow(w);
+    }
+}
+
 /**
  * @brief Interpola suavemente la posición y tamaño usando KWin::AnimationEffect::Translation.
  */

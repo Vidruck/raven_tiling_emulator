@@ -298,13 +298,29 @@ function applyCommands(commandsJson) {
             try {
               w.minimized = true;
             } catch (eMin) {}
+
+            try {
+              if (workspace.activeWindow === w) {
+                var nextWin = null;
+                for (var mi = 0; mi < windows.length; mi++) {
+                  var cand = windows[mi];
+                  if (cand && cand !== w && !cand.deleted && !cand.minimized && !cand.hidden && isManageable(cand)) {
+                    nextWin = cand;
+                    break;
+                  }
+                }
+                if (nextWin) {
+                  workspace.activeWindow = nextWin;
+                }
+              }
+            } catch (eFoc) {}
+
             (function (cw) {
               setKWinTimeout(function () {
                 if (cw && !cw.deleted) {
                   cw.__raven_mutating = false;
-                  requestStateSync();
                 }
-              }, 60);
+              }, 300);
             })(w);
           }
           break;
@@ -319,9 +335,8 @@ function applyCommands(commandsJson) {
               setKWinTimeout(function () {
                 if (cw && !cw.deleted) {
                   cw.__raven_mutating = false;
-                  requestStateSync();
                 }
-              }, 60);
+              }, 300);
             })(w);
           }
           break;

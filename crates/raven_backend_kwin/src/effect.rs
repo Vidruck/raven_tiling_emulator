@@ -127,4 +127,92 @@ impl RavenEffectClient {
             });
         }
     }
+
+    /// Minimiza de forma nativa una ventana a través del efecto C++ de KWin.
+    pub async fn minimize_window(&self, window_id: &str) {
+        let wid = window_id.to_string();
+        let conn_opt = self.connection.read().await.clone();
+        if let Some(conn) = conn_opt {
+            tokio::spawn(async move {
+                let call_res = conn
+                    .call_method(
+                        Some("org.kde.kwin.RavenEffect"),
+                        "/Effects/Raven",
+                        Some("org.kde.kwin.RavenEffect"),
+                        "MinimizeWindow",
+                        &(&wid,),
+                    )
+                    .await;
+                if let Err(e) = call_res {
+                    debug!("[EFFECT-CLIENT] Fallo al invocar MinimizeWindow: {}", e);
+                }
+            });
+        }
+    }
+
+    /// Desminimiza de forma nativa una ventana a través del efecto C++ de KWin.
+    pub async fn unminimize_window(&self, window_id: &str) {
+        let wid = window_id.to_string();
+        let conn_opt = self.connection.read().await.clone();
+        if let Some(conn) = conn_opt {
+            tokio::spawn(async move {
+                let call_res = conn
+                    .call_method(
+                        Some("org.kde.kwin.RavenEffect"),
+                        "/Effects/Raven",
+                        Some("org.kde.kwin.RavenEffect"),
+                        "UnminimizeWindow",
+                        &(&wid,),
+                    )
+                    .await;
+                if let Err(e) = call_res {
+                    debug!("[EFFECT-CLIENT] Fallo al invocar UnminimizeWindow: {}", e);
+                }
+            });
+        }
+    }
+
+    /// Cierra de forma nativa una ventana a través del efecto C++ de KWin.
+    pub async fn close_window(&self, window_id: &str) {
+        let wid = window_id.to_string();
+        let conn_opt = self.connection.read().await.clone();
+        if let Some(conn) = conn_opt {
+            tokio::spawn(async move {
+                let call_res = conn
+                    .call_method(
+                        Some("org.kde.kwin.RavenEffect"),
+                        "/Effects/Raven",
+                        Some("org.kde.kwin.RavenEffect"),
+                        "CloseWindow",
+                        &(&wid,),
+                    )
+                    .await;
+                if let Err(e) = call_res {
+                    debug!("[EFFECT-CLIENT] Fallo al invocar CloseWindow: {}", e);
+                }
+            });
+        }
+    }
+
+    /// Activa/enfoca de forma nativa una ventana a través del efecto C++ de KWin.
+    pub async fn activate_window(&self, window_id: &str) {
+        let wid = window_id.to_string();
+        let conn_opt = self.connection.read().await.clone();
+        if let Some(conn) = conn_opt {
+            tokio::spawn(async move {
+                let call_res = conn
+                    .call_method(
+                        Some("org.kde.kwin.RavenEffect"),
+                        "/Effects/Raven",
+                        Some("org.kde.kwin.RavenEffect"),
+                        "ActivateWindow",
+                        &(&wid,),
+                    )
+                    .await;
+                if let Err(e) = call_res {
+                    debug!("[EFFECT-CLIENT] Fallo al invocar ActivateWindow: {}", e);
+                }
+            });
+        }
+    }
 }

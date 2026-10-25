@@ -100,6 +100,14 @@ public:
     void cancelWindowAnimation(const QString &windowId);
 
     /**
+     * @brief Control nativo de ventanas desde el compositor.
+     */
+    void minimizeWindow(const QString &windowId);
+    void unminimizeWindow(const QString &windowId);
+    void closeWindow(const QString &windowId);
+    void activateWindow(const QString &windowId);
+
+    /**
      * @brief Actualiza la configuración de los contornos activo/inactivo en tiempo real.
      */
     void updateBorderConfig(bool enabled, double width, const QString &activeColor, const QString &inactiveColor, double radius = -1.0);
