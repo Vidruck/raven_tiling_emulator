@@ -309,20 +309,14 @@ impl CompositorBackend for KWinBackend {
                 match action {
                     RavenAction::CloseWindow { window_id } => {
                         self.effect_client.cancel_animation(window_id).await;
-                        self.effect_client.close_window(window_id).await;
                         geom_guard.remove(window_id);
                     }
                     RavenAction::MinimizeWindow { window_id } => {
                         self.effect_client.cancel_animation(window_id).await;
-                        self.effect_client.minimize_window(window_id).await;
                         geom_guard.remove(window_id);
                     }
-                    RavenAction::UnminimizeWindow { window_id } => {
-                        self.effect_client.unminimize_window(window_id).await;
-                    }
-                    RavenAction::FocusWindow { window_id } => {
-                        self.effect_client.activate_window(window_id).await;
-                    }
+                    RavenAction::UnminimizeWindow { .. } => {}
+                    RavenAction::FocusWindow { .. } => {}
                     RavenAction::ReleaseQuarantine { window_id } => {
                         // 140ms de animación de nacimiento reactiva con zoom y elastic
                         self.effect_client.animate_birth(window_id, 140).await;

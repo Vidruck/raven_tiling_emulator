@@ -101,7 +101,7 @@ function syncState() {
  */
 function syncWindowDelta(w) {
   try {
-    if (!w || w.deleted || !isManageable(w)) return;
+    if (!w || w.deleted || w.minimized || !isManageable(w)) return;
     const safeId = getSafeWindowId(w);
     if (!safeId) return;
 
@@ -319,8 +319,9 @@ function applyCommands(commandsJson) {
               setKWinTimeout(function () {
                 if (cw && !cw.deleted) {
                   cw.__raven_mutating = false;
+                  requestStateSync();
                 }
-              }, 300);
+              }, 250);
             })(w);
           }
           break;
@@ -386,7 +387,8 @@ function applyCommands(commandsJson) {
  */
 function bindWindow(w) {
   try {
-    if (!isManageable(w) || w.__raven_bound) return;
+    if (!isManageable(w) 
+      || w.__raven_bound) return;
     w.__raven_bound = true;
 
     const onStateChange = function () {
@@ -421,7 +423,9 @@ function bindWindow(w) {
     }
 
     const onOutputOrDesktop = function () {
-      if (!w || w.deleted || w.__raven_mutating) return;
+      if (!w 
+        || w.deleted 
+        || w.__raven_mutating) return;
       if (!w.interactiveMove && !w.interactiveResize) {
         w.__raven_ui_migrating = true;
         (function (cw) {
@@ -437,8 +441,11 @@ function bindWindow(w) {
     w.desktopsChanged.connect(onOutputOrDesktop);
 
     w.frameGeometryChanged.connect(function () {
-      if (!w || w.deleted) return;
-      if (w.interactiveMove || w.interactiveResize) {
+      if (!w 
+        || w.deleted 
+        || w.minimized) return;
+      if (w.interactiveMove 
+        || w.interactiveResize) {
         w.__was_interacting = true;
         return;
       }
@@ -447,7 +454,8 @@ function bindWindow(w) {
         requestStateSync();
         return;
       }
-      if (w.__raven_mutating || w.__raven_ui_migrating) return;
+      if (w.__raven_mutating 
+        || w.__raven_ui_migrating) return;
       if (hasActiveTransientOrModalChild(w, null)) return;
 
       syncWindowDelta(w);

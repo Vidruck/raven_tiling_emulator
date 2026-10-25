@@ -475,8 +475,9 @@ impl RavenControllerActor {
                                 win_node.strict_birth = false;
                             }
 
-                            let is_tiled = !win_node.is_floating && !win_node.is_minimized;
                             let wid = win_node.window_id.clone();
+                            let was_min = self.controller.get_engine().minimized_windows.contains(&wid);
+                            let is_min = win_node.is_minimized;
 
                             if win_node.is_pip && self.initialized_pip_windows.insert(wid.clone()) {
                                 tracing::info!(
@@ -491,18 +492,11 @@ impl RavenControllerActor {
                             
                             self.controller.handle_delta_change(win_node);
 
-                            // Solo actualizar active_window_id si es genuinamente diferente a la actual
-                            // Un SyncWindowDelta puede venir de un cambio de geometría causado por nuestro
-                            // propio mosaico — en ese caso, NO sobrescribimos la ventana activa.
-                            let is_new_focus = self.active_window_id.as_deref() != Some(wid.as_str());
-                            if is_tiled && is_new_focus {
-                                self.active_window_id = Some(wid.clone());
-                                self.controller.active_window_id = Some(wid.clone());
-                                self.controller.get_engine_mut().promote_to_recent(&wid);
-                            }
-
-                            if let Ok(recalc_cmds) = self.controller.commit_layout() {
-                                commands.extend(recalc_cmds);
+                            // Recalcular layout únicamente si el estado de minimizado cambió estructuralmente
+                            if was_min != is_min {
+                                if let Ok(recalc_cmds) = self.controller.commit_layout() {
+                                    commands.extend(recalc_cmds);
+                                }
                             }
                         }
                         let _ = reply.send(commands);
