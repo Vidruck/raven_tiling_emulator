@@ -766,7 +766,7 @@ function applyCommands(commandsJson) {
                   cw.__raven_mutating = false;
                   requestStateSync();
                 }
-              }, 250);
+              }, 50);
             })(w);
           }
           break;

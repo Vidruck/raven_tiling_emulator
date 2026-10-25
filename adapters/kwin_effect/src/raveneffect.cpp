@@ -199,8 +199,14 @@ void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
                 cancelWindowAnimation(wid);
             }
             removeBorder(w);
+            if (KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
         } else if (m_bordersEnabled) {
             updateBorder(w);
+            if (KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
         }
     }));
     conns.append(connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, this, [this, w]() {
@@ -273,9 +279,14 @@ void RavenEffect::prePaintWindow(KWin::RenderView *view, KWin::EffectWindow *w, 
     if (w) {
         if (w->isDeleted() || w->isHidden() || w->isMinimized()) {
             auto it = m_borders.find(w);
-            if (it != m_borders.end()) {
-                removeBorder(w);
+            if (it != m_borders.end() && it->second.item) {
+                it->second.item->setVisible(false);
             }
+            // CRÍTICO: No invocar KWin::AnimationEffect::prePaintWindow para ventanas minimizadas,
+            // ocultas o eliminadas. Si AnimationEffect procesa una ventana minimizada, altera data.mask
+            // (p. ej. PAINT_WINDOW_TRANSFORMED) forzando al compositor a dibujar la ventana en el
+            // buffer de pantalla a pesar de estar minimizada, dejándola como superficie fantasma.
+            return;
         } else if (m_bordersEnabled) {
             auto it = m_borders.find(w);
             if (it == m_borders.end() || !it->second.item) {
@@ -517,6 +528,9 @@ void RavenEffect::minimizeWindow(const QString &windowId)
     cancelWindowAnimation(windowId);
     removeBorder(w);
     w->minimize();
+    if (KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
 }
 
 void RavenEffect::unminimizeWindow(const QString &windowId)
@@ -528,6 +542,7 @@ void RavenEffect::unminimizeWindow(const QString &windowId)
     w->unminimize();
     if (KWin::effects) {
         KWin::effects->activateWindow(w);
+        KWin::effects->addRepaintFull();
     }
 }
 
@@ -1316,11 +1331,8 @@ void RavenEffect::removeBorder(KWin::EffectWindow *w)
         }
 #endif
         m_borders.erase(it);
-        if (w) {
-            w->addRepaintFull();
-            if (KWin::effects) {
-                KWin::effects->addRepaint(w->expandedGeometry());
-            }
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
         }
     }
 }
@@ -1485,12 +1497,14 @@ void RavenEffect::slotWindowMinimizedChanged(KWin::EffectWindow *w)
         if (m_lastActiveWindow == w) {
             m_lastActiveWindow.clear();
         }
-        w->addRepaintFull();
         if (KWin::effects) {
-            KWin::effects->addRepaint(w->expandedGeometry());
+            KWin::effects->addRepaintFull();
         }
     } else {
         updateBorder(w);
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
     }
 }
 
