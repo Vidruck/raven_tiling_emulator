@@ -48,12 +48,25 @@ function registerRavenShortcuts() {
 
   registerShortcut("RavenMinimizeActive", "Raven: Minimizar Ventana", "Meta+X", function () {
     const aw = workspace.activeWindow;
-    dispatchToRaven("minimizeActive", aw ? getSafeWindowId(aw) || "" : "");
+    if (!aw || aw.deleted) return;
+    const targetWin = aw.transientFor || aw;
+    dispatchToRaven("minimizeActive", getSafeWindowId(targetWin) || "");
   });
 
   registerShortcut("RavenCloseActive", "Raven: Cerrar Ventana", "Meta+Q", function () {
     const aw = workspace.activeWindow;
-    dispatchToRaven("closeActive", aw ? getSafeWindowId(aw) || "" : "");
+    if (!aw || aw.deleted) return;
+    // Si la ventana activa es un diálogo modal, subventana transitoria o no manejable,
+    // cerrarla directamente a nivel de KWin para no desincronizar el árbol de mosaico
+    if (aw.transientFor != null || aw.modal || !isManageable(aw)) {
+      try {
+        if (typeof aw.closeWindow === "function") {
+          aw.closeWindow();
+          return;
+        }
+      } catch (eClose) { }
+    }
+    dispatchToRaven("closeActive", getSafeWindowId(aw) || "");
   });
 
   // Navegación y foco

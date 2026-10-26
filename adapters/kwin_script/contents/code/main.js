@@ -600,6 +600,17 @@ function hasActiveTransientOrModalChild(parentWin, allWindows) {
     if (child.transientFor === parentWin) {
       return true;
     }
+    if (child.modal || child.dialog || child.transient) {
+      if (child.transientFor === parentWin) return true;
+      try {
+        if (typeof child.mainWindows === "function") {
+          const mains = child.mainWindows();
+          if (mains && mains.indexOf(parentWin) !== -1) return true;
+        } else if (child.mainWindows && child.mainWindows.indexOf && child.mainWindows.indexOf(parentWin) !== -1) {
+          return true;
+        }
+      } catch (eMains) { }
+    }
   }
   return false;
 }
@@ -992,12 +1003,25 @@ function registerRavenShortcuts() {
 
   registerShortcut("RavenMinimizeActive", "Raven: Minimizar Ventana", "Meta+X", function () {
     const aw = workspace.activeWindow;
-    dispatchToRaven("minimizeActive", aw ? getSafeWindowId(aw) || "" : "");
+    if (!aw || aw.deleted) return;
+    const targetWin = aw.transientFor || aw;
+    dispatchToRaven("minimizeActive", getSafeWindowId(targetWin) || "");
   });
 
   registerShortcut("RavenCloseActive", "Raven: Cerrar Ventana", "Meta+Q", function () {
     const aw = workspace.activeWindow;
-    dispatchToRaven("closeActive", aw ? getSafeWindowId(aw) || "" : "");
+    if (!aw || aw.deleted) return;
+    // Si la ventana activa es un diálogo modal, subventana transitoria o no manejable,
+    // cerrarla directamente a nivel de KWin para no desincronizar el árbol de mosaico
+    if (aw.transientFor != null || aw.modal || !isManageable(aw)) {
+      try {
+        if (typeof aw.closeWindow === "function") {
+          aw.closeWindow();
+          return;
+        }
+      } catch (eClose) { }
+    }
+    dispatchToRaven("closeActive", getSafeWindowId(aw) || "");
   });
 
   // Navegación y foco
@@ -1111,11 +1135,12 @@ function initDBusBridge() {
       if (!aw || aw.deleted) {
         return;
       }
-      // Blindaje de popups y menús desplegables: ignorar paneles, subventanas hijas y popups
-      if (!isManageable(aw) || aw.transientFor != null || aw.popupWindow) {
+      // Si la ventana activada es un diálogo o subventana transitoria, asociar foco a su ventana madre
+      var targetWin = (aw.transientFor != null) ? aw.transientFor : aw;
+      if (!targetWin || targetWin.deleted || !isManageable(targetWin) || targetWin.popupWindow) {
         return;
       }
-      var awId = getSafeWindowId(aw);
+      var awId = getSafeWindowId(targetWin);
       if (awId) {
         try {
           callDBus(

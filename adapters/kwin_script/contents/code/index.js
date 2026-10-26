@@ -80,11 +80,12 @@ function initDBusBridge() {
       if (!aw || aw.deleted) {
         return;
       }
-      // Blindaje de popups y menús desplegables: ignorar paneles, subventanas hijas y popups
-      if (!isManageable(aw) || aw.transientFor != null || aw.popupWindow) {
+      // Si la ventana activada es un diálogo o subventana transitoria, asociar foco a su ventana madre
+      var targetWin = (aw.transientFor != null) ? aw.transientFor : aw;
+      if (!targetWin || targetWin.deleted || !isManageable(targetWin) || targetWin.popupWindow) {
         return;
       }
-      var awId = getSafeWindowId(aw);
+      var awId = getSafeWindowId(targetWin);
       if (awId) {
         try {
           callDBus(

@@ -609,27 +609,10 @@ impl RavenController {
                 });
 
                 if let Some(wid) = target_wid {
-                    self.flap_guard.remove(&wid);
-                    self.last_known_layout.remove(&wid);
-                    self.engine.current_windows.remove(&wid);
-                    self.engine.window_history.retain(|id| id != &wid);
-                    self.engine.spatial_order.retain(|id| id != &wid);
-                    self.engine.dynamic_floating_windows.remove(&wid);
-                    self.engine.maximized_windows.remove(&wid);
-                    self.engine.minimized_windows.remove(&wid);
-                    if self.active_window_id.as_deref() == Some(wid.as_str()) {
-                        self.active_window_id = self.engine.window_history.back().cloned();
-                    }
                     commands.push(RavenAction::CloseWindow {
                         window_id: wid.clone(),
                     });
-                    if let Some(ref next_id) = self.active_window_id {
-                        commands.push(RavenAction::FocusWindow {
-                            window_id: next_id.clone(),
-                        });
-                    }
                     self.send_osd_notification("Ventana", "Cerrar");
-                    needs_recalc = true;
                 }
             }
             // Alternar estado flotante dinámico (Quick Peek)

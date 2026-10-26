@@ -160,6 +160,17 @@ function hasActiveTransientOrModalChild(parentWin, allWindows) {
     if (child.transientFor === parentWin) {
       return true;
     }
+    if (child.modal || child.dialog || child.transient) {
+      if (child.transientFor === parentWin) return true;
+      try {
+        if (typeof child.mainWindows === "function") {
+          const mains = child.mainWindows();
+          if (mains && mains.indexOf(parentWin) !== -1) return true;
+        } else if (child.mainWindows && child.mainWindows.indexOf && child.mainWindows.indexOf(parentWin) !== -1) {
+          return true;
+        }
+      } catch (eMains) { }
+    }
   }
   return false;
 }
