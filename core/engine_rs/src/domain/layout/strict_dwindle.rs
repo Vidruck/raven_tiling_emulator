@@ -7,7 +7,7 @@
 //! Alterna cortes horizontales y verticales manteniendo un piso de seguridad `min_rem` para evitar
 //! colapsos dimensionales en resoluciones reducidas.
 
-use super::{apply_gaps, LayoutStrategy};
+use super::{apply_gaps, clamp_min_height, clamp_min_width, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
@@ -80,9 +80,9 @@ impl LayoutStrategy for StrictDwindleStrategy {
             let mut curr = container;
             let current_ratio = master_ratio.clamp(0.20, 0.80);
 
-            // División según la dirección alternante actual respetando requerimientos mínimos
+            // División según la dirección alternante actual respetando requerimientos mínimos acotados
             if split_horizontal {
-                let win_min_w = win.min_w;
+                let win_min_w = clamp_min_width(win, container.width, 2);
                 let min_rem = 80;
                 let max_allowed = std::cmp::max(1, container.width - min_rem);
                 let raw_w = (container.width as f32 * current_ratio) as i32;
@@ -95,7 +95,7 @@ impl LayoutStrategy for StrictDwindleStrategy {
                 container.x += w;
                 container.width = std::cmp::max(1, container.width - w);
             } else {
-                let win_min_h = win.min_h;
+                let win_min_h = clamp_min_height(win, container.height, 2);
                 let min_rem = 80;
                 let max_allowed = std::cmp::max(1, container.height - min_rem);
                 let raw_h = (container.height as f32 * current_ratio) as i32;

@@ -396,6 +396,10 @@ impl TilingEngine {
         self.dynamic_floating_windows
             .retain(|id| valid_ids.contains(id.as_str()));
 
+        // Limpiar de la lista de maximizadas aquellas ventanas que hayan sido cerradas
+        self.maximized_windows
+            .retain(|id| valid_ids.contains(id.as_str()));
+
         // Limpiar de la lista de minimizadas aquellas ventanas que hayan sido cerradas
         self.minimized_windows
             .retain(|id| valid_ids.contains(id.as_str()));

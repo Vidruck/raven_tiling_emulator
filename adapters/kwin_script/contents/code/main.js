@@ -56,122 +56,6 @@ var Logger = {
   }
 };
 /**
- * @file timer_pool.js
- * @brief Pool estático de temporizadores reutilizables para optimización del recolector de basura (GC) en QJSEngine.
- * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
- */
-
-/** @type {number} Capacidad máxima de temporizadores preasignados en el pool. */
-var TIMER_POOL_SIZE = 10;
-
-/** @type {Array<{timer: QTimer, busy: boolean, callback: Function|null}>} Lista de slots de temporizadores. */
-var _timer_pool = [];
-
-/** @type {boolean} Indica si el pool ha completado su inicialización. */
-var _timer_pool_ready = false;
-
-/** @type {Array<{at: number, callback: Function}>} Cola de callbacks pendientes para ejecución diferida */
-var _deferred_queue = [];
-var _queue_timer = null;
-
-/**
- * @brief Inicializa el pool de temporizadores estáticos preasignados.
- *
- * Crea instancias persistentes de QTimer para evitar la creación y destrucción constante
- * de objetos durante eventos masivos de redimensionamiento o movimiento.
- * Debe invocarse una única vez durante el ciclo de arranque `initDBusBridge()`.
- */
-function initTimerPool() {
-  try {
-    for (var i = 0; i < TIMER_POOL_SIZE; i++) {
-      var t = new QTimer();
-      t.singleShot = true;
-      var slot = { timer: t, busy: false, callback: null };
-      (function (s) {
-        s.timer.timeout.connect(function () {
-          s.busy = false;
-          var cb = s.callback;
-          s.callback = null;
-          try { if (cb) cb(); } catch (e) { }
-          processDeferredQueue();
-        });
-      })(slot);
-      _timer_pool.push(slot);
-    }
-    _timer_pool_ready = true;
-  } catch (e) {
-    Logger.error("initTimerPool", "Error inicializando pool de timers", e);
-    _timer_pool_ready = false;
-  }
-}
-
-function processDeferredQueue() {
-  if (!_timer_pool_ready || _deferred_queue.length === 0) return;
-  var now = Date.now();
-  for (var i = 0; i < _deferred_queue.length; i++) {
-    var item = _deferred_queue[i];
-    if (item.at <= now) {
-      _deferred_queue.splice(i, 1);
-      i--;
-      try { item.callback(); } catch (e) {}
-    } else {
-      var remaining = Math.max(0, item.at - now);
-      for (var s = 0; s < _timer_pool.length; s++) {
-        if (!_timer_pool[s].busy) {
-          _deferred_queue.splice(i, 1);
-          i--;
-          _timer_pool[s].busy = true;
-          _timer_pool[s].callback = item.callback;
-          _timer_pool[s].timer.interval = remaining;
-          _timer_pool[s].timer.start();
-          break;
-        }
-      }
-    }
-  }
-}
-
-/**
- * @brief Ejecuta un callback después de un retardo temporal en milisegundos.
- *
- * Utiliza un slot preasignado del pool de temporizadores. Si el pool está temporalmente saturado,
- * agenda el callback en una cola de vencimiento procesada por un timer maestro persistente,
- * eliminando fugas de memoria y allocations continuas en QJSEngine.
- */
-function setKWinTimeout(callback, delayMs) {
-  if (_timer_pool_ready && _timer_pool.length > 0) {
-    for (var i = 0; i < _timer_pool.length; i++) {
-      var slot = _timer_pool[i];
-      if (!slot.busy) {
-        slot.busy = true;
-        slot.callback = callback;
-        slot.timer.interval = delayMs;
-        slot.timer.start();
-        return slot;
-      }
-    }
-  }
-
-  // Si los slots fijos están saturados, agendar en la cola persistente sin instanciar QTimers huérfanos
-  _deferred_queue.push({ at: Date.now() + delayMs, callback: callback });
-  if (!_queue_timer) {
-    _queue_timer = new QTimer();
-    _queue_timer.interval = 16;
-    _queue_timer.timeout.connect(function () {
-      processDeferredQueue();
-      if (_deferred_queue.length === 0 && _queue_timer && _queue_timer.active) {
-        _queue_timer.stop();
-      }
-    });
-  }
-  if (!_queue_timer.active) {
-    _queue_timer.start();
-  }
-  return null;
-}
-
-/**
  * @file geometry.js
  * @brief Funciones auxiliares de cálculo y normalización geométrica de pantallas y ventanas en KWin.
  * @author Alejandro González Hernández (Vidruck)
@@ -413,64 +297,66 @@ function processNewWindow(w) {
 
 /**
  * @file focus.js
- * @brief Resalte visual interactivo mediante el sistema de contorno (Outline) nativo de KWin.
+ * @brief Gestión de retroalimentación de foco delegada al efecto nativo C++ (kwin4_effect_raven).
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @version 5.1
  */
 
 /**
- * @brief Destaca momentáneamente una ventana proyectando el marco de contorno (Outline) del compositor.
+ * @brief Limpia cualquier contorno residual del compositor sin instanciar temporizadores.
  *
- * Utilizado al conmutar foco mediante atajos (`Meta+J` / `Meta+K`) para dar retroalimentación visual inmediata.
- * El contorno se desvanece automáticamente tras 200 ms.
+ * La proyección visual de bordes activos e inactivos se realiza por hardware en `BorderManager` (C++).
  *
- * @param {KWin::Window} w Instancia de la ventana a destacar.
+ * @param {KWin::Window} w Instancia de la ventana enfocada.
  */
 function highlightWindow(w) {
   try {
     if (!w) return;
-    if (workspace.showOutline) {
-      workspace.showOutline(w.frameGeometry);
-      setKWinTimeout(function() {
-        if (workspace.hideOutline) workspace.hideOutline();
-      }, 200);
+    if (workspace.hideOutline) {
+      workspace.hideOutline();
     }
   } catch (e) { }
 }
 
+
 /**
  * @file dbus_bridge.js
- * @brief Orquestador D-Bus ultraligero entre KWin y el demonio Raven en Rust.
+ * @brief Orquestador D-Bus ultraligero y libre de temporizadores entre KWin y el demonio Raven en Rust.
  * @author Alejandro González Hernández (Vidruck)
- * @version 5.0
+ * @version 5.1
  */
 
-var _debounceTimer = null;
+var _isApplyingCommands = false;
+var _lastSyncedPayloadJson = "";
+var _lastDeltaMap = {};
 
 /**
- * @brief Solicita una sincronización global de estado agrupando eventos en 20ms.
+ * @brief Solicita una sincronización global de estado de forma inmediata (sin QTimers en KWin).
+ * La coalescencia de ráfagas y estabilización se ejecuta de forma asíncrona en el Actor de Rust.
  */
-function requestStateSync() {
+function requestStateSync(force) {
+  if (_isApplyingCommands && !force) return;
   try {
-    if (!_debounceTimer) {
-      _debounceTimer = new QTimer();
-      _debounceTimer.interval = 35;
-      _debounceTimer.singleShot = true;
-      _debounceTimer.timeout.connect(syncState);
-    }
-    if (_debounceTimer.active) _debounceTimer.stop();
-    _debounceTimer.start();
-  } catch (e) {
-    try { syncState(); } catch (err) { }
+    syncState(Boolean(force));
+  } catch (err) { }
+}
+
+/**
+ * @brief Limpia el caché de deltas para una ventana cerrada garantizando memoria acotada.
+ */
+function clearWindowDeltaCache(safeId) {
+  if (safeId && _lastDeltaMap[safeId] !== undefined) {
+    delete _lastDeltaMap[safeId];
   }
 }
 
 /**
- * @brief Extrae la topología y lista de ventanas y la despacha a Rust.
+ * @brief Extrae la topología y lista de ventanas y la despacha a Rust si hubo cambios reales.
  */
-function syncState() {
+function syncState(force) {
   const windows = workspace.windowList();
   const winState = [];
+  const activeIds = {};
   const screens = {};
   const outs = workspace.screens || [];
   const desks = workspace.desktops || [];
@@ -506,8 +392,21 @@ function syncState() {
     try {
       if (!isManageable(w)) continue;
       const safeId = getSafeWindowId(w);
-      if (safeId) winState.push(buildWindowState(w, safeId));
+      if (safeId) {
+        activeIds[safeId] = true;
+        winState.push(buildWindowState(w, safeId));
+      }
     } catch (e) { }
+  }
+
+  // Podar entradas obsoletas en _lastDeltaMap para garantizar memoria O(N) estricta
+  const cachedKeys = Object.keys(_lastDeltaMap);
+  if (cachedKeys.length > winState.length + 16) {
+    for (let k = 0; k < cachedKeys.length; k++) {
+      if (!activeIds[cachedKeys[k]]) {
+        delete _lastDeltaMap[cachedKeys[k]];
+      }
+    }
   }
 
   const payload = {
@@ -521,12 +420,18 @@ function syncState() {
   };
 
   try {
+    const payloadJson = JSON.stringify(payload);
+    if (!force && payloadJson === _lastSyncedPayloadJson) {
+      return;
+    }
+    _lastSyncedPayloadJson = payloadJson;
+
     callDBus(
       "org.kde.raven.Daemon",
       "/Events",
       "org.kde.raven.Events",
       "syncStateAndUpdateLayout",
-      JSON.stringify(payload),
+      payloadJson,
       function (response) {
         if (response && response !== "[]") applyCommands(response);
       }
@@ -537,7 +442,7 @@ function syncState() {
 }
 
 /**
- * @brief Sincroniza incrementalmente el estado de una ventana individual.
+ * @brief Sincroniza incrementalmente el estado de una ventana individual con deduplicación.
  */
 function syncWindowDelta(w) {
   try {
@@ -545,12 +450,18 @@ function syncWindowDelta(w) {
     const safeId = getSafeWindowId(w);
     if (!safeId) return;
 
+    const deltaJson = JSON.stringify(buildWindowState(w, safeId));
+    if (_lastDeltaMap[safeId] === deltaJson) {
+      return;
+    }
+    _lastDeltaMap[safeId] = deltaJson;
+
     callDBus(
       "org.kde.raven.Daemon",
       "/Events",
       "org.kde.raven.Events",
       "syncWindowDelta",
-      JSON.stringify(buildWindowState(w, safeId)),
+      deltaJson,
       function (response) {
         if (response && response !== "[]") applyCommands(response);
       }
@@ -616,10 +527,33 @@ function hasActiveTransientOrModalChild(parentWin, allWindows) {
 }
 
 /**
- * @brief Aplica las acciones calculadas por Rust en KWin.
+ * @brief Comprueba si una ventana se encuentra actualmente en redimensionamiento interactivo con el ratón.
  */
-function applyCommands(commandsJson) {
+function isWindowResizing(w) {
+  if (!w || w.deleted) return false;
+  return Boolean(w.resize || w.interactiveResize || w.__was_resizing);
+}
+
+/**
+ * @brief Comprueba si una ventana se encuentra actualmente en arrastre interactivo con el ratón.
+ */
+function isWindowMoving(w) {
+  if (!w || w.deleted) return false;
+  return Boolean(w.move || w.interactiveMove || w.__was_moving);
+}
+
+/**
+ * @brief Aplica las acciones calculadas por Rust en KWin sin necesidad de temporizadores.
+ *
+ * @param commandsJson Cadena JSON con el lote de acciones generadas por el demonio Rust.
+ * @param activeResizingId Identificador de la ventana actualmente sujeta por el cursor (si aplica)
+ *                         para blindarla contra sobreescrituras mientras las ventanas vecinas reaccionan.
+ */
+function applyCommands(commandsJson, activeResizingId) {
   if (!commandsJson) return;
+  var needsSyncAfterBatch = false;
+  var forceSyncAfterBatch = false;
+  _isApplyingCommands = true;
   try {
     const cmds = JSON.parse(commandsJson);
     if (!cmds || !cmds.length) return;
@@ -635,7 +569,8 @@ function applyCommands(commandsJson) {
     for (let i = 0; i < cmds.length; i++) {
       const cmd = cmds[i];
       if (cmd.action === "request_sync") {
-        requestStateSync();
+        needsSyncAfterBatch = true;
+        forceSyncAfterBatch = true;
         continue;
       }
       if (cmd.action === "saturation_warning") {
@@ -650,6 +585,9 @@ function applyCommands(commandsJson) {
         case "set_floating":
           w.__raven_dynamic_float = Boolean(cmd.floating);
           w.keepAbove = Boolean(cmd.keep_above);
+          if (w.__raven_dynamic_float) {
+            delete w.__raven_target_geom;
+          }
           break;
 
         case "set_keep_above":
@@ -660,31 +598,53 @@ function applyCommands(commandsJson) {
           w.__raven_mutating = true;
           try {
             const shouldMax = Boolean(cmd.maximized !== undefined ? cmd.maximized : cmd.floating);
+            if (shouldMax) {
+              delete w.__raven_target_geom;
+            }
             w.setMaximize(shouldMax, shouldMax);
-          } catch (eMax) { }
-          (function (cw) {
-            setKWinTimeout(function () {
-              if (cw && !cw.deleted) {
-                cw.__raven_mutating = false;
-                requestStateSync();
-              }
-            }, 60);
-          })(w);
+            needsSyncAfterBatch = true;
+          } catch (eMax) {
+          } finally {
+            w.__raven_mutating = false;
+          }
           break;
 
         case "move":
         case "rectify_window":
-          if (w.minimized || w.interactiveMove || w.interactiveResize || w.fullScreen) break;
+          const safeId = getSafeWindowId(w);
+          // BLINDAJE ANTI-JALONEO: Si esta ventana está siendo manipulada directamente por el usuario
+          // con el ratón, NUNCA sobreescribir su geometría para evitar la lucha contra el cursor.
+          // Las ventanas vecinas sí recibirán su nuevo tamaño y posición para reaccionar en tiempo real.
+          if (
+            isWindowResizing(w) ||
+            isWindowMoving(w) ||
+            (activeResizingId && safeId === activeResizingId) ||
+            w.minimized ||
+            w.fullScreen
+          ) {
+            break;
+          }
           if (w.maximized || (w.maximizeMode !== undefined && w.maximizeMode === 3)) break;
           if (!w.normalWindow || w.transient || w.transientFor != null || w.modal || w.dialog || w.utility) break;
           if (hasActiveTransientOrModalChild(w, windows)) break;
 
-          // Si la ventana tiene maximización parcial (ej. Teams con MAXIMIZED_VERT),
-          // desmarcarla en KWin para que acepte libremente la nueva geometría
+          // Si la ventana tiene maximización parcial (ej. Teams con MAXIMIZED_VERT)
+          // o anclaje de mosaico nativo de Plasma (QuickTile / Tile), desmarcarlos
+          // para que Raven controle la geometría sin interferencias del compositor
           if (w.maximizeMode !== undefined && w.maximizeMode !== 0) {
             try {
               w.setMaximize(false, false);
             } catch (eUnmax) { }
+          }
+          if (w.tile) {
+            try {
+              w.tile = null;
+            } catch (eTile) { }
+          }
+          if (w.quickTileMode !== undefined && w.quickTileMode !== 0) {
+            try {
+              w.quickTileMode = 0;
+            } catch (eQt) { }
           }
 
           const targetGeom = {
@@ -694,18 +654,13 @@ function applyCommands(commandsJson) {
             height: Math.round(cmd.height),
           };
 
+          w.__raven_target_geom = targetGeom;
           w.__raven_mutating = true;
-          w.frameGeometry = targetGeom;
-
-          // Modelo Dumb Actuator: aplicar geometría de inmediato sin bucle de ping-pong D-Bus.
-          // La verificación de lazo cerrado se delega al motor en Rust de forma asíncrona.
-          (function (cw) {
-            setKWinTimeout(function () {
-              if (cw && !cw.deleted) {
-                cw.__raven_mutating = false;
-              }
-            }, 50);
-          })(w);
+          try {
+            w.frameGeometry = targetGeom;
+          } finally {
+            w.__raven_mutating = false;
+          }
           break;
 
         case "focus":
@@ -721,7 +676,11 @@ function applyCommands(commandsJson) {
             w.__raven_mutating = true;
             try {
               w.minimized = true;
-            } catch (eMin) { }
+              needsSyncAfterBatch = true;
+            } catch (eMin) {
+            } finally {
+              w.__raven_mutating = false;
+            }
 
             try {
               if (workspace.activeWindow === w) {
@@ -738,15 +697,6 @@ function applyCommands(commandsJson) {
                 }
               }
             } catch (eFoc) { }
-
-            (function (cw) {
-              setKWinTimeout(function () {
-                if (cw && !cw.deleted) {
-                  cw.__raven_mutating = false;
-                  requestStateSync();
-                }
-              }, 50);
-            })(w);
           }
           break;
 
@@ -755,14 +705,10 @@ function applyCommands(commandsJson) {
             w.__raven_mutating = true;
             try {
               w.minimized = false;
-            } catch (eUnmin) { }
-            (function (cw) {
-              setKWinTimeout(function () {
-                if (cw && !cw.deleted) {
-                  cw.__raven_mutating = false;
-                }
-              }, 300);
-            })(w);
+            } catch (eUnmin) {
+            } finally {
+              w.__raven_mutating = false;
+            }
           }
           break;
 
@@ -776,38 +722,310 @@ function applyCommands(commandsJson) {
 
         case "migrate_to_output":
           w.__raven_mutating = true;
-          migrateWindow(w, cmd.target_ws, null);
-          (function (cw) {
-            setKWinTimeout(function () {
-              if (cw && !cw.deleted) {
-                cw.__raven_mutating = false;
-                requestStateSync();
-              }
-            }, 40);
-          })(w);
+          try {
+            delete w.__raven_target_geom;
+            migrateWindow(w, cmd.target_ws, null);
+            needsSyncAfterBatch = true;
+          } finally {
+            w.__raven_mutating = false;
+          }
           break;
 
         case "migrate_to_desktop":
           w.__raven_mutating = true;
-          migrateWindow(w, null, cmd.target_ws);
-          (function (cw) {
-            setKWinTimeout(function () {
-              if (cw && !cw.deleted) {
-                cw.__raven_mutating = false;
-                requestStateSync();
-              }
-            }, 40);
-          })(w);
+          try {
+            delete w.__raven_target_geom;
+            migrateWindow(w, null, cmd.target_ws);
+            needsSyncAfterBatch = true;
+          } finally {
+            w.__raven_mutating = false;
+          }
           break;
       }
     }
   } catch (e) {
     Logger.error("applyCommands", "Error procesando comandos", e);
+  } finally {
+    _isApplyingCommands = false;
+  }
+
+  if (needsSyncAfterBatch) {
+    requestStateSync(forceSyncAfterBatch);
   }
 }
 
 /**
- * @brief Enlaza reactivamente los eventos del ciclo de vida de una ventana.
+ * @brief Determina el hueco (slot) geométrico del algoritmo activo bajo el punto de arrastre `(dropX, dropY)`.
+ *
+ * Evalúa todas las ventanas gestionables del escritorio actual usando sus geometrías de mosaico
+ * objetivo (`__raven_target_geom` o `__raven_pre_drag_geom`) para dibujar en tiempo real el contorno
+ * del algoritmo activo mediante `workspace.showOutline`.
+ */
+function findTargetSlotGeometry(draggedWin, dropX, dropY) {
+  try {
+    const windows = workspace.windowList();
+    const currentDesk = workspace.currentDesktop;
+    const currentDeskId = currentDesk && currentDesk.id ? currentDesk.id.toString() : "";
+
+    let bestSlot = null;
+    let bestDistSq = Number.MAX_VALUE;
+
+    for (let i = 0; i < windows.length; i++) {
+      const cand = windows[i];
+      if (!cand || cand.deleted || cand.minimized || cand.hidden || !isManageable(cand)) continue;
+      if (isWindowNativeFloating(cand)) continue;
+
+      if (currentDeskId && cand.desktops && cand.desktops.length > 0) {
+        let onDesk = false;
+        for (let d = 0; d < cand.desktops.length; d++) {
+          if (cand.desktops[d] && cand.desktops[d].id.toString() === currentDeskId) {
+            onDesk = true;
+            break;
+          }
+        }
+        if (!onDesk) continue;
+      }
+
+      let slot = null;
+      if (cand === draggedWin) {
+        slot = cand.__raven_pre_drag_geom || cand.__raven_target_geom;
+      } else {
+        slot = cand.__raven_target_geom;
+      }
+      if (!slot) {
+        const cg = getRectGeometry(cand.frameGeometry);
+        slot = { x: cg.x, y: cg.y, width: cg.w, height: cg.h };
+      }
+
+      if (
+        dropX >= slot.x &&
+        dropX <= slot.x + slot.width &&
+        dropY >= slot.y &&
+        dropY <= slot.y + slot.height
+      ) {
+        return slot;
+      }
+
+      const cx = slot.x + slot.width / 2;
+      const cy = slot.y + slot.height / 2;
+      const distSq = (dropX - cx) * (dropX - cx) + (dropY - cy) * (dropY - cy);
+      if (distSq < bestDistSq) {
+        bestDistSq = distSq;
+        bestSlot = slot;
+      }
+    }
+
+    if (bestSlot) {
+      return bestSlot;
+    }
+
+    // Si se arrastra hacia un monitor vacío, proyectar el área útil completa de ese monitor
+    const outs = workspace.screens || [];
+    for (let o = 0; o < outs.length; o++) {
+      const out = outs[o];
+      if (!out) continue;
+      const area = getSafeScreenGeometry(out, currentDesk);
+      if (
+        dropX >= area.x &&
+        dropX <= area.x + area.width &&
+        dropY >= area.y &&
+        dropY <= area.y + area.height
+      ) {
+        return area;
+      }
+    }
+  } catch (eSlot) { }
+  return null;
+}
+
+/**
+ * @brief Finaliza una operación interactiva de arrastre o redimensionado con el ratón.
+ *
+ * Oculta el contorno visual de previsualización, anula cualquier intento de mosaico nativo de Plasma
+ * y notifica al motor Rust las nuevas proporciones (`userResizedWindow`) o el punto de caída
+ * para intercambio de ranuras en tiempo real (`userMovedWindow`).
+ */
+function finishInteractiveMoveResize(w) {
+  if (!w || w.deleted) return;
+  const wasMoving = Boolean(w.__was_moving || isWindowMoving(w));
+  const wasResizing = Boolean(w.__was_resizing || isWindowResizing(w));
+  w.__was_interacting = false;
+  w.__was_moving = false;
+  w.__was_resizing = false;
+  delete w.__last_resize_step;
+  delete w.__last_outline_key;
+  delete w.__raven_pre_drag_geom;
+  delete w.__raven_target_geom;
+
+  try {
+    if (typeof workspace.hideOutline === "function") {
+      workspace.hideOutline();
+    }
+  } catch (eHide) { }
+
+  if (!isWindowNativeFloating(w)) {
+    if (w.tile) {
+      w.__raven_mutating = true;
+      try { w.tile = null; } catch (eTile) { }
+      w.__raven_mutating = false;
+    }
+    if (w.quickTileMode !== undefined && w.quickTileMode !== 0) {
+      w.__raven_mutating = true;
+      try { w.quickTileMode = 0; } catch (eQt) { }
+      w.__raven_mutating = false;
+    }
+  }
+
+  const safeId = getSafeWindowId(w);
+  const g = getRectGeometry(w.frameGeometry);
+
+  if (wasResizing && safeId && !isWindowNativeFloating(w)) {
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "userResizedWindow",
+        safeId,
+        Math.round(g.x),
+        Math.round(g.y),
+        Math.round(g.w),
+        Math.round(g.h),
+        function (response) {
+          if (response && response !== "[]") applyCommands(response, safeId);
+        }
+      );
+      return;
+    } catch (eResFin) { }
+  }
+
+  if (wasMoving && safeId && !isWindowNativeFloating(w)) {
+    let dropX = g.x + g.w / 2;
+    let dropY = g.y + g.h / 2;
+    try {
+      if (workspace.cursorPos && workspace.cursorPos.x !== undefined && workspace.cursorPos.y !== undefined) {
+        dropX = workspace.cursorPos.x;
+        dropY = workspace.cursorPos.y;
+      }
+    } catch (eCur) { }
+
+    try {
+      callDBus(
+        "org.kde.raven.Daemon",
+        "/Events",
+        "org.kde.raven.Events",
+        "userMovedWindow",
+        safeId,
+        Math.round(dropX),
+        Math.round(dropY),
+        function (response) {
+          if (response && response !== "[]") applyCommands(response, safeId);
+        }
+      );
+      return;
+    } catch (eMovFin) { }
+  }
+
+  requestStateSync(true);
+}
+
+/**
+ * @brief Gestiona el paso interactivo (arrastre o redimensionado) con el ratón.
+ */
+function handleInteractiveStep(w, geom) {
+  if (!w || w.deleted || isWindowNativeFloating(w)) return;
+  const g = getRectGeometry(geom || w.frameGeometry);
+
+  if (isWindowResizing(w)) {
+    w.__was_interacting = true;
+    w.__was_resizing = true;
+    delete w.__raven_target_geom;
+
+    if (!_isApplyingCommands) {
+      const lastStep = w.__last_resize_step;
+      if (
+        !lastStep ||
+        Math.abs(g.w - lastStep.w) >= 8 ||
+        Math.abs(g.h - lastStep.h) >= 8 ||
+        Math.abs(g.x - lastStep.x) >= 8 ||
+        Math.abs(g.y - lastStep.y) >= 8
+      ) {
+        w.__last_resize_step = { x: g.x, y: g.y, w: g.w, h: g.h };
+        const safeId = getSafeWindowId(w);
+        if (safeId) {
+          try {
+            callDBus(
+              "org.kde.raven.Daemon",
+              "/Events",
+              "org.kde.raven.Events",
+              "userResizedWindow",
+              safeId,
+              Math.round(g.x),
+              Math.round(g.y),
+              Math.round(g.w),
+              Math.round(g.h),
+              function (response) {
+                if (response && response !== "[]") {
+                  applyCommands(response, safeId);
+                }
+              }
+            );
+          } catch (eLiveRes) { }
+        }
+      }
+    }
+    return;
+  }
+
+  if (isWindowMoving(w)) {
+    if (!w.__was_moving) {
+      w.__was_moving = true;
+      if (w.__raven_target_geom) {
+        w.__raven_pre_drag_geom = {
+          x: w.__raven_target_geom.x,
+          y: w.__raven_target_geom.y,
+          width: w.__raven_target_geom.width,
+          height: w.__raven_target_geom.height,
+        };
+      } else {
+        w.__raven_pre_drag_geom = {
+          x: g.x,
+          y: g.y,
+          width: g.w,
+          height: g.h,
+        };
+      }
+    }
+    w.__was_interacting = true;
+    delete w.__raven_target_geom;
+
+    // Dibujar el contorno de la ranura destino del algoritmo activo en tiempo real
+    if (typeof workspace.showOutline === "function") {
+      let dropX = g.x + g.w / 2;
+      let dropY = g.y + g.h / 2;
+      try {
+        if (workspace.cursorPos && workspace.cursorPos.x !== undefined && workspace.cursorPos.y !== undefined) {
+          dropX = workspace.cursorPos.x;
+          dropY = workspace.cursorPos.y;
+        }
+      } catch (eCur) { }
+
+      const slot = findTargetSlotGeometry(w, dropX, dropY);
+      if (slot) {
+        const key = slot.x + ":" + slot.y + ":" + slot.width + ":" + slot.height;
+        if (w.__last_outline_key !== key) {
+          w.__last_outline_key = key;
+          try {
+            workspace.showOutline(slot);
+          } catch (eOut) { }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * @brief Enlaza reactivamente los eventos del ciclo de vida e interacción de una ventana.
  */
 function bindWindow(w) {
   try {
@@ -815,8 +1033,8 @@ function bindWindow(w) {
     w.__raven_bound = true;
 
     const onStateChange = function () {
-      if (w && !w.deleted && !w.__raven_mutating && !w.interactiveMove && !w.interactiveResize) {
-        requestStateSync();
+      if (w && !w.deleted && !w.__raven_mutating && !_isApplyingCommands && !isWindowMoving(w) && !isWindowResizing(w)) {
+        requestStateSync(false);
       }
     };
 
@@ -826,24 +1044,45 @@ function bindWindow(w) {
     if (w.transientChanged !== undefined) {
       w.transientChanged.connect(function () {
         delete w.__raven_manageable;
-        requestStateSync();
+        requestStateSync(false);
       });
     }
     if (w.modalChanged !== undefined) {
       w.modalChanged.connect(function () {
         delete w.__raven_manageable;
-        requestStateSync();
+        requestStateSync(false);
       });
+    }
+
+    // Suprimir el mosaico nativo de Plasma (QuickTiling / Custom Tiles) en ventanas gestionadas por Raven
+    const suppressNativeTile = function () {
+      if (!w || w.deleted || w.__raven_mutating || isWindowNativeFloating(w)) return;
+      if (w.tile) {
+        w.__raven_mutating = true;
+        try { w.tile = null; } catch (eTile) { }
+        w.__raven_mutating = false;
+      }
+      if (w.quickTileMode !== undefined && w.quickTileMode !== 0) {
+        w.__raven_mutating = true;
+        try { w.quickTileMode = 0; } catch (eQt) { }
+        w.__raven_mutating = false;
+      }
+    };
+    if (w.tileChanged !== undefined) {
+      w.tileChanged.connect(suppressNativeTile);
+    }
+    if (w.quickTileModeChanged !== undefined) {
+      w.quickTileModeChanged.connect(suppressNativeTile);
     }
 
     if (w.captionChanged !== undefined) {
       w.captionChanged.connect(function () {
-        if (!w || w.deleted || w.__raven_mutating) return;
+        if (!w || w.deleted || w.__raven_mutating || _isApplyingCommands) return;
         // Solo actuar si la ventana conmuta al modo Picture-in-Picture
         if (isPipWindow(w) && !w.__raven_pip_init) {
           w.__raven_pip_init = true;
           w.keepAbove = true;
-          requestStateSync();
+          requestStateSync(false);
           return;
         }
         // Los cambios de título habituales (navegador, terminal, música)
@@ -852,34 +1091,85 @@ function bindWindow(w) {
     }
 
     const onOutputOrDesktop = function () {
-      if (!w || w.deleted || w.__raven_mutating) return;
-      if (!w.interactiveMove && !w.interactiveResize) {
-        w.__raven_ui_migrating = true;
-        (function (cw) {
-          setKWinTimeout(function () {
-            if (cw && !cw.deleted) cw.__raven_ui_migrating = false;
-          }, 60);
-        })(w);
-      }
-      requestStateSync();
+      if (!w || w.deleted || w.__raven_mutating || _isApplyingCommands) return;
+      delete w.__raven_target_geom;
+      requestStateSync(false);
     };
 
     w.outputChanged.connect(onOutputOrDesktop);
     w.desktopsChanged.connect(onOutputOrDesktop);
 
+    if (w.moveResizedChanged !== undefined) {
+      w.moveResizedChanged.connect(function () {
+        if (!w || w.deleted) return;
+        const resizing = isWindowResizing(w);
+        const moving = isWindowMoving(w);
+        if (resizing) {
+          w.__was_resizing = true;
+          w.__was_interacting = true;
+          delete w.__raven_target_geom;
+        } else if (moving) {
+          w.__was_moving = true;
+          w.__was_interacting = true;
+          delete w.__raven_target_geom;
+        } else if (w.__was_interacting) {
+          finishInteractiveMoveResize(w);
+        }
+      });
+    }
+
+    if (w.interactiveMoveResizeStarted !== undefined) {
+      w.interactiveMoveResizeStarted.connect(function () {
+        if (!w || w.deleted) return;
+        delete w.__raven_target_geom;
+        if (isWindowResizing(w)) w.__was_resizing = true;
+        if (isWindowMoving(w)) w.__was_moving = true;
+        w.__was_interacting = true;
+      });
+    }
+
+    if (w.interactiveMoveResizeStepped !== undefined) {
+      w.interactiveMoveResizeStepped.connect(function (stepGeom) {
+        if (!w || w.deleted) return;
+        handleInteractiveStep(w, stepGeom);
+      });
+    }
+
     w.frameGeometryChanged.connect(function () {
       if (!w || w.deleted || w.minimized) return;
-      if (w.interactiveMove || w.interactiveResize) {
-        w.__was_interacting = true;
+
+      const resizing = isWindowResizing(w);
+      const moving = isWindowMoving(w);
+
+      if (resizing || moving) {
+        handleInteractiveStep(w, w.frameGeometry);
         return;
       }
-      if (w.__was_interacting && !w.interactiveMove && !w.interactiveResize) {
-        w.__was_interacting = false;
-        requestStateSync();
+
+      if (w.__was_interacting && !resizing && !moving) {
+        finishInteractiveMoveResize(w);
         return;
       }
-      if (w.__raven_mutating || w.__raven_ui_migrating) return;
+
+      if (w.__raven_mutating || _isApplyingCommands) return;
       if (hasActiveTransientOrModalChild(w, null)) return;
+
+      // Supresión de eco determinista libre de temporizadores:
+      // Si el cambio de geometría reportado por el cliente Wayland converge con
+      // el objetivo comandado por Raven (tolerancia <= 4px pos, <= 12px dim),
+      // se ignora el eco sin disparar llamadas D-Bus innecesarias.
+      if (w.__raven_target_geom) {
+        const g = getRectGeometry(w.frameGeometry);
+        const tg = w.__raven_target_geom;
+        if (
+          Math.abs(g.x - tg.x) <= 4 &&
+          Math.abs(g.y - tg.y) <= 4 &&
+          Math.abs(g.w - tg.width) <= 12 &&
+          Math.abs(g.h - tg.height) <= 12
+        ) {
+          return;
+        }
+      }
 
       syncWindowDelta(w);
     });
@@ -887,8 +1177,7 @@ function bindWindow(w) {
     if (w.interactiveMoveResizeFinished !== undefined) {
       w.interactiveMoveResizeFinished.connect(function () {
         if (w && !w.deleted) {
-          w.__was_interacting = false;
-          requestStateSync();
+          finishInteractiveMoveResize(w);
         }
       });
     }
@@ -1038,25 +1327,22 @@ function registerRavenShortcuts() {
  * @file index.js
  * @brief Punto de entrada modular y orquestador del puente Raven (Raven Bridge) en KDE Plasma 6.
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @version 5.1
  */
 
 
 /**
  * @brief Inicializa el ciclo de vida del puente D-Bus y enlaza las señales del compositor KWin.
  *
- * Secuencia de arranque:
- * 1. Inicializa el pool estático de temporizadores (`initTimerPool`).
+ * Secuencia de arranque (Libre de QTimers):
+ * 1. Registra los atajos de teclado de KWin.
  * 2. Enlaza todas las ventanas gestionables ya presentes en el espacio de trabajo (`bindWindow`).
- * 3. Registra ganchos de eventos del compositor (`windowAdded`, `windowRemoved`, `activeWindowChanged`, `currentDesktopChanged`).
+ * 3. Registra ganchos de eventos del compositor (`windowAdded`, `windowRemoved`, `windowActivated`, `currentDesktopChanged`).
  * 4. Suscribe la señal D-Bus `tilingCommandsPending` y notifica `bridgeReady` al demonio Rust.
  * 5. Ejecuta la primera sincronización de estado global (`requestStateSync`).
  */
 function initDBusBridge() {
-  // 1. Inicializar pool de timers estáticos
-  initTimerPool();
-
-  // 2. Registrar atajos de teclado de KWin
+  // 1. Registrar atajos de teclado de KWin
   try {
     if (typeof registerRavenShortcuts === "function") {
       registerRavenShortcuts();
@@ -1065,7 +1351,7 @@ function initDBusBridge() {
     Logger.error("Main", "Error registrando atajos", eShortcuts);
   }
 
-  // 3. Enlazar ventanas existentes al puente (sin disparar syncs masivos)
+  // 2. Enlazar ventanas existentes al puente (sin disparar syncs masivos)
   var existingWindows = workspace.windowList();
   for (var i = 0; i < existingWindows.length; i++) {
     var w = existingWindows[i];
@@ -1083,6 +1369,9 @@ function initDBusBridge() {
     // Blindaje: notificar cierre inmediato al motor Rust o sincronizar si era subventana/diálogo
     if (w) {
       var safeId = getSafeWindowId(w);
+      if (safeId) {
+        clearWindowDeltaCache(safeId);
+      }
       if (safeId && w.__raven_bound) {
         try {
           callDBus(
@@ -1099,7 +1388,7 @@ function initDBusBridge() {
         } catch (e) {}
       }
       if (w.__raven_bound || w.normalWindow || w.dialog || w.utility) {
-        requestStateSync();
+        requestStateSync(false);
       }
     }
   });
@@ -1130,56 +1419,70 @@ function initDBusBridge() {
   }
 
   workspace.currentDesktopChanged.connect(function () {
-    requestStateSync();
+    requestStateSync(false);
   });
 
   // Escuchar cambios en el área útil de trabajo (ej. aparición, redimensionamiento o movimiento del panel de Plasma)
   if (workspace.clientAreaChanged) {
     workspace.clientAreaChanged.connect(function () {
-      requestStateSync();
+      requestStateSync(false);
     });
   }
 
   // Escuchar cambios o reconfiguración de pantallas
   if (workspace.screensChanged) {
     workspace.screensChanged.connect(function () {
-      requestStateSync();
+      requestStateSync(false);
     });
   }
 
-  // 4. Solicitar configuración del daemon y notificar arranque de forma diferida (100ms)
-  setKWinTimeout(function () {
-    try {
-      callDBus(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
-        "bridgeReady"
-      );
-    } catch (e) { }
-
-    try {
-      registerDBusSignal(
-        "org.kde.raven.Daemon",
-        "/Events",
-        "org.kde.raven.Events",
-        "tilingCommandsPending",
-        function (commandsJson) {
-          if (commandsJson && commandsJson !== "[]") {
-            applyCommands(commandsJson);
-          }
+  // 4. Suscribir señal asíncrona y notificar arranque directamente (sin temporizadores en el compositor)
+  try {
+    registerDBusSignal(
+      "org.kde.raven.Daemon",
+      "/Events",
+      "org.kde.raven.Events",
+      "tilingCommandsPending",
+      function (commandsJson) {
+        if (commandsJson && commandsJson !== "[]") {
+          applyCommands(commandsJson);
         }
-      );
-    } catch (e) { }
+      }
+    );
+  } catch (e) { }
 
-    // Sincronización inicial única y limpia tras levantar el entorno
-    requestStateSync();
-  }, 100);
+  try {
+    callDBus(
+      "org.kde.raven.Daemon",
+      "/Events",
+      "org.kde.raven.Events",
+      "bridgeReady"
+    );
+  } catch (e) { }
+
+  // 5. Sincronización inicial única y limpia
+  requestStateSync(true);
+
+  // 6. Informar foco activo inicial si existe una ventana gestionable enfocada
+  try {
+    if (workspace.activeWindow && !workspace.activeWindow.deleted && isManageable(workspace.activeWindow)) {
+      var initAwId = getSafeWindowId(workspace.activeWindow);
+      if (initAwId) {
+        callDBus(
+          "org.kde.raven.Daemon",
+          "/Events",
+          "org.kde.raven.Events",
+          "windowActivated",
+          initAwId
+        );
+      }
+    }
+  } catch (eInitFocus) { }
 }
 
 // Registro e inicialización de ciclo de vida en el motor de scripting de KWin
 try {
-  Logger.info("Main", "Inicializando el puente de Raven Tiling Emulator v3.4");
+  Logger.info("Main", "Inicializando el puente de Raven Tiling Emulator v5.1 (Zero-Timers)");
   initDBusBridge();
   Logger.info("Main", "Puente inicializado exitosamente");
 } catch (e) {

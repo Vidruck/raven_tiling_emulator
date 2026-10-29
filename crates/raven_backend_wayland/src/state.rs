@@ -129,17 +129,14 @@ impl Dispatch<wl_registry::WlRegistry, ()> for WaylandState {
             version,
         } = event
         {
-            match interface.as_str() {
-                "wl_output" => {
-                    let out = registry.bind::<WlOutput, _, _>(name, version.min(4), qh, ());
-                    state.outputs.insert(out, OutputInfo::default());
-                    debug!("[WAYLAND-BACKEND] Descubierto wl_output id: {}", name);
-                }
-                // Nota: zwlr_foreign_toplevel_manager_v1 no se vincula cuando se usa con KWin
-                // para evitar que identificadores efímeros (wlr_toplevel_*) colisionen con los
-                // UUIDs autoritativos de KWin o sobreescriban el foco activo.
-                _ => {}
+            if interface.as_str() == "wl_output" {
+                let out = registry.bind::<WlOutput, _, _>(name, version.min(4), qh, ());
+                state.outputs.insert(out, OutputInfo::default());
+                debug!("[WAYLAND-BACKEND] Descubierto wl_output id: {}", name);
             }
+            // Nota: zwlr_foreign_toplevel_manager_v1 no se vincula cuando se usa con KWin
+            // para evitar que identificadores efímeros (wlr_toplevel_*) colisionen con los
+            // UUIDs autoritativos de KWin o sobreescriban el foco activo.
         }
     }
 }

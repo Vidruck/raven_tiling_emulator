@@ -64,6 +64,7 @@ public:
     KWin::BorderRadius resolveAdaptiveBorderRadius(KWin::EffectWindow *w) const;
 
     void updateBorder(KWin::EffectWindow *w, bool isFocused, WindowFilter &filter);
+    void invalidateDecoration(KWin::EffectWindow *w);
     void removeBorder(KWin::EffectWindow *w);
     void clearAll();
 

@@ -306,12 +306,16 @@ void BorderManager::updateBorder(KWin::EffectWindow *w, bool isFocused, WindowFi
 #if defined(HAVE_KDECORATION)
         if (w->window() && w->window()->decoration() && !it->second.decorationConnection) {
             auto *decor = w->window()->decoration();
-            it->second.decorationConnection = QObject::connect(decor, &KDeco::Decoration::borderRadiusChanged, [this, w, &filter]() {
-                if (auto borderIt = m_borders.find(w); borderIt != m_borders.end()) {
+            QPointer<KWin::EffectWindow> winPtr(w);
+            it->second.decorationConnection = QObject::connect(decor, &KDeco::Decoration::borderRadiusChanged, w, [this, winPtr, &filter]() {
+                if (!winPtr || winPtr->isDeleted()) {
+                    return;
+                }
+                if (auto borderIt = m_borders.find(winPtr.data()); borderIt != m_borders.end()) {
                     borderIt->second.lastWidth = -1.0f;
                 }
-                bool focused = (KWin::effects && w == KWin::effects->activeWindow());
-                updateBorder(w, focused, filter);
+                bool focused = (KWin::effects && winPtr.data() == KWin::effects->activeWindow());
+                updateBorder(winPtr.data(), focused, filter);
             });
         }
 #endif
@@ -323,21 +327,28 @@ void BorderManager::updateBorder(KWin::EffectWindow *w, bool isFocused, WindowFi
         data.lastRadius = radius;
         data.lastWidth = m_borderWidth;
         if (w->window()) {
-            data.radiusConnection = QObject::connect(w->window(), &KWin::Window::borderRadiusChanged, [this, w, &filter]() {
-                if (auto borderIt = m_borders.find(w); borderIt != m_borders.end()) {
+            QPointer<KWin::EffectWindow> winPtr(w);
+            data.radiusConnection = QObject::connect(w->window(), &KWin::Window::borderRadiusChanged, w, [this, winPtr, &filter]() {
+                if (!winPtr || winPtr->isDeleted()) {
+                    return;
+                }
+                if (auto borderIt = m_borders.find(winPtr.data()); borderIt != m_borders.end()) {
                     borderIt->second.lastWidth = -1.0f;
                 }
-                bool focused = (KWin::effects && w == KWin::effects->activeWindow());
-                updateBorder(w, focused, filter);
+                bool focused = (KWin::effects && winPtr.data() == KWin::effects->activeWindow());
+                updateBorder(winPtr.data(), focused, filter);
             });
 #if defined(HAVE_KDECORATION)
             if (auto *decor = w->window()->decoration()) {
-                data.decorationConnection = QObject::connect(decor, &KDeco::Decoration::borderRadiusChanged, [this, w, &filter]() {
-                    if (auto borderIt = m_borders.find(w); borderIt != m_borders.end()) {
+                data.decorationConnection = QObject::connect(decor, &KDeco::Decoration::borderRadiusChanged, w, [this, winPtr, &filter]() {
+                    if (!winPtr || winPtr->isDeleted()) {
+                        return;
+                    }
+                    if (auto borderIt = m_borders.find(winPtr.data()); borderIt != m_borders.end()) {
                         borderIt->second.lastWidth = -1.0f;
                     }
-                    bool focused = (KWin::effects && w == KWin::effects->activeWindow());
-                    updateBorder(w, focused, filter);
+                    bool focused = (KWin::effects && winPtr.data() == KWin::effects->activeWindow());
+                    updateBorder(winPtr.data(), focused, filter);
                 });
             }
 #endif
@@ -346,6 +357,16 @@ void BorderManager::updateBorder(KWin::EffectWindow *w, bool isFocused, WindowFi
         w->addRepaintFull();
     }
 #endif
+}
+
+void BorderManager::invalidateDecoration(KWin::EffectWindow *w)
+{
+    auto it = m_borders.find(w);
+    if (it != m_borders.end()) {
+        QObject::disconnect(it->second.decorationConnection);
+        it->second.decorationConnection = QMetaObject::Connection();
+        it->second.lastWidth = -1.0f;
+    }
 }
 
 void BorderManager::removeBorder(KWin::EffectWindow *w)

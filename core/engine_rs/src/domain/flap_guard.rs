@@ -30,6 +30,9 @@ pub struct FlapGuard {
 }
 
 impl FlapGuard {
+    /// Capacidad máxima del registro para garantizar memoria estrictamente acotada.
+    const MAX_REGISTRY_ENTRIES: usize = 512;
+
     /// Crea una nueva instancia de `FlapGuard`.
     pub fn new() -> Self {
         Self {
@@ -53,6 +56,15 @@ impl FlapGuard {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
+
+        if self.registry.len() >= Self::MAX_REGISTRY_ENTRIES
+            && !self.registry.contains_key(&win.window_id)
+        {
+            self.registry.retain(|_, v| now.saturating_sub(v.last_toggle_time) < 5_000);
+            if self.registry.len() >= Self::MAX_REGISTRY_ENTRIES {
+                self.registry.clear();
+            }
+        }
 
         let tracker = self
             .registry

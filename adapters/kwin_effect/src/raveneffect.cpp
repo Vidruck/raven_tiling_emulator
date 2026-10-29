@@ -292,6 +292,7 @@ void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
         }
     }));
     conns.append(connect(w, &KWin::EffectWindow::windowDecorationChanged, this, [this, w]() {
+        m_borderManager.invalidateDecoration(w);
         if (m_borderManager.isEnabled()) {
             bool isFocused = (KWin::effects && w == KWin::effects->activeWindow());
             m_borderManager.updateBorder(w, isFocused, m_filter);
@@ -299,6 +300,27 @@ void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
     }));
 
     if (w->window()) {
+        conns.append(connect(w->window(), &KWin::Window::decorationPolicyChanged, this, [this, w]() {
+            m_borderManager.invalidateDecoration(w);
+            if (m_borderManager.isEnabled()) {
+                bool isFocused = (KWin::effects && w == KWin::effects->activeWindow());
+                m_borderManager.updateBorder(w, isFocused, m_filter);
+            }
+        }));
+        conns.append(connect(w->window(), &KWin::Window::tileChanged, this, [this, w]() {
+            if (w && !w->isDeleted() && w->window() && m_filter.shouldDrawBorder(w)) {
+                if (w->window()->tile() != nullptr) {
+                    w->window()->requestTile(nullptr);
+                }
+            }
+        }));
+        conns.append(connect(w->window(), &KWin::Window::quickTileModeChanged, this, [this, w]() {
+            if (w && !w->isDeleted() && w->window() && m_filter.shouldDrawBorder(w)) {
+                if (w->window()->quickTileMode() != KWin::QuickTileMode(KWin::QuickTileFlag::None)) {
+                    w->window()->setQuickTileModeAtCurrentPosition(KWin::QuickTileMode(KWin::QuickTileFlag::None));
+                }
+            }
+        }));
         conns.append(connect(w->window(), &KWin::Window::closed, this, [this, w]() {
             slotWindowClosed(w);
         }));
@@ -330,10 +352,14 @@ void RavenEffect::setupWindowConnections(KWin::EffectWindow *w)
             }
         }));
         conns.append(connect(w->window(), &KWin::Window::captionChanged, this, [this, w]() {
-            m_filter.invalidate(w);
-            if (m_borderManager.isEnabled()) {
-                bool isFocused = (KWin::effects && w == KWin::effects->activeWindow());
-                m_borderManager.updateBorder(w, isFocused, m_filter);
+            const bool prevVerdict = m_filter.shouldDrawBorder(w);
+            const bool newVerdict = m_filter.computeShouldDrawBorder(w);
+            if (prevVerdict != newVerdict) {
+                m_filter.invalidate(w);
+                if (m_borderManager.isEnabled()) {
+                    bool isFocused = (KWin::effects && w == KWin::effects->activeWindow());
+                    m_borderManager.updateBorder(w, isFocused, m_filter);
+                }
             }
         }));
     }

@@ -1,27 +1,24 @@
 /**
  * @file focus.js
- * @brief Resalte visual interactivo mediante el sistema de contorno (Outline) nativo de KWin.
+ * @brief Gestión de retroalimentación de foco delegada al efecto nativo C++ (kwin4_effect_raven).
  * @author Alejandro González Hernández (Vidruck)
- * @version 3.4
+ * @version 5.1
  */
 
 /**
- * @brief Destaca momentáneamente una ventana proyectando el marco de contorno (Outline) del compositor.
+ * @brief Limpia cualquier contorno residual del compositor sin instanciar temporizadores.
  *
- * Utilizado al conmutar foco mediante atajos (`Meta+J` / `Meta+K`) para dar retroalimentación visual inmediata.
- * El contorno se desvanece automáticamente tras 200 ms.
+ * La proyección visual de bordes activos e inactivos se realiza por hardware en `BorderManager` (C++).
  *
- * @param {KWin::Window} w Instancia de la ventana a destacar.
+ * @param {KWin::Window} w Instancia de la ventana enfocada.
  */
 function highlightWindow(w) {
   try {
     if (!w) return;
-    if (workspace.showOutline) {
-      workspace.showOutline(w.frameGeometry);
-      setKWinTimeout(function() {
-        if (workspace.hideOutline) workspace.hideOutline();
-      }, 200);
+    if (workspace.hideOutline) {
+      workspace.hideOutline();
     }
   } catch (e) { }
 }
+
 

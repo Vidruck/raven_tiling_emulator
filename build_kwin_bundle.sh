@@ -11,20 +11,18 @@ OUTPUT="${CODE_DIR}/main.js"
 
 echo "🐦 Raven Bridge Builder — Generando bundle main.js..."
 
-# Orden de concatenación (resolviendo dependencias):
+# Orden de concatenación (resolviendo dependencias, libre de QTimers):
 # 1. Logger (sin dependencias)
-# 2. Timer Pool (depende de Logger)
-# 3. Geometry (sin dependencias internas)
-# 4. Window Utils (depende de Logger)
-# 5. Quarantine (depende de Window Utils, Timer Pool)
-# 6. Focus (depende de Geometry, Window Utils)
-# 7. D-Bus Bridge (depende de todo lo anterior)
-# 8. Shortcuts (depende de D-Bus Bridge)
-# 9. Index (punto de entrada, inicialización)
+# 2. Geometry (sin dependencias internas)
+# 3. Window Utils (depende de Logger)
+# 4. Quarantine (depende de Window Utils)
+# 5. Focus (depende de Geometry, Window Utils)
+# 6. D-Bus Bridge (depende de todo lo anterior)
+# 7. Shortcuts (depende de D-Bus Bridge)
+# 8. Index (punto de entrada, inicialización)
 
 cat \
   "${CODE_DIR}/utils/logger.js" \
-  "${CODE_DIR}/utils/timer_pool.js" \
   "${CODE_DIR}/utils/geometry.js" \
   "${CODE_DIR}/core/window_utils.js" \
   "${CODE_DIR}/core/quarantine.js" \

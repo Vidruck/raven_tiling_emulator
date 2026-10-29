@@ -562,7 +562,7 @@ impl RavenController {
                         .rev()
                         .find(|&id| {
                             id != &wid
-                                && self.engine.current_windows.get(id).map_or(false, |w| {
+                                && self.engine.current_windows.get(id).is_some_and(|w| {
                                     !w.is_minimized
                                         && !w.is_floating
                                         && !w.is_pip
@@ -726,24 +726,34 @@ impl RavenController {
                 needs_recalc = true;
             }
             "cycle_layout" => {
-                let current_ws = self.active_window_id.as_ref().and_then(|wid| {
-                    self.engine
-                        .current_windows
-                        .get(wid)
-                        .map(|w| w.workspace_id.clone())
-                });
+                self.last_known_layout.clear();
+                let current_ws = self
+                    .active_window_id
+                    .as_ref()
+                    .and_then(|wid| {
+                        self.engine
+                            .current_windows
+                            .get(wid)
+                            .map(|w| w.workspace_id.clone())
+                    })
+                    .or_else(|| {
+                        self.engine.window_history.back().and_then(|wid| {
+                            self.engine
+                                .current_windows
+                                .get(wid)
+                                .map(|w| w.workspace_id.clone())
+                        })
+                    })
+                    .or_else(|| {
+                        self.engine
+                            .current_windows
+                            .values()
+                            .find(|w| !w.is_minimized && !w.is_floating)
+                            .map(|w| w.workspace_id.clone())
+                    });
 
-                let new_layout_name;
-                if let Some(ws_id) = current_ws {
-                    let current = self
-                        .engine
-                        .config
-                        .workspace_layouts
-                        .get(&ws_id)
-                        .cloned()
-                        .unwrap_or_else(|| self.engine.config.layout_type.clone());
-
-                    let next = match current.as_str() {
+                let next_layout_for = |current: &str| -> String {
+                    match current {
                         "raven" => "tall",
                         "tall" => "monocle",
                         "monocle" => "strict_dwindle",
@@ -752,28 +762,45 @@ impl RavenController {
                         "divisor" => "raven",
                         _ => "raven",
                     }
-                    .to_string();
+                    .to_string()
+                };
 
+                let new_layout_name;
+                if let Some(ws_id) = current_ws {
+                    let output_name = ws_id.split("||").next().unwrap_or(&ws_id).to_string();
+                    let current = self
+                        .engine
+                        .config
+                        .workspace_layouts
+                        .get(&ws_id)
+                        .or_else(|| self.engine.config.workspace_layouts.get(&output_name))
+                        .cloned()
+                        .unwrap_or_else(|| self.engine.config.layout_type.clone());
+
+                    let next = next_layout_for(&current);
                     new_layout_name = next.clone();
                     self.engine
                         .config
                         .workspace_layouts
                         .insert(ws_id.clone(), next.clone());
+                    if self.engine.config.workspace_layouts.contains_key(&output_name) {
+                        self.engine
+                            .config
+                            .workspace_layouts
+                            .insert(output_name, next.clone());
+                    }
+                    self.engine.config.layout_type = next.clone();
                     info!(
                         "[CONTROLLER] Layout de Workspace {} cambiado a: {}",
                         ws_id, next
                     );
                 } else {
-                    self.engine.config.layout_type = match self.engine.config.layout_type.as_str() {
-                        "raven" => "tall".to_string(),
-                        "tall" => "monocle".to_string(),
-                        "monocle" => "strict_dwindle".to_string(),
-                        "strict_dwindle" => "inverted_strict_dwindle".to_string(),
-                        "inverted_strict_dwindle" => "divisor".to_string(),
-                        "divisor" => "raven".to_string(),
-                        _ => "raven".to_string(),
-                    };
-                    new_layout_name = self.engine.config.layout_type.clone();
+                    let next = next_layout_for(&self.engine.config.layout_type);
+                    self.engine.config.layout_type = next.clone();
+                    for val in self.engine.config.workspace_layouts.values_mut() {
+                        *val = next.clone();
+                    }
+                    new_layout_name = next;
                     info!(
                         "[CONTROLLER] Layout global cambiado a: {}",
                         self.engine.config.layout_type
@@ -797,6 +824,7 @@ impl RavenController {
                 config_changed = true;
             }
             "increment_gaps" => {
+                self.last_known_layout.clear();
                 self.engine.config.default_gaps =
                     std::cmp::max(0, self.engine.config.default_gaps + _payload);
                 let sign = if _payload >= 0 {
@@ -816,39 +844,51 @@ impl RavenController {
             }
             // BUG-01: handlers de nmaster ahora implementados correctamente
             "increment_nmaster" => {
+                self.last_known_layout.clear();
                 self.engine.config.nmaster = (self.engine.config.nmaster + 1).min(8);
                 needs_recalc = true;
                 config_changed = true;
             }
             "decrement_nmaster" => {
+                self.last_known_layout.clear();
                 self.engine.config.nmaster = self.engine.config.nmaster.saturating_sub(1).max(1);
                 needs_recalc = true;
                 config_changed = true;
             }
             "increase_ratio" => {
+                self.last_known_layout.clear();
                 self.engine.config.master_ratio =
                     f32::min(0.85, self.engine.config.master_ratio + 0.05);
                 needs_recalc = true;
                 config_changed = true;
             }
             "decrease_ratio" => {
+                self.last_known_layout.clear();
                 self.engine.config.master_ratio =
-                    f32::max(0.30, self.engine.config.master_ratio - 0.05);
+                    f32::max(0.25, self.engine.config.master_ratio - 0.05);
                 needs_recalc = true;
                 config_changed = true;
             }
             "resize_width_inc" | "resize_width_dec" | "resize_height_inc" | "resize_height_dec" => {
-                if let Some(ref wid) = self.active_window_id {
+                let target_wid = self.active_window_id.clone().or_else(|| {
+                    self.engine.window_history.back().cloned()
+                });
+                if let Some(ref wid) = target_wid {
                     if let Some(win) = self.engine.current_windows.get_mut(wid) {
+                        self.last_known_layout.clear();
                         let delta = 0.05f32;
                         match action.as_str() {
                             "resize_width_inc" => {
                                 let cur = win.custom_w_ratio.unwrap_or(1.0);
                                 win.custom_w_ratio = Some((cur + delta).min(3.0));
+                                self.engine.config.master_ratio =
+                                    (self.engine.config.master_ratio + delta).clamp(0.25, 0.85);
                             }
                             "resize_width_dec" => {
                                 let cur = win.custom_w_ratio.unwrap_or(1.0);
                                 win.custom_w_ratio = Some((cur - delta).max(0.2));
+                                self.engine.config.master_ratio =
+                                    (self.engine.config.master_ratio - delta).clamp(0.25, 0.85);
                             }
                             "resize_height_inc" => {
                                 let cur = win.custom_h_ratio.unwrap_or(1.0);
@@ -865,6 +905,7 @@ impl RavenController {
                 }
             }
             "swap_next" | "swap_prev" => {
+                self.last_known_layout.clear();
                 self.send_osd_notification(
                     "Organización de Mosaico",
                     if action == "swap_next" {
@@ -873,31 +914,44 @@ impl RavenController {
                         "Intercambiar Ventana (Anterior)"
                     },
                 );
-                commands.push(RavenAction::RequestSync);
+
+                let effective_active_id = self.active_window_id.clone().or_else(|| {
+                    self.engine
+                        .window_history
+                        .back()
+                        .cloned()
+                        .or_else(|| {
+                            windows
+                                .iter()
+                                .find(|w| !w.is_floating && !w.is_minimized && !w.is_pip)
+                                .map(|w| w.window_id.clone())
+                        })
+                });
+
+                let active_ws = effective_active_id.as_ref().and_then(|aid| {
+                    self.engine
+                        .current_windows
+                        .get(aid)
+                        .map(|w| w.workspace_id.clone())
+                });
 
                 let mut active_windows: Vec<_> = windows
                     .into_iter()
-                    .filter(|w| !w.is_floating && !w.is_minimized && !w.is_pip)
+                    .filter(|w| {
+                        !w.is_floating
+                            && !w.is_minimized
+                            && !w.is_pip
+                            && (active_ws.is_none() || Some(&w.workspace_id) == active_ws.as_ref())
+                    })
                     .collect();
 
                 if active_windows.len() > 1 {
                     active_windows.sort_by_key(|w| {
-                        let is_strict = w.min_w > 0 || w.min_h > 0;
-                        let pos = self
-                            .engine
+                        self.engine
                             .spatial_order
                             .iter()
                             .position(|id| id == &w.window_id)
-                            .unwrap_or(usize::MAX);
-                        (!is_strict, pos)
-                    });
-
-                    let effective_active_id = self.active_window_id.clone().or_else(|| {
-                        self.engine
-                            .window_history
-                            .back()
-                            .cloned()
-                            .or_else(|| active_windows.first().map(|w| w.window_id.clone()))
+                            .unwrap_or(usize::MAX)
                     });
 
                     if let Some(ref active_id) = effective_active_id {
@@ -945,6 +999,8 @@ impl RavenController {
                             }
                         }
                     }
+                } else {
+                    commands.push(RavenAction::RequestSync);
                 }
             }
             "focus_next" | "focus_prev" => {
@@ -1132,5 +1188,413 @@ impl RavenController {
         }
 
         Ok((needs_recalc, commands))
+    }
+
+    /// Recarga en caliente la configuración del motor sin reiniciar el demonio ni perder el historial
+    /// de ventanas, actualizando de inmediato la geometría de todas las ventanas activas.
+    ///
+    /// # Parámetros
+    /// * `new_config` - Nueva estructura `RavenConfig` leída desde el disco.
+    ///
+    /// # Retorno
+    /// Vector de comandos `RavenAction` para aplicar la nueva composición al instante.
+    pub fn reload_config(
+        &mut self,
+        new_config: crate::infrastructure::config::RavenConfig,
+    ) -> Result<Vec<RavenAction>, RavenError> {
+        self.engine.config = new_config;
+        for win in self.engine.current_windows.values_mut() {
+            win.custom_w_ratio = None;
+            win.custom_h_ratio = None;
+        }
+        self.last_known_layout.clear();
+        self.flap_guard.clear();
+        self.commit_layout()
+    }
+
+    /// Adapta en tiempo real los parámetros del algoritmo de composición (`master_ratio`,
+    /// `custom_w_ratio`, `custom_h_ratio`) cuando el usuario redimensiona una ventana con el cursor.
+    ///
+    /// Incluye acoplamiento magnético suave en proporciones canónicas (`50/50`, `60/40`, `40/60`,
+    /// `70/30`, `30/70`) para facilitar ajustes precisos sin que el demonio devuelva la ventana
+    /// a su dimensión anterior.
+    ///
+    /// # Parámetros
+    /// * `window_id` - Identificador de la ventana redimensionada por el usuario.
+    /// * `new_rect` - Nueva geometría resultante de la interacción con el ratón.
+    ///
+    /// # Retorno
+    /// Vector de acciones `RavenAction` para reacomodar las ventanas vecinas en tiempo real.
+    pub fn handle_user_resize(
+        &mut self,
+        window_id: &str,
+        new_rect: Rect,
+    ) -> Result<Vec<RavenAction>, RavenError> {
+        let (ws_id, is_floating, is_minimized, old_win_geom) =
+            match self.engine.current_windows.get(window_id) {
+                Some(w) => (w.workspace_id.clone(), w.is_floating, w.is_minimized, w.geometry),
+                None => return Ok(Vec::new()),
+            };
+
+        if is_floating || is_minimized {
+            if let Some(w) = self.engine.current_windows.get_mut(window_id) {
+                w.geometry = new_rect;
+            }
+            return Ok(Vec::new());
+        }
+
+        let old_rect = self
+            .last_known_layout
+            .get(window_id)
+            .copied()
+            .unwrap_or(old_win_geom);
+        let screen_rect = self
+            .engine
+            .current_workspaces
+            .get(&ws_id)
+            .or_else(|| {
+                let out = ws_id.split("||").next().unwrap_or(&ws_id);
+                self.engine.current_workspaces.get(out)
+            })
+            .copied()
+            .unwrap_or(Rect::new(0, 0, 1920, 1080));
+
+        let gaps = self.engine.config.default_gaps;
+        let usable_w = (screen_rect.width - gaps).max(1) as f32;
+        let usable_h = (screen_rect.height - gaps).max(1) as f32;
+
+        // Ordenar las ventanas activas del workspace según spatial_order para identificar el rol de la ventana
+        let mut ws_windows: Vec<String> = self
+            .engine
+            .current_windows
+            .values()
+            .filter(|w| {
+                w.workspace_id == ws_id && !w.is_floating && !w.is_minimized && !w.is_pip
+            })
+            .map(|w| w.window_id.clone())
+            .collect();
+
+        ws_windows.sort_by_key(|id| {
+            self.engine
+                .spatial_order
+                .iter()
+                .position(|sid| sid == id)
+                .unwrap_or(usize::MAX)
+        });
+
+        let total_count = ws_windows.len();
+        let win_idx = ws_windows
+            .iter()
+            .position(|id| id == window_id)
+            .unwrap_or(0);
+
+        let output_name = ws_id.split("||").next().unwrap_or(&ws_id);
+        let layout_type = self
+            .engine
+            .config
+            .workspace_layouts
+            .get(&ws_id)
+            .or_else(|| self.engine.config.workspace_layouts.get(output_name))
+            .cloned()
+            .unwrap_or_else(|| self.engine.config.layout_type.clone());
+
+        let snap_canonical_ratio = |r: f32| -> f32 {
+            let clamped = r.clamp(0.20, 0.80);
+            if (clamped - 0.50).abs() <= 0.025 {
+                0.50
+            } else if (clamped - 0.60).abs() <= 0.015 {
+                0.60
+            } else if (clamped - 0.40).abs() <= 0.015 {
+                0.40
+            } else if (clamped - 0.70).abs() <= 0.015 {
+                0.70
+            } else if (clamped - 0.30).abs() <= 0.015 {
+                0.30
+            } else {
+                clamped
+            }
+        };
+
+        let mut config_changed = false;
+        let dw = (new_rect.width - old_rect.width).abs();
+        let dh = (new_rect.height - old_rect.height).abs();
+
+        if dw > 4 && total_count >= 2 {
+            if total_count == 2 {
+                // Para 2 ventanas en mosaico horizontal: calcular la relación espacial física
+                // directa entre la ventana redimensionada y su vecina.
+                let other_id = ws_windows.iter().find(|id| id.as_str() != window_id);
+                let other_geom = other_id
+                    .and_then(|oid| {
+                        self.last_known_layout
+                            .get(oid)
+                            .or_else(|| self.engine.current_windows.get(oid).map(|w| &w.geometry))
+                    })
+                    .copied()
+                    .unwrap_or(Rect::new(0, 0, 100, 100));
+
+                let win_is_left = old_rect.x < other_geom.x;
+                let raw_ratio_left = if win_is_left {
+                    ((new_rect.width + gaps) as f32 / usable_w).clamp(0.15, 0.85)
+                } else {
+                    (1.0 - ((new_rect.width + gaps) as f32 / usable_w)).clamp(0.15, 0.85)
+                };
+
+                // Imantado magnético suave cerca de 50/50, manteniendo fluidez continua en el resto
+                let ratio_left = if (raw_ratio_left - 0.50).abs() <= 0.020 {
+                    0.50
+                } else if (raw_ratio_left - 0.60).abs() <= 0.012 {
+                    0.60
+                } else if (raw_ratio_left - 0.40).abs() <= 0.012 {
+                    0.40
+                } else {
+                    raw_ratio_left
+                };
+
+                match layout_type.as_str() {
+                    "tall" | "strict_dwindle" => {
+                        self.engine.config.master_ratio = ratio_left;
+                        config_changed = true;
+                    }
+                    "inverted_strict_dwindle" => {
+                        self.engine.config.master_ratio = 1.0 - ratio_left;
+                        config_changed = true;
+                    }
+                    "divisor" => {
+                        if let Some(w_curr) = self.engine.current_windows.get_mut(window_id) {
+                            let r = if win_is_left { ratio_left } else { 1.0 - ratio_left };
+                            w_curr.custom_w_ratio = Some((r / (1.0 - r).max(0.01)).clamp(0.20, 5.0));
+                        }
+                    }
+                    _ => {
+                        // Raven DwindleBSP: en 2 ventanas, la ventana izquierda tiene cuota (1 - master_ratio)
+                        // y la central/derecha tiene master_ratio.
+                        self.engine.config.master_ratio = (1.0 - ratio_left).clamp(0.15, 0.85);
+                        config_changed = true;
+                    }
+                }
+            } else {
+                // 3 o más ventanas
+                let frac_w = ((new_rect.width + gaps) as f32 / usable_w).clamp(0.20, 0.80);
+                match layout_type.as_str() {
+                    "divisor" => {
+                        if let Some(w) = self.engine.current_windows.get_mut(window_id) {
+                            let scale_w =
+                                (new_rect.width as f32 / old_rect.width.max(1) as f32).clamp(0.25, 3.0);
+                            let cur = w.custom_w_ratio.unwrap_or(1.0);
+                            w.custom_w_ratio = Some((cur * scale_w).clamp(0.20, 3.0));
+                        }
+                    }
+                    "tall" | "strict_dwindle" => {
+                        let raw_ratio = if win_idx < self.engine.config.nmaster.max(1) {
+                            frac_w
+                        } else {
+                            1.0 - frac_w
+                        };
+                        self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
+                        config_changed = true;
+                    }
+                    "inverted_strict_dwindle" => {
+                        let raw_ratio = if win_idx == 0 { frac_w } else { 1.0 - frac_w };
+                        self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
+                        config_changed = true;
+                    }
+                    _ => {
+                        if win_idx == 0 {
+                            self.engine.config.master_ratio = snap_canonical_ratio(frac_w);
+                            config_changed = true;
+                        } else if total_count == 3 {
+                            let aspect_ratio = usable_w / usable_h.max(1.0);
+                            if aspect_ratio < 1.55 {
+                                self.engine.config.master_ratio = snap_canonical_ratio(1.0 - frac_w);
+                                config_changed = true;
+                            } else if let Some(w) = self.engine.current_windows.get_mut(window_id) {
+                                let scale_w = (new_rect.width as f32 / old_rect.width.max(1) as f32)
+                                    .clamp(0.25, 3.0);
+                                let cur = w.custom_w_ratio.unwrap_or(1.0);
+                                w.custom_w_ratio = Some((cur * scale_w).clamp(0.20, 3.0));
+                            }
+                        } else {
+                            let raw_ratio = (1.0 - (2.0 * frac_w)).clamp(0.25, 0.85);
+                            self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
+                            config_changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if dh > 4 && total_count >= 2 {
+            let frac_h = ((new_rect.height + gaps) as f32 / usable_h).clamp(0.15, 0.85);
+            let aspect_ratio = usable_w / usable_h.max(1.0);
+            if layout_type == "raven" && total_count == 3 && aspect_ratio >= 1.55 {
+                let raw_ratio = if win_idx == 0 { frac_h } else { 1.0 - frac_h };
+                self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
+                config_changed = true;
+            } else if let Some(w) = self.engine.current_windows.get_mut(window_id) {
+                let scale_h =
+                    (new_rect.height as f32 / old_rect.height.max(1) as f32).clamp(0.25, 3.0);
+                let cur = w.custom_h_ratio.unwrap_or(1.0);
+                w.custom_h_ratio = Some((cur * scale_h).clamp(0.20, 3.0));
+            }
+        }
+
+        if let Some(w) = self.engine.current_windows.get_mut(window_id) {
+            w.geometry = new_rect;
+        }
+        self.flap_guard.remove(window_id);
+        self.last_known_layout.clear();
+
+        if config_changed {
+            let _ = self.engine.config.save();
+        }
+
+        self.commit_layout()
+    }
+
+    /// Reubica o intercambia interactivamente una ventana en el mosaico activo cuando el usuario
+    /// la arrastra y suelta con el cursor del ratón sobre otro slot o monitor.
+    ///
+    /// # Parámetros
+    /// * `window_id` - Identificador de la ventana arrastrada por el usuario.
+    /// * `drop_x` - Coordenada X global del punto de suelta (cursor o centro de ventana).
+    /// * `drop_y` - Coordenada Y global del punto de suelta (cursor o centro de ventana).
+    ///
+    /// # Retorno
+    /// Vector de acciones `RavenAction` para posicionar e intercambiar las ventanas involucradas.
+    pub fn handle_user_move(
+        &mut self,
+        window_id: &str,
+        drop_x: i32,
+        drop_y: i32,
+    ) -> Result<Vec<RavenAction>, RavenError> {
+        let (mut current_ws_id, is_floating, is_minimized) =
+            match self.engine.current_windows.get(window_id) {
+                Some(w) => (w.workspace_id.clone(), w.is_floating, w.is_minimized),
+                None => return Ok(Vec::new()),
+            };
+
+        if is_floating || is_minimized {
+            return Ok(Vec::new());
+        }
+
+        let current_desk = current_ws_id
+            .split("||")
+            .nth(1)
+            .unwrap_or("default_desk")
+            .to_string();
+
+        // Comprobar si el usuario arrastró la ventana hacia otro monitor físico
+        let mut migrated_output: Option<String> = None;
+        for (ws_key, ws_rect) in &self.engine.current_workspaces {
+            let desk_part = ws_key.split("||").nth(1).unwrap_or("default_desk");
+            if desk_part == current_desk
+                && drop_x >= ws_rect.x
+                && drop_x <= ws_rect.x + ws_rect.width
+                && drop_y >= ws_rect.y
+                && drop_y <= ws_rect.y + ws_rect.height
+            {
+                if ws_key != &current_ws_id {
+                    let new_out = ws_key.split("||").next().unwrap_or("default").to_string();
+                    migrated_output = Some(new_out);
+                    current_ws_id = ws_key.clone();
+                }
+                break;
+            }
+        }
+
+        if let Some(ref new_out) = migrated_output {
+            if let Some(win) = self.engine.current_windows.get_mut(window_id) {
+                win.output = new_out.clone();
+                win.workspace_id = current_ws_id.clone();
+            }
+        }
+
+        // Buscar la ventana objetivo en el workspace destino cuyo slot contenga (drop_x, drop_y)
+        // o cuyo centro geométrico sea el más cercano al punto de suelta.
+        let candidate_ids: Vec<String> = self
+            .engine
+            .current_windows
+            .values()
+            .filter(|w| {
+                w.workspace_id == current_ws_id && !w.is_floating && !w.is_minimized && !w.is_pip
+            })
+            .map(|w| w.window_id.clone())
+            .collect();
+
+        let mut target_window_id: Option<String> = None;
+        let mut best_dist_sq = i64::MAX;
+
+        for cid in &candidate_ids {
+            let slot_rect = self
+                .last_known_layout
+                .get(cid)
+                .copied()
+                .or_else(|| self.engine.current_windows.get(cid).map(|w| w.geometry));
+
+            if let Some(r) = slot_rect {
+                let contains = drop_x >= r.x
+                    && drop_x <= r.x + r.width
+                    && drop_y >= r.y
+                    && drop_y <= r.y + r.height;
+                if contains && cid != window_id {
+                    target_window_id = Some(cid.clone());
+                    break;
+                }
+                let cx = (r.x + r.width / 2) as i64;
+                let cy = (r.y + r.height / 2) as i64;
+                let dx = drop_x as i64 - cx;
+                let dy = drop_y as i64 - cy;
+                let dist_sq = dx * dx + dy * dy;
+                if dist_sq < best_dist_sq {
+                    best_dist_sq = dist_sq;
+                    target_window_id = Some(cid.clone());
+                }
+            }
+        }
+
+        if let Some(ref target_id) = target_window_id {
+            if target_id != window_id {
+                let s_pos_a = self
+                    .engine
+                    .spatial_order
+                    .iter()
+                    .position(|id| id == window_id);
+                let s_pos_b = self
+                    .engine
+                    .spatial_order
+                    .iter()
+                    .position(|id| id == target_id);
+                if let (Some(pa), Some(pb)) = (s_pos_a, s_pos_b) {
+                    self.engine.spatial_order.swap(pa, pb);
+                }
+
+                let h_pos_a = self
+                    .engine
+                    .window_history
+                    .iter()
+                    .position(|id| id == window_id);
+                let h_pos_b = self
+                    .engine
+                    .window_history
+                    .iter()
+                    .position(|id| id == target_id);
+                if let (Some(pa), Some(pb)) = (h_pos_a, h_pos_b) {
+                    self.engine.window_history.swap(pa, pb);
+                }
+            }
+        }
+
+        self.flap_guard.remove(window_id);
+        self.last_known_layout.clear();
+        let mut cmds = Vec::new();
+        if let Some(target_out) = migrated_output {
+            cmds.push(RavenAction::MigrateToOutput {
+                window_id: window_id.to_string(),
+                target_output: target_out,
+            });
+        }
+        cmds.extend(self.commit_layout()?);
+        Ok(cmds)
     }
 }

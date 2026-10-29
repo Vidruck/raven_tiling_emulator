@@ -180,6 +180,9 @@ impl KWinQuarantineManager {
         if seen.contains(&key) {
             StartupMode::Warm
         } else {
+            if seen.len() > 512 {
+                seen.clear();
+            }
             seen.insert(key);
             StartupMode::Cold
         }
@@ -262,6 +265,9 @@ impl KWinQuarantineManager {
             if lx == x && ly == y && lw == w && lh == h {
                 return true; // Es flood idéntico, suprimir
             }
+        }
+        if geom_map.len() > 512 && !geom_map.contains_key(window_id) {
+            geom_map.clear();
         }
         geom_map.insert(window_id.to_string(), (x, y, w, h));
         false

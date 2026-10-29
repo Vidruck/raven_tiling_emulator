@@ -7,7 +7,9 @@
 //! - Columna izquierda: Área Maestra con capacidad configurable (`nmaster`) y proporción de corte (`master_ratio`).
 //! - Columna derecha: Pila vertical secundaria (Stack) con distribución ponderada de alturas.
 
-use super::{apply_gaps, distribute_weighted_sizes, LayoutStrategy};
+use super::{
+    apply_gaps, clamp_min_height, clamp_min_width, distribute_weighted_sizes, LayoutStrategy,
+};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
@@ -77,14 +79,13 @@ impl LayoutStrategy for TallStrategy {
         } else {
             // 4. Caso B: Hay ventanas suficientes para crear la columna Master (izq) y la columna Stack (der)
 
-            // Límite defensivo: Ninguna ventana puede exigir un min_w mayor al 40% del contenedor útil
-            let max_allowed_min_w = (container.width as f32 * 0.40) as i32;
+            // Límite defensivo: Ninguna ventana puede distorsionar la proporción entre columnas
             let mut master_w = (container.width as f32 * master_ratio) as i32;
 
-            // Restricción dinámicas para el área Master
+            // Restricción dinámica para el área Master
             let mut max_master_min_w = 0;
             for win in active_windows.iter().take(nmaster) {
-                let clamped_min = win.min_w.min(max_allowed_min_w);
+                let clamped_min = clamp_min_width(win, container.width, 2);
                 if clamped_min > max_master_min_w {
                     max_master_min_w = clamped_min;
                 }
@@ -100,7 +101,7 @@ impl LayoutStrategy for TallStrategy {
             let mut max_stack_min_w = 0;
             for i in 0..stack_count {
                 let win = &active_windows[nmaster + i];
-                let clamped_min = win.min_w.min(max_allowed_min_w);
+                let clamped_min = clamp_min_width(win, container.width, 2);
                 if clamped_min > max_stack_min_w {
                     max_stack_min_w = clamped_min;
                 }
@@ -119,9 +120,10 @@ impl LayoutStrategy for TallStrategy {
 
             // 5. Apilar ventanas de la columna Master a la izquierda
             let master_wins = &active_windows[..nmaster];
+            let master_len = master_wins.len();
             let master_mins: Vec<i32> = master_wins
                 .iter()
-                .map(|w| std::cmp::max(w.min_h, 80))
+                .map(|w| std::cmp::max(clamp_min_height(w, container.height, master_len), 80))
                 .collect();
             let master_weights: Vec<Option<f32>> =
                 master_wins.iter().map(|w| w.custom_h_ratio).collect();
@@ -141,9 +143,10 @@ impl LayoutStrategy for TallStrategy {
 
             // 6. Apilar ventanas de la columna Stack a la derecha
             let stack_wins = &active_windows[nmaster..];
+            let stack_len = stack_wins.len();
             let stack_mins: Vec<i32> = stack_wins
                 .iter()
-                .map(|w| std::cmp::max(w.min_h, 80))
+                .map(|w| std::cmp::max(clamp_min_height(w, container.height, stack_len), 80))
                 .collect();
             let stack_weights: Vec<Option<f32>> =
                 stack_wins.iter().map(|w| w.custom_h_ratio).collect();

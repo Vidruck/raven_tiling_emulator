@@ -120,7 +120,7 @@ impl WindowNode {
             is_floating,
             is_minimized,
             is_pip,
-            geometry: Rect::new(geometry.x, geometry.y, geometry.width.max(0), geometry.height.max(0)),
+            geometry: Rect::new(geometry.x, geometry.y, geometry.width.max(1), geometry.height.max(1)),
             min_w: min_w.max(0),
             min_h: min_h.max(0),
             strict_birth,

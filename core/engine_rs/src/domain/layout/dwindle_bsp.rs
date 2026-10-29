@@ -7,7 +7,9 @@
 //! - Distribución tripartita dinámica entre Área Maestra Central, Paneles Laterales y Paneles Inferiores.
 //! - Ratios 2D personalizados y soporte de restricciones geométricas de hardware.
 
-use super::{apply_gaps, distribute_weighted_sizes, LayoutStrategy};
+use super::{
+    apply_gaps, clamp_min_height, clamp_min_width, distribute_weighted_sizes, LayoutStrategy,
+};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
@@ -115,14 +117,36 @@ impl LayoutStrategy for DwindleBSPStrategy {
                 }
             }
 
-            // 5. Requerimientos de tamaño mínimo
-            let left_min_w = left_group.iter().map(|w| w.min_w).max().unwrap_or(0);
-            let right_min_w = right_group.iter().map(|w| w.min_w).max().unwrap_or(0);
-            let center_min_w = center_group.iter().map(|w| w.min_w).max().unwrap_or(0);
-            let bottom_min_h = bottom_group.iter().map(|w| w.min_h).max().unwrap_or(0);
+            // 5. Requerimientos de tamaño mínimo acotados defensivamente para impedir que
+            // navegadores o aplicaciones CSD deformen una disposición 50/50 hacia 70/30.
+            let active_cols = usize::from(!left_group.is_empty())
+                + usize::from(!center_group.is_empty())
+                + usize::from(!right_group.is_empty());
+            let active_rows = 1 + usize::from(!bottom_group.is_empty());
+
+            let left_min_w = left_group
+                .iter()
+                .map(|w| clamp_min_width(w, container.width, active_cols))
+                .max()
+                .unwrap_or(0);
+            let right_min_w = right_group
+                .iter()
+                .map(|w| clamp_min_width(w, container.width, active_cols))
+                .max()
+                .unwrap_or(0);
+            let center_min_w = center_group
+                .iter()
+                .map(|w| clamp_min_width(w, container.width, active_cols))
+                .max()
+                .unwrap_or(0);
+            let bottom_min_h = bottom_group
+                .iter()
+                .map(|w| clamp_min_height(w, container.height, active_rows))
+                .max()
+                .unwrap_or(0);
 
             // 6. Calcular proporciones y alturas de paneles
-            let central_ratio = master_ratio.clamp(0.35, 0.85);
+            let central_ratio = master_ratio.clamp(0.25, 0.85);
             let bottom_ratio =
                 if left_group.is_empty() && right_group.is_empty() && !bottom_group.is_empty() {
                     1.0 - central_ratio
@@ -193,9 +217,10 @@ impl LayoutStrategy for DwindleBSPStrategy {
 
             // 8. Posicionar ventanas del Sidebar Izquierdo (Left Group)
             if !left_group.is_empty() {
+                let left_len = left_group.len();
                 let mins: Vec<i32> = left_group
                     .iter()
-                    .map(|w| std::cmp::max(w.min_h, 80))
+                    .map(|w| std::cmp::max(clamp_min_height(w, container.height, left_len), 80))
                     .collect();
                 let weights: Vec<Option<f32>> =
                     left_group.iter().map(|w| w.custom_h_ratio).collect();
@@ -215,9 +240,10 @@ impl LayoutStrategy for DwindleBSPStrategy {
 
             // 9. Posicionar ventanas del Sidebar Derecho (Right Group)
             if !right_group.is_empty() {
+                let right_len = right_group.len();
                 let mins: Vec<i32> = right_group
                     .iter()
-                    .map(|w| std::cmp::max(w.min_h, 80))
+                    .map(|w| std::cmp::max(clamp_min_height(w, container.height, right_len), 80))
                     .collect();
                 let weights: Vec<Option<f32>> =
                     right_group.iter().map(|w| w.custom_h_ratio).collect();
@@ -238,9 +264,10 @@ impl LayoutStrategy for DwindleBSPStrategy {
             // 10. Posicionar ventanas del Área Central (Center Group)
             if !center_group.is_empty() {
                 let main_h = container.height - bottom_height;
+                let center_len = center_group.len();
                 let mins: Vec<i32> = center_group
                     .iter()
-                    .map(|w| std::cmp::max(w.min_h, 120))
+                    .map(|w| std::cmp::max(clamp_min_height(w, main_h, center_len), 120))
                     .collect();
                 let weights: Vec<Option<f32>> =
                     center_group.iter().map(|w| w.custom_h_ratio).collect();
@@ -261,9 +288,10 @@ impl LayoutStrategy for DwindleBSPStrategy {
 
             // 11. Posicionar ventanas del Panel Inferior (Bottom Group)
             if !bottom_group.is_empty() {
+                let bottom_len = bottom_group.len();
                 let mins: Vec<i32> = bottom_group
                     .iter()
-                    .map(|w| std::cmp::max(w.min_w, 100))
+                    .map(|w| std::cmp::max(clamp_min_width(w, center_width, bottom_len), 100))
                     .collect();
                 let weights: Vec<Option<f32>> =
                     bottom_group.iter().map(|w| w.custom_w_ratio).collect();

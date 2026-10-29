@@ -229,6 +229,7 @@ void RavenController::setTilingEnabled(bool enabled)
 void RavenController::cycleLayout()
 {
     sendDbusAction(QStringLiteral("cycleLayout"));
+    refreshState();
 }
 
 /**
@@ -357,7 +358,7 @@ void RavenController::focusNext()
  */
 void RavenController::migrateActiveToScreen()
 {
-    invokeKWinShortcut(QStringLiteral("RavenMigrateMonitor"));
+    sendDbusAction(QStringLiteral("migrateActiveToScreen"));
 }
 
 /**
@@ -365,7 +366,7 @@ void RavenController::migrateActiveToScreen()
  */
 void RavenController::migrateActiveToPrevScreen()
 {
-    invokeKWinShortcut(QStringLiteral("RavenMigratePrevMonitor"));
+    sendDbusAction(QStringLiteral("migrateActiveToPrevScreen"));
 }
 
 /**
@@ -373,7 +374,8 @@ void RavenController::migrateActiveToPrevScreen()
  */
 void RavenController::migrateActiveToDesktop()
 {
-    invokeKWinShortcut(QStringLiteral("RavenMigrateDesktop"));
+    sendDbusAction(QStringLiteral("migrateActiveToDesktop"));
+    refreshState();
 }
 
 /**
@@ -381,7 +383,8 @@ void RavenController::migrateActiveToDesktop()
  */
 void RavenController::migrateActiveToPrevDesktop()
 {
-    invokeKWinShortcut(QStringLiteral("RavenMigratePrevDesktop"));
+    sendDbusAction(QStringLiteral("migrateActiveToPrevDesktop"));
+    refreshState();
 }
 
 /**

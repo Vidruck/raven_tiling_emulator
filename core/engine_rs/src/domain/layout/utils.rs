@@ -7,7 +7,116 @@
 //! (`apply_gaps`) y el algoritmo de distribución de dimensiones con pesos relativos
 //! y restricciones mínimas innegociables (`distribute_weighted_sizes`).
 
-use crate::domain::geometry::Rect;
+use crate::domain::geometry::{Rect, WindowNode};
+
+/// Determina si una ventana pertenece a un navegador web o aplicación basada en motor web/Electron
+/// que reporta dimensiones mínimas infladas (`minSize`) por barras de pestañas o marcadores,
+/// pero que es perfectamente capaz de renderizar en divisiones 50/50 o menores.
+///
+/// # Parámetros
+/// - `win`: Nodo de ventana a evaluar.
+///
+/// # Retorno
+/// `true` si la ventana es un navegador o cliente web flexible; `false` en caso contrario.
+#[inline]
+pub(crate) fn is_flexible_browser_or_webapp(win: &WindowNode) -> bool {
+    let cls = win.resource_class.to_ascii_lowercase();
+    let name = win.resource_name.to_ascii_lowercase();
+    const FLEXIBLE_PATTERNS: &[&str] = &[
+        "firefox",
+        "zen",
+        "librewolf",
+        "waterfox",
+        "floorp",
+        "chrome",
+        "chromium",
+        "brave",
+        "vivaldi",
+        "edge",
+        "msedge",
+        "opera",
+        "thorium",
+        "falkon",
+        "qutebrowser",
+        "epiphany",
+        "midori",
+        "ladybird",
+        "electron",
+        "code",
+        "codium",
+        "discord",
+        "vesktop",
+        "spotify",
+        "slack",
+        "teams",
+        "obsidian",
+        "ferdium",
+        "telegram",
+    ];
+    FLEXIBLE_PATTERNS
+        .iter()
+        .any(|p| cls.contains(p) || name.contains(p))
+}
+
+/// Acota defensivamente el requerimiento de ancho mínimo (`min_w`) de una ventana para el cálculo de mosaico.
+///
+/// Evita que navegadores web o aplicaciones CSD que anuncian un `minSize` excesivo (ej. 900px-1350px)
+/// rompan la simetría 50/50 de dos ventanas o secuestren la proporción `master_ratio` llevándola a 70/30.
+///
+/// # Parámetros
+/// - `win`: Nodo de ventana cuyo `min_w` se desea sanitizar.
+/// - `container_width`: Ancho total útil del contenedor o área de pantalla en píxeles.
+/// - `num_columns`: Número de columnas activas en paralelo dentro del contenedor.
+///
+/// # Retorno
+/// El ancho mínimo efectivo y seguro en píxeles que no distorsiona la composición.
+#[inline]
+pub(crate) fn clamp_min_width(win: &WindowNode, container_width: i32, num_columns: usize) -> i32 {
+    if win.min_w <= 0 {
+        return 0;
+    }
+    if num_columns <= 1 {
+        return win.min_w.clamp(0, container_width.max(1));
+    }
+    let fair_share = (container_width / num_columns as i32).max(1);
+    if is_flexible_browser_or_webapp(win) {
+        return win.min_w.min(240).min(fair_share);
+    }
+    let max_allowed = ((container_width as f32 * 0.35) as i32)
+        .min(fair_share)
+        .clamp(80, 380);
+    win.min_w.min(max_allowed)
+}
+
+/// Acota defensivamente el requerimiento de altura mínima (`min_h`) de una ventana para el cálculo de mosaico.
+///
+/// Garantiza que ninguna ventana apilada verticalmente desplace desproporcionadamente a sus vecinas
+/// por reportar alturas mínimas infladas al compositor.
+///
+/// # Parámetros
+/// - `win`: Nodo de ventana cuyo `min_h` se desea sanitizar.
+/// - `container_height`: Altura total útil del contenedor o columna en píxeles.
+/// - `num_rows`: Número de filas apiladas verticalmente en la columna.
+///
+/// # Retorno
+/// La altura mínima efectiva y segura en píxeles.
+#[inline]
+pub(crate) fn clamp_min_height(win: &WindowNode, container_height: i32, num_rows: usize) -> i32 {
+    if win.min_h <= 0 {
+        return 0;
+    }
+    if num_rows <= 1 {
+        return win.min_h.clamp(0, container_height.max(1));
+    }
+    let fair_share = (container_height / num_rows as i32).max(1);
+    if is_flexible_browser_or_webapp(win) {
+        return win.min_h.min(200).min(fair_share);
+    }
+    let max_allowed = ((container_height as f32 * 0.35) as i32)
+        .min(fair_share)
+        .clamp(80, 320);
+    win.min_h.min(max_allowed)
+}
 
 /// Aplica un espaciado interno (gap) a un rectángulo de ventana.
 ///

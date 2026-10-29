@@ -213,6 +213,7 @@ impl QuarantinePolicy {
 #[derive(Clone)]
 pub struct QuarantineManager {
     scheduled: Arc<tokio::sync::Mutex<HashSet<String>>>,
+    scheduled_rectifications: Arc<std::sync::Mutex<HashSet<String>>>,
     tx: mpsc::Sender<RavenMessage>,
 }
 
@@ -221,6 +222,7 @@ impl QuarantineManager {
     pub fn new(tx: mpsc::Sender<RavenMessage>) -> Self {
         Self {
             scheduled: Arc::new(tokio::sync::Mutex::new(HashSet::new())),
+            scheduled_rectifications: Arc::new(std::sync::Mutex::new(HashSet::new())),
             tx,
         }
     }
@@ -239,6 +241,9 @@ impl QuarantineManager {
         let mut guard = self.scheduled.lock().await;
         if guard.contains(&window_id) {
             return;
+        }
+        if guard.len() > 512 {
+            guard.clear();
         }
         guard.insert(window_id.clone());
         drop(guard);
@@ -273,21 +278,36 @@ impl QuarantineManager {
 
     /// Agenda la verificación de rectificación post-cuarentena para una ventana (Fase 2).
     ///
-    /// Debe llamarse **después** de que `ReleaseQuarantine` fue procesado por el actor y las
-    /// órdenes de posicionamiento iniciales fueron enviadas al compositor.
+    /// Incluye deduplicación en memoria acotada para evitar agendar múltiples tareas
+    /// concurrentes sobre la misma ventana durante ráfagas de eventos de KWin.
     ///
     /// # Parámetros
     /// * `window_id`      – Identificador de la ventana a verificar.
     /// * `resource_class` – Segunda parte de WM_CLASS (para determinar la política de demora).
     /// * `resource_name`  – Nombre del ejecutable (primera parte WM_CLASS).
     pub fn schedule_rectification(&self, window_id: String, resource_class: &str, resource_name: &str) {
+        if let Ok(mut guard) = self.scheduled_rectifications.lock() {
+            if guard.contains(&window_id) {
+                return;
+            }
+            if guard.len() > 512 {
+                guard.clear();
+            }
+            guard.insert(window_id.clone());
+        }
+
         let policy = QuarantinePolicy::from_class(resource_class, resource_name);
         let delay = policy.rectification_delay();
         let target_id = window_id;
         let tx = self.tx.clone();
+        let rect_ref = self.scheduled_rectifications.clone();
 
         tokio::spawn(async move {
             tokio::time::sleep(delay).await;
+
+            if let Ok(mut guard) = rect_ref.lock() {
+                guard.remove(&target_id);
+            }
 
             info!(
                 "[RECTIF-MGR] Verificación rectificación (Fase 2, {:?}, {:?}) para ventana '{}'",
@@ -304,7 +324,12 @@ impl QuarantineManager {
 
     /// Limpia el registro de una ventana si se destruyó antes de expirar el timer.
     pub async fn cancel(&self, window_id: &str) {
-        let mut guard = self.scheduled.lock().await;
-        guard.remove(window_id);
+        {
+            let mut guard = self.scheduled.lock().await;
+            guard.remove(window_id);
+        }
+        if let Ok(mut rect_guard) = self.scheduled_rectifications.lock() {
+            rect_guard.remove(window_id);
+        }
     }
 }

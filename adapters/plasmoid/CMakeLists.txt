@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(ravenlauncher VERSION 4.6.5 LANGUAGES CXX)
+project(ravenlauncher VERSION 4.7.0 LANGUAGES CXX)
 
 set(QT_MAJOR_VERSION 6)
 set(REQUIRED_QT_VERSION "6.5.0")

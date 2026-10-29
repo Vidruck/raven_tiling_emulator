@@ -47,13 +47,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         actor_tx.clone(),
     );
 
-    // Iniciar el actor en un hilo en background
-    tokio::spawn(actor.run());
-
     // Inicializar e intermediar primero el bridge D-Bus de KWin (org.kde.raven.Daemon)
-    // para satisfacer de inmediato la activación Type=dbus de systemd sin bloqueos.
+    // para satisfacer de inmediato la activación Type=dbus de systemd y garantizar que
+    // la conexión D-Bus esté activa antes de que el actor emita el RequestSync inicial.
     let actor_tx_kwin = actor_tx.clone();
     kwin_backend.start_bridge(actor_tx_kwin).await?;
+
+    // Iniciar el actor en background una vez establecida la conexión D-Bus
+    tokio::spawn(actor.run());
 
     // Inicializar listener de Wayland nativo para recepción directa de topología de pantallas
     let wayland_backend = raven_backend_wayland::WaylandBackend::new();

@@ -27,4 +27,6 @@ pub use strategy::{get_strategy, LayoutStrategy};
 pub use strict_dwindle::StrictDwindleStrategy;
 pub use tall::TallStrategy;
 pub use topology::calculate_global_topology;
-pub(crate) use utils::{apply_gaps, distribute_weighted_sizes};
+pub(crate) use utils::{
+    apply_gaps, clamp_min_height, clamp_min_width, distribute_weighted_sizes,
+};

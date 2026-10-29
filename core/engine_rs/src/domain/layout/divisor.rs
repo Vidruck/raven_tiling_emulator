@@ -6,7 +6,7 @@
 //! Implementa una partición horizontal donde la pantalla se divide en $N$ columnas
 //! paralelas de ancho equitativo, ocupando la altura total disponible.
 
-use super::{apply_gaps, distribute_weighted_sizes, LayoutStrategy};
+use super::{apply_gaps, clamp_min_width, distribute_weighted_sizes, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
@@ -58,10 +58,11 @@ impl LayoutStrategy for DivisorStrategy {
             height: std::cmp::max(1, screen_rect.height - default_gaps),
         };
 
-        // 3. Dividir el ancho del contenedor respetando requerimientos mínimos y ratios horizontales
+        // 3. Dividir el ancho del contenedor respetando requerimientos mínimos acotados y ratios horizontales
+        let col_count = active_windows.len();
         let mins: Vec<i32> = active_windows
             .iter()
-            .map(|w| std::cmp::max(w.min_w, 80))
+            .map(|w| std::cmp::max(clamp_min_width(w, container.width, col_count), 80))
             .collect();
         let weights: Vec<Option<f32>> = active_windows.iter().map(|w| w.custom_w_ratio).collect();
         let widths = distribute_weighted_sizes(container.width, &mins, &weights);

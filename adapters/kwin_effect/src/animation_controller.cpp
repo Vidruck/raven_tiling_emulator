@@ -7,6 +7,7 @@
 
 #include "animation_controller.h"
 #include "raveneffect.h"
+#include <window.h>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -41,6 +42,9 @@ void AnimationController::removePending(const QString &windowId)
 
 void AnimationController::storePending(const QString &windowId, const PendingAnimation &anim)
 {
+    if (m_pendingAnimations.size() > 256) {
+        m_pendingAnimations.clear();
+    }
     m_pendingAnimations.insert(windowId, anim);
 }
 
@@ -108,10 +112,16 @@ void AnimationController::onAnimationEnded(KWin::EffectWindow *w, KWin::Animatio
     const QString hexId = QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(w), 0, 16);
     const QString decId = QString::number(reinterpret_cast<quintptr>(w));
 
-    if (a == KWin::AnimationEffect::Scale) {
+    if (a == KWin::AnimationEffect::Scale || a == KWin::AnimationEffect::Translation) {
         for (const QString &key : {windowId, hexId, decId}) {
             if (!key.isEmpty()) {
                 m_activeGeometryAnimations.remove(key);
+            }
+        }
+    }
+    if (a == KWin::AnimationEffect::Scale || a == KWin::AnimationEffect::Opacity) {
+        for (const QString &key : {windowId, hexId, decId}) {
+            if (!key.isEmpty()) {
                 m_activeBirthAnimations.remove(key);
             }
         }
@@ -120,10 +130,19 @@ void AnimationController::onAnimationEnded(KWin::EffectWindow *w, KWin::Animatio
     w->addRepaintFull();
 }
 
+/**
+ * @brief Orquesta la interpolación geométrica FLIP o aplica directamente la geometría en KWin::Window.
+ *
+ * Si la ventana está siendo arrastrada o redimensionada interactivamente por el usuario, se omite
+ * cualquier mutación o animación para evitar tirones ("rubber-banding") contra el cursor.
+ * Si la ventana aún no posee la geometría destino, la aplica con latencia cero en C++ y registra
+ * la transición pendiente para el frame de repintado inmediato.
+ */
 void AnimationController::animateGeometry(RavenEffect *effect, KWin::EffectWindow *w, const QString &windowId,
                                          const QRectF &startRect, const QRectF &targetRect, int durationMs, const QString &easingName)
 {
-    if (!effect || !w || w->isDeleted() || w->isHidden() || w->isMinimized()) {
+    if (!effect || !w || w->isDeleted() || w->isHidden() || w->isMinimized()
+        || w->isUserMove() || w->isUserResize()) {
         return;
     }
 
@@ -136,7 +155,26 @@ void AnimationController::animateGeometry(RavenEffect *effect, KWin::EffectWindo
     const QRectF currentGeom = w->frameGeometry();
 
     if (currentGeom != targetRect) {
-        m_pendingAnimations[windowId] = { startRect, targetRect, durationMs, easingName };
+        storePending(windowId, { startRect, targetRect, durationMs, easingName });
+
+        // Aplicación directa de geometría en C++ con latencia cero:
+        // Si la ventana es normal, gestionable y no está en interacción por el usuario,
+        // desvinculamos cualquier anclaje de mosaico nativo de Plasma y comandamos
+        // el cambio geométrico directamente sobre KWin::Window sin esperar al puente JS.
+        if (KWin::Window *kw = w->window()) {
+            if (!w->isUserMove() && !w->isUserResize() && !w->isFullScreen()
+                && w->isNormalWindow() && !w->isDialog() && !w->isUtility()
+                && !w->isModal() && w->transientFor() == nullptr
+                && !kw->isTransient() && !kw->isModal()) {
+                if (kw->tile() != nullptr) {
+                    kw->requestTile(nullptr);
+                }
+                if (kw->quickTileMode() != KWin::QuickTileMode(KWin::QuickTileFlag::None)) {
+                    kw->setQuickTileModeAtCurrentPosition(KWin::QuickTileMode(KWin::QuickTileFlag::None));
+                }
+                kw->moveResize(KWin::RectF(targetRect));
+            }
+        }
         return;
     }
 

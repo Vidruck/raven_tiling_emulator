@@ -34,6 +34,9 @@ bool WindowFilter::hasBirthed(const KWin::EffectWindow *w) const
 void WindowFilter::markBirthed(const KWin::EffectWindow *w)
 {
     if (w) {
+        if (m_birthedWindows.size() > 512) {
+            m_birthedWindows.clear();
+        }
         m_birthedWindows.insert(w);
     }
 }
@@ -58,6 +61,9 @@ bool WindowFilter::shouldDrawBorder(KWin::EffectWindow *w)
     auto it = m_borderVerdictCache.constFind(w);
     if (it != m_borderVerdictCache.constEnd()) {
         return it.value();
+    }
+    if (m_borderVerdictCache.size() > 512) {
+        m_borderVerdictCache.clear();
     }
     bool verdict = computeShouldDrawBorder(w);
     m_borderVerdictCache.insert(w, verdict);

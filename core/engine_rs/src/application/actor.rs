@@ -107,6 +107,9 @@ impl RavenControllerActor {
             });
         }
 
+        // Solicitar sincronización inicial proactiva por si el script KWin arrancó antes que el demonio
+        let _ = out_tx.send(vec![RavenAction::RequestSync]).await;
+
         while let Some(msg) = self.rx.recv().await {
             match msg {
                 RavenMessage::Compositor(event) => {
@@ -120,17 +123,23 @@ impl RavenControllerActor {
                             }
                         }
                         CompositorEvent::WindowClosed(window_id) => {
+                            self.quarantine_manager.cancel(&window_id).await;
                             self.initialized_pip_windows.remove(&window_id);
                             self.rectify_retries.remove(&window_id);
                             self.audit_retries.remove(&window_id);
+                            self.controller.clear_window_flapping(&window_id);
                             let engine = self.controller.get_engine_mut();
                             engine.current_windows.remove(&window_id);
                             engine.window_history.retain(|id| id != &window_id);
+                            engine.spatial_order.retain(|id| id != &window_id);
                             engine
                                 .dynamic_floating_windows
                                 .retain(|id| id != &window_id);
                             engine
                                 .maximized_windows
+                                .retain(|id| id != &window_id);
+                            engine
+                                .minimized_windows
                                 .retain(|id| id != &window_id);
                             if let Ok(cmds) = self.controller.commit_layout() {
                                 if !cmds.is_empty() {
@@ -382,17 +391,18 @@ impl RavenControllerActor {
                                 }
                             }
                             
-                            // Blindaje de Idempotencia: Solo agendar cuarentena si la ventana NO existe
-                            // en el registro activo de Rust o si Rust también la tiene en cuarentena.
-                            // Si Rust ya la liberó previamente (is_quarantined=false y strict_birth=false),
-                            // ignorar la bandera residual enviada por KWin para no disparar animaciones cíclicas.
+                            // Blindaje de Idempotencia y Resiliencia Zero-Timers:
+                            let is_new_window = !self
+                                .controller
+                                .get_engine()
+                                .current_windows
+                                .contains_key(&win.window_id);
                             let already_released = self
                                 .controller
                                 .get_engine()
                                 .current_windows
                                 .get(&win.window_id)
-                                .map(|known| !known.is_quarantined && !known.strict_birth)
-                                .unwrap_or(false);
+                                .is_some_and(|known| !known.is_quarantined && !known.strict_birth);
 
                             if !already_released && (win.is_quarantined || win.strict_birth) {
                                 self.quarantine_manager
@@ -402,6 +412,14 @@ impl RavenControllerActor {
                                 // Asegurar que el nodo entrante no reactive banderas obsoletas
                                 win.is_quarantined = false;
                                 win.strict_birth = false;
+                            } else if is_new_window && !win.is_minimized && !win.is_floating {
+                                // Sin timers en JS, Rust posiciona la ventana en 0ms y agenda la auditoría
+                                // asíncrona (Fase 2) para absorber restauraciones tardías de sesión Wayland/CSD.
+                                self.quarantine_manager.schedule_rectification(
+                                    win.window_id.clone(),
+                                    &win.resource_class,
+                                    &win.resource_name,
+                                );
                             }
                         }
 
@@ -430,6 +448,14 @@ impl RavenControllerActor {
                         all_commands.extend(pip_init_cmds);
                         if let Ok(cmds) = self.controller.handle_state_change(workspaces, windows) {
                             all_commands.extend(cmds);
+                        }
+
+                        // Podar registros auxiliares con base en las ventanas activas reales para garantizar memoria acotada
+                        {
+                            let active_map = &self.controller.get_engine().current_windows;
+                            self.initialized_pip_windows.retain(|id| active_map.contains_key(id));
+                            self.rectify_retries.retain(|id, _| active_map.contains_key(id));
+                            self.audit_retries.retain(|id, _| active_map.contains_key(id));
                         }
 
                         let _ = reply.send(all_commands);
@@ -568,6 +594,11 @@ impl RavenControllerActor {
                                 }
                             }
                         }
+                        if self.controller.get_engine().current_windows.is_empty()
+                            && !all_commands.iter().any(|c| matches!(c, RavenAction::RequestSync))
+                        {
+                            all_commands.push(RavenAction::RequestSync);
+                        }
                         if !all_commands.is_empty() {
                             let _ = out_tx.send(all_commands.clone()).await;
                         }
@@ -576,6 +607,7 @@ impl RavenControllerActor {
                     KWinBridgeMessage::BridgeReady => {
                         self.last_payload_json.clear();
                         self.controller.reset_state();
+                        let _ = out_tx.send(vec![RavenAction::RequestSync]).await;
 
                         // Sincronizar de inmediato la configuración de contornos con el efecto nativo de KWin
                         let cfg = self.controller.get_config();
@@ -596,6 +628,7 @@ impl RavenControllerActor {
                         });
                     }
                     KWinBridgeMessage::WindowClosed { window_id, reply } => {
+                        self.quarantine_manager.cancel(&window_id).await;
                         self.initialized_pip_windows.remove(&window_id);
                         self.rectify_retries.remove(&window_id);
                         self.audit_retries.remove(&window_id);
@@ -676,6 +709,7 @@ impl RavenControllerActor {
                         let _ = reply.send(count);
                     }
                     KWinBridgeMessage::SetLayoutForCurrentWorkspace { layout_name, reply } => {
+                        let cur_desk = self.current_topology.current_desktop.as_str();
                         let current_ws = self
                             .active_window_id
                             .as_ref()
@@ -684,6 +718,11 @@ impl RavenControllerActor {
                                     .get_engine()
                                     .current_windows
                                     .get(wid)
+                                    .filter(|w| {
+                                        cur_desk.is_empty()
+                                            || w.desktops.is_empty()
+                                            || w.desktops.iter().any(|d| d == cur_desk)
+                                    })
                                     .map(|w| w.workspace_id.clone())
                             })
                             .or_else(|| {
@@ -691,7 +730,12 @@ impl RavenControllerActor {
                                     .get_engine()
                                     .current_windows
                                     .values()
-                                    .next()
+                                    .find(|w| {
+                                        !w.is_minimized
+                                            && (cur_desk.is_empty()
+                                                || w.desktops.is_empty()
+                                                || w.desktops.iter().any(|d| d == cur_desk))
+                                    })
                                     .map(|w| w.workspace_id.clone())
                             })
                             .or_else(|| {
@@ -701,22 +745,30 @@ impl RavenControllerActor {
                                     .first()
                                     .map(|s| s.as_str())
                                     .unwrap_or("default");
-                                let desk = if !self.current_topology.current_desktop.is_empty() {
-                                    self.current_topology.current_desktop.as_str()
+                                let desk = if !cur_desk.is_empty() {
+                                    cur_desk
                                 } else {
                                     "default_desk"
                                 };
                                 Some(format!("{}||{}", out, desk))
                             });
 
-                        if let Some(ws_id) = current_ws {
-                            self.controller
-                                .get_engine_mut()
-                                .config
-                                .workspace_layouts
-                                .insert(ws_id, layout_name.clone());
-                        } else {
-                            self.controller.get_engine_mut().config.layout_type = layout_name.clone();
+                        {
+                            let engine = self.controller.get_engine_mut();
+                            if let Some(ws_id) = current_ws {
+                                let out_name = ws_id.split("||").next().unwrap_or(&ws_id).to_string();
+                                engine
+                                    .config
+                                    .workspace_layouts
+                                    .insert(ws_id, layout_name.clone());
+                                if engine.config.workspace_layouts.contains_key(&out_name) {
+                                    engine
+                                        .config
+                                        .workspace_layouts
+                                        .insert(out_name, layout_name.clone());
+                                }
+                            }
+                            engine.config.layout_type = layout_name.clone();
                         }
 
                         if let Err(e) = self.controller.get_engine().config.save() {
@@ -737,9 +789,16 @@ impl RavenControllerActor {
                             &format!("Layout: {}", readable_name),
                         );
 
-                        let mut commands = Vec::new();
-                        if let Ok(cmds) = self.controller.commit_layout() {
-                            commands = cmds;
+                        let cfg_clone = self.controller.get_config().clone();
+                        let mut commands = self
+                            .controller
+                            .reload_config(cfg_clone)
+                            .unwrap_or_default();
+                        if self.controller.get_engine().current_windows.is_empty() {
+                            commands.push(RavenAction::RequestSync);
+                        }
+                        if !commands.is_empty() {
+                            let _ = out_tx.send(commands.clone()).await;
                         }
                         let _ = reply.send(commands);
                     }
@@ -814,9 +873,16 @@ impl RavenControllerActor {
                             );
                         }
 
-                        let mut commands = Vec::new();
-                        if let Ok(cmds) = self.controller.commit_layout() {
-                            commands = cmds;
+                        let cfg_clone = self.controller.get_config().clone();
+                        let mut commands = self
+                            .controller
+                            .reload_config(cfg_clone)
+                            .unwrap_or_default();
+                        if self.controller.get_engine().current_windows.is_empty() {
+                            commands.push(RavenAction::RequestSync);
+                        }
+                        if !commands.is_empty() {
+                            let _ = out_tx.send(commands.clone()).await;
                         }
                         let _ = reply.send(commands);
                     }
@@ -922,6 +988,87 @@ impl RavenControllerActor {
                             }
                         }
 
+                        let _ = reply.send(commands);
+                    }
+                    KWinBridgeMessage::ReloadConfig { reply } => {
+                        info!("[ACTOR] Recargando configuración en caliente (Hot-Reload)...");
+                        let new_cfg = raven_core::config::RavenConfig::load();
+                        let enabled = new_cfg.borders_enabled;
+                        let width = new_cfg.border_width as f64;
+                        let active_c = new_cfg.active_border_color.clone();
+                        let inactive_c = new_cfg.inactive_border_color.clone();
+                        let radius = new_cfg.border_radius as f64;
+
+                        tokio::spawn(async move {
+                            if let Ok(conn) = zbus::Connection::session().await {
+                                let _ = conn
+                                    .call_method(
+                                        Some("org.kde.kwin.RavenEffect"),
+                                        "/Effects/Raven",
+                                        Some("org.kde.kwin.RavenEffect"),
+                                        "UpdateBorderConfig",
+                                        &(enabled, width, active_c, inactive_c),
+                                    )
+                                    .await;
+                                let _ = conn
+                                    .call_method(
+                                        Some("org.kde.kwin.RavenEffect"),
+                                        "/Effects/Raven",
+                                        Some("org.kde.kwin.RavenEffect"),
+                                        "SetBorderRadius",
+                                        &(radius,),
+                                    )
+                                    .await;
+                            }
+                        });
+
+                        let mut commands = self
+                            .controller
+                            .reload_config(new_cfg)
+                            .unwrap_or_default();
+                        commands.push(RavenAction::RequestSync);
+
+                        self.notifier.notify_osd(
+                            "Raven Control Center",
+                            "Configuración aplicada en caliente",
+                        );
+
+                        if !commands.is_empty() {
+                            let _ = out_tx.send(commands.clone()).await;
+                        }
+                        let _ = reply.send(commands);
+                    }
+                    KWinBridgeMessage::UserResizedWindow {
+                        window_id,
+                        x,
+                        y,
+                        width,
+                        height,
+                        reply,
+                    } => {
+                        let new_rect = raven_core::geometry::Rect::new(x, y, width, height);
+                        let commands = self
+                            .controller
+                            .handle_user_resize(&window_id, new_rect)
+                            .unwrap_or_default();
+                        if !commands.is_empty() {
+                            let _ = out_tx.send(commands.clone()).await;
+                        }
+                        let _ = reply.send(commands);
+                    }
+                    KWinBridgeMessage::UserMovedWindow {
+                        window_id,
+                        drop_x,
+                        drop_y,
+                        reply,
+                    } => {
+                        let commands = self
+                            .controller
+                            .handle_user_move(&window_id, drop_x, drop_y)
+                            .unwrap_or_default();
+                        if !commands.is_empty() {
+                            let _ = out_tx.send(commands.clone()).await;
+                        }
                         let _ = reply.send(commands);
                     }
                 },

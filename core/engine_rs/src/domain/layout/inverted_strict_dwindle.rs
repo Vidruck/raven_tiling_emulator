@@ -7,7 +7,7 @@
 //! toma el panel derecho y las subsecuentes se subdividen de forma recursiva hacia
 //! el cuadrante izquierdo con protecciones de contorno `min_rem`.
 
-use super::{apply_gaps, LayoutStrategy};
+use super::{apply_gaps, clamp_min_height, clamp_min_width, LayoutStrategy};
 use crate::domain::geometry::{Rect, WindowNode};
 use std::collections::HashMap;
 
@@ -71,7 +71,7 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
             match i % 4 {
                 0 => {
                     // Partición vertical: la ventana toma el bloque DERECHO
-                    let win_min_w = win.min_w;
+                    let win_min_w = clamp_min_width(win, container.width, 2);
                     let min_rem = 80;
                     let max_allowed = std::cmp::max(1, container.width - min_rem);
                     let raw_w = (container.width as f32 * current_ratio) as i32;
@@ -90,7 +90,7 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                 }
                 1 => {
                     // Partición horizontal: la ventana toma el bloque INFERIOR
-                    let win_min_h = win.min_h;
+                    let win_min_h = clamp_min_height(win, container.height, 2);
                     let min_rem = 80;
                     let max_allowed = std::cmp::max(1, container.height - min_rem);
                     let raw_h = (container.height as f32 * current_ratio) as i32;
@@ -109,7 +109,7 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                 }
                 2 => {
                     // Partición vertical: la ventana toma el bloque IZQUIERDO del área remanente
-                    let win_min_w = win.min_w;
+                    let win_min_w = clamp_min_width(win, container.width, 2);
                     let min_rem = 80;
                     let max_allowed = std::cmp::max(1, container.width - min_rem);
                     let raw_w = (container.width as f32 * current_ratio) as i32;
@@ -128,7 +128,7 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
                 }
                 _ => {
                     // Partición horizontal: la ventana toma el bloque SUPERIOR
-                    let win_min_h = win.min_h;
+                    let win_min_h = clamp_min_height(win, container.height, 2);
                     let min_rem = 80;
                     let max_allowed = std::cmp::max(1, container.height - min_rem);
                     let raw_h = (container.height as f32 * current_ratio) as i32;

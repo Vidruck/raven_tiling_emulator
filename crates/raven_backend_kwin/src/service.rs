@@ -89,6 +89,26 @@ pub enum KWinBridgeMessage {
         inactive_color: String,
         reply: oneshot::Sender<bool>,
     },
+    /// Recarga la configuración desde disco en caliente y recalcula el mosaico inmediatamente.
+    ReloadConfig {
+        reply: oneshot::Sender<Vec<RavenAction>>,
+    },
+    /// Notifica que el usuario redimensionó interactivamente una ventana con el cursor del ratón.
+    UserResizedWindow {
+        window_id: String,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        reply: oneshot::Sender<Vec<RavenAction>>,
+    },
+    /// Notifica que el usuario arrastró y soltó interactivamente una ventana con el cursor del ratón.
+    UserMovedWindow {
+        window_id: String,
+        drop_x: i32,
+        drop_y: i32,
+        reply: oneshot::Sender<Vec<RavenAction>>,
+    },
 }
 
 /// Convierte una lista de acciones de Raven en la representación JSON de `TilingCommand` esperada por KWin.
@@ -141,7 +161,7 @@ impl KWinDbusService {
 #[interface(name = "org.kde.raven.Events")]
 impl KWinDbusService {
     /// Señal emitida a KWin cuando se generan comandos de mosaico asíncronos.
-    #[zbus(signal)]
+    #[zbus(signal, name = "tilingCommandsPending")]
     pub async fn tiling_commands_pending(emitter: &SignalEmitter<'_>, commands_json: &str) -> zbus::Result<()>;
 
     /// Recibe y procesa el estado global de las ventanas, retornando inmediatamente los comandos geométricos.
@@ -601,5 +621,88 @@ impl KWinDbusService {
         } else {
             false
         }
+    }
+
+    /// Recarga la configuración general de Raven en caliente desde `~/.config/raven/raven.json`
+    /// y aplica las nuevas disposiciones, márgenes y proporciones de inmediato sin reiniciar el demonio.
+    #[zbus(name = "reloadConfig")]
+    async fn reload_config(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = KWinBridgeMessage::ReloadConfig { reply: reply_tx };
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let response = actions_to_kwin_json(actions);
+        if response != "[]" {
+            let _ = Self::tiling_commands_pending(&emitter, &response).await;
+        }
+        response
+    }
+
+    /// Adapta en tiempo real las proporciones del algoritmo activo cuando el usuario
+    /// redimensiona una ventana arrastrando sus bordes con el cursor del ratón.
+    #[zbus(name = "userResizedWindow")]
+    async fn user_resized_window(
+        &self,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+        window_id: String,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+    ) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = KWinBridgeMessage::UserResizedWindow {
+            window_id,
+            x,
+            y,
+            width,
+            height,
+            reply: reply_tx,
+        };
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let response = actions_to_kwin_json(actions);
+        if response != "[]" {
+            let _ = Self::tiling_commands_pending(&emitter, &response).await;
+        }
+        response
+    }
+
+    /// Intercambia o reubica una ventana en el algoritmo de mosaico activo cuando el usuario
+    /// la arrastra y suelta con el cursor del ratón sobre otro slot.
+    #[zbus(name = "userMovedWindow")]
+    async fn user_moved_window(
+        &self,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+        window_id: String,
+        drop_x: i32,
+        drop_y: i32,
+    ) -> String {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        let msg = KWinBridgeMessage::UserMovedWindow {
+            window_id,
+            drop_x,
+            drop_y,
+            reply: reply_tx,
+        };
+        let actions = if self.tx.send(msg).await.is_ok() {
+            reply_rx.await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let response = actions_to_kwin_json(actions);
+        if response != "[]" {
+            let _ = Self::tiling_commands_pending(&emitter, &response).await;
+        }
+        response
     }
 }

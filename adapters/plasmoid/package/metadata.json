@@ -10,7 +10,7 @@
         "Icon": "start-here-kde",
         "Id": "org.kde.plasma.ravenlauncher",
         "Name": "Raven Hub & Launcher",
-        "Version": "4.6.5",
+        "Version": "4.7.0",
         "Website": "https://github.com/Vidruck/raven_tiling_emulator"
     },
     "KPackageStructure": "Plasma/Applet",

@@ -92,10 +92,16 @@ impl KWinBackend {
 
         // Capacidad ampliada a 256 para absorber ráfagas extremas de sincronización interactiva
         let (bridge_tx, mut bridge_rx) = mpsc::channel(256);
+        let last_known_geoms_bridge = self.last_known_geometries.clone();
 
         // Forwarder intermediario: retransmite los mensajes del bridge al actor principal
+        // y mantiene sincronizado el caché de geometrías de animación ante cierres de ventana.
         tokio::spawn(async move {
             while let Some(msg) = bridge_rx.recv().await {
+                if let KWinBridgeMessage::WindowClosed { ref window_id, .. } = msg {
+                    let mut geom_guard = last_known_geoms_bridge.write().await;
+                    geom_guard.remove(window_id);
+                }
                 if target_tx.send(M::from(msg)).await.is_err() {
                     break;
                 }
@@ -268,6 +274,15 @@ impl CompositorBackend for KWinBackend {
                     KWinBridgeMessage::SetBorderConfig { reply, .. } => {
                         let _ = reply.send(true);
                     }
+                    KWinBridgeMessage::ReloadConfig { reply } => {
+                        let _ = reply.send(Vec::new());
+                    }
+                    KWinBridgeMessage::UserResizedWindow { reply, .. } => {
+                        let _ = reply.send(Vec::new());
+                    }
+                    KWinBridgeMessage::UserMovedWindow { reply, .. } => {
+                        let _ = reply.send(Vec::new());
+                    }
                     KWinBridgeMessage::BridgeReady => {}
                 }
             }
@@ -306,18 +321,27 @@ impl CompositorBackend for KWinBackend {
         let mut animations = Vec::new();
         {
             let mut geom_guard = self.last_known_geometries.write().await;
+            if geom_guard.len() > 256 {
+                geom_guard.clear();
+            }
             for action in &actions {
                 match action {
                     RavenAction::CloseWindow { window_id } => {
                         self.effect_client.cancel_animation(window_id).await;
+                        self.effect_client.close_window(window_id).await;
                         geom_guard.remove(window_id);
                     }
                     RavenAction::MinimizeWindow { window_id } => {
                         self.effect_client.cancel_animation(window_id).await;
+                        self.effect_client.minimize_window(window_id).await;
                         geom_guard.remove(window_id);
                     }
-                    RavenAction::UnminimizeWindow { .. } => {}
-                    RavenAction::FocusWindow { .. } => {}
+                    RavenAction::UnminimizeWindow { window_id } => {
+                        self.effect_client.unminimize_window(window_id).await;
+                    }
+                    RavenAction::FocusWindow { window_id } => {
+                        self.effect_client.activate_window(window_id).await;
+                    }
                     RavenAction::ReleaseQuarantine { window_id } => {
                         // 140ms de animación de nacimiento reactiva con zoom y elastic
                         self.effect_client.animate_birth(window_id, 140).await;
@@ -328,25 +352,22 @@ impl CompositorBackend for KWinBackend {
                         window_id, x, y, width, height 
                     } => {
                         let target_rect = Rect::new(*x, *y, *width, *height);
-                        if let Some(prev_rect) = geom_guard.get(window_id).copied() {
-                            if prev_rect != target_rect {
-                                animations.push(WindowAnimation {
-                                    id: window_id.clone(),
-                                    from: [
-                                        prev_rect.x as f64, 
-                                        prev_rect.y as f64, 
-                                        prev_rect.width as f64, 
-                                        prev_rect.height as f64],
-                                    to: [
-                                        target_rect.x as f64, 
-                                        target_rect.y as f64, 
-                                        target_rect.width as f64, 
-                                        target_rect.height as f64],
-                                    duration_ms: 130,
-                                    easing: "EaseOutCubic".to_string(),
-                                });
-                            }
-                        }
+                        let prev_rect = geom_guard.get(window_id).copied().unwrap_or(target_rect);
+                        animations.push(WindowAnimation {
+                            id: window_id.clone(),
+                            from: [
+                                prev_rect.x as f64, 
+                                prev_rect.y as f64, 
+                                prev_rect.width as f64, 
+                                prev_rect.height as f64],
+                            to: [
+                                target_rect.x as f64, 
+                                target_rect.y as f64, 
+                                target_rect.width as f64, 
+                                target_rect.height as f64],
+                            duration_ms: 130,
+                            easing: "EaseOutCubic".to_string(),
+                        });
                         geom_guard.insert(window_id.clone(), target_rect);
                     }
                     _ => {}

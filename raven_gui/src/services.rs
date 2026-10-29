@@ -125,14 +125,31 @@ impl ServiceManager {
                     .output();
 
                 if self.is_service_active() {
-                    let ok = Command::new("systemctl")
-                        .args(["--user", "restart", "raven.service"])
+                    let hot_reload_ok = Command::new("busctl")
+                        .args([
+                            "--user",
+                            "call",
+                            "org.kde.raven.Daemon",
+                            "/Events",
+                            "org.kde.raven.Events",
+                            "reloadConfig",
+                        ])
                         .status()
-                        .is_ok();
-                    if ok {
-                        "✅ Configuración guardada y servicio reiniciado.".to_string()
+                        .map(|s| s.success())
+                        .unwrap_or(false);
+
+                    if hot_reload_ok {
+                        "✅ Configuración aplicada en caliente.".to_string()
                     } else {
-                        "❌ Error al reiniciar el servicio.".to_string()
+                        let ok = Command::new("systemctl")
+                            .args(["--user", "restart", "raven.service"])
+                            .status()
+                            .is_ok();
+                        if ok {
+                            "✅ Configuración guardada y servicio reiniciado.".to_string()
+                        } else {
+                            "❌ Error al aplicar cambios en el servicio.".to_string()
+                        }
                     }
                 } else {
                     "✅ Configuración guardada correctamente.".to_string()

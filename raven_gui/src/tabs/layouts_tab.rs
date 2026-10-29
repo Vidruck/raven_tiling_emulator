@@ -208,6 +208,28 @@ pub fn show(
             });
             ui.add_space(4.0);
 
+            // Función auxiliar para sincronizar el borrador con el ámbito seleccionado de inmediato
+            let apply_staging_to_scope = |cfg: &mut RavenConfig, layout: &str, scope: &LayoutScopeMode, target_key: &Option<String>, sel_out: &str| {
+                match scope {
+                    LayoutScopeMode::GlobalDefault => {
+                        cfg.layout_type = layout.to_string();
+                        cfg.workspace_layouts.clear();
+                    }
+                    LayoutScopeMode::SelectedMonitor => {
+                        let prefix = format!("{}||", sel_out);
+                        cfg.workspace_layouts.retain(|k, _| !k.starts_with(&prefix));
+                        if let Some(key) = target_key {
+                            cfg.workspace_layouts.insert(key.clone(), layout.to_string());
+                        }
+                    }
+                    LayoutScopeMode::VirtualDesktop => {
+                        if let Some(key) = target_key {
+                            cfg.workspace_layouts.insert(key.clone(), layout.to_string());
+                        }
+                    }
+                }
+            };
+
             // Presets Rápidos
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new("Presets:").weak().size(11.5));
@@ -216,29 +238,60 @@ pub fn show(
                         state.staging_layout = p.layout_type.to_string();
                         config.default_gaps = p.gaps;
                         config.master_ratio = p.ratio;
+                        apply_staging_to_scope(
+                            config,
+                            &state.staging_layout,
+                            &state.scope_mode,
+                            &current_target_key,
+                            &state.selected_output,
+                        );
                     }
                 }
             });
 
             ui.add_space(6.0);
 
-            // Catálogo Nativo de Algoritmos (Radio buttons modifican el borrador `state.staging_layout`)
+            // Catálogo Nativo de Algoritmos (Radio buttons sincronizan el borrador y el ámbito activo)
             for p in PRESETS {
-                ui.radio_value(
-                    &mut state.staging_layout,
-                    p.layout_type.to_string(),
-                    egui::RichText::new(p.display).strong(),
-                );
+                if ui
+                    .radio_value(
+                        &mut state.staging_layout,
+                        p.layout_type.to_string(),
+                        egui::RichText::new(p.display).strong(),
+                    )
+                    .changed()
+                {
+                    apply_staging_to_scope(
+                        config,
+                        &state.staging_layout,
+                        &state.scope_mode,
+                        &current_target_key,
+                        &state.selected_output,
+                    );
+                }
                 ui.label(egui::RichText::new(p.desc).weak().size(11.0));
                 ui.add_space(2.0);
             }
 
             // Opción Modo Flotante
-            ui.radio_value(
-                &mut state.staging_layout,
-                "floating".to_string(),
-                egui::RichText::new("🪟 Flotante (Libre)").strong().color(egui::Color32::from_rgb(235, 90, 90)),
-            );
+            if ui
+                .radio_value(
+                    &mut state.staging_layout,
+                    "floating".to_string(),
+                    egui::RichText::new("🪟 Flotante (Libre)")
+                        .strong()
+                        .color(egui::Color32::from_rgb(235, 90, 90)),
+                )
+                .changed()
+            {
+                apply_staging_to_scope(
+                    config,
+                    &state.staging_layout,
+                    &state.scope_mode,
+                    &current_target_key,
+                    &state.selected_output,
+                );
+            }
             ui.label(egui::RichText::new("Desactiva el mosaico en este espacio permitiendo ventanas libres de KWin.").weak().size(11.0));
             ui.add_space(4.0);
 
@@ -248,11 +301,22 @@ pub fn show(
                 ui.add_space(4.0);
                 ui.label(egui::RichText::new("Scripts Lua:").strong().size(12.0));
                 for layout_name in custom_layouts {
-                    ui.radio_value(
-                        &mut state.staging_layout,
-                        layout_name.clone(),
-                        egui::RichText::new(&layout_name).strong(),
-                    );
+                    if ui
+                        .radio_value(
+                            &mut state.staging_layout,
+                            layout_name.clone(),
+                            egui::RichText::new(&layout_name).strong(),
+                        )
+                        .changed()
+                    {
+                        apply_staging_to_scope(
+                            config,
+                            &state.staging_layout,
+                            &state.scope_mode,
+                            &current_target_key,
+                            &state.selected_output,
+                        );
+                    }
                 }
             }
 
@@ -268,14 +332,13 @@ pub fn show(
             );
 
             if btn_resp.clicked() {
-                match &current_target_key {
-                    Some(key) => {
-                        config.workspace_layouts.insert(key.clone(), state.staging_layout.clone());
-                    }
-                    None => {
-                        config.layout_type = state.staging_layout.clone();
-                    }
-                }
+                apply_staging_to_scope(
+                    config,
+                    &state.staging_layout,
+                    &state.scope_mode,
+                    &current_target_key,
+                    &state.selected_output,
+                );
                 state.feedback_msg = Some((
                     format!("✅ Asignado '{}' a {}", get_readable_algo_name(&state.staging_layout), target_display_name),
                     std::time::Instant::now(),
