@@ -48,6 +48,9 @@ endif()
 # KPLUGINFACTORY_PLUGIN_CLASS_INTERNAL_NAME que necesita KWIN_EFFECT_FACTORY_SUPPORTED
 kcoreaddons_add_plugin(kwin4_effect_raven
     SOURCES
+        src/window_filter.cpp
+        src/border_manager.cpp
+        src/animation_controller.cpp
         src/raveneffect.cpp
         src/raveneffect_factory.cpp
         src/dbus/raven_effect_adaptor.cpp

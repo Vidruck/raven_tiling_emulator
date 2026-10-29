@@ -14,7 +14,7 @@ function requestStateSync() {
   try {
     if (!_debounceTimer) {
       _debounceTimer = new QTimer();
-      _debounceTimer.interval = 20;
+      _debounceTimer.interval = 35;
       _debounceTimer.singleShot = true;
       _debounceTimer.timeout.connect(syncState);
     }
@@ -257,47 +257,15 @@ function applyCommands(commandsJson) {
           w.__raven_mutating = true;
           w.frameGeometry = targetGeom;
 
-          // Auditoría y verificación suave de convergencia:
-          // Si el cliente Wayland CSD (Gecko, GTK, Electron) confirma su superficie inicial
-          // milisegundos después y se queda en el centro, re-aplicamos targetGeom de inmediato.
-          (function (cw, tgt, wid) {
+          // Modelo Dumb Actuator: aplicar geometría de inmediato sin bucle de ping-pong D-Bus.
+          // La verificación de lazo cerrado se delega al motor en Rust de forma asíncrona.
+          (function (cw) {
             setKWinTimeout(function () {
-              if (!cw || cw.deleted) return;
-              if (cw.minimized) {
+              if (cw && !cw.deleted) {
                 cw.__raven_mutating = false;
-                return;
               }
-              try {
-                var cur = cw.frameGeometry;
-                if (cur && (Math.abs(cur.x - tgt.x) > 2 || Math.abs(cur.y - tgt.y) > 2 ||
-                  Math.abs(cur.width - tgt.width) > 2 || Math.abs(cur.height - tgt.height) > 2)) {
-                  cw.frameGeometry = tgt;
-                }
-              } catch (eReapply) { }
-
-              try {
-                var fgApplied = cw.frameGeometry || tgt;
-                callDBus(
-                  "org.kde.raven.Daemon",
-                  "/Events",
-                  "org.kde.raven.Events",
-                  "commandAppliedState",
-                  wid,
-                  Math.round(fgApplied.x),
-                  Math.round(fgApplied.y),
-                  Math.round(fgApplied.width),
-                  Math.round(fgApplied.height),
-                  function (response) {
-                    if (response && response !== "[]") {
-                      applyCommands(response);
-                    }
-                  }
-                );
-              } catch (eAudit) { }
-
-              cw.__raven_mutating = false;
-            }, 60);
-          })(w, targetGeom, cmd.window_id);
+            }, 50);
+          })(w);
           break;
 
         case "focus":
@@ -430,10 +398,16 @@ function bindWindow(w) {
 
     if (w.captionChanged !== undefined) {
       w.captionChanged.connect(function () {
-        delete w.__raven_manageable;
-        if (w && !w.deleted && !w.__raven_mutating) {
-          syncWindowDelta(w);
+        if (!w || w.deleted || w.__raven_mutating) return;
+        // Solo actuar si la ventana conmuta al modo Picture-in-Picture
+        if (isPipWindow(w) && !w.__raven_pip_init) {
+          w.__raven_pip_init = true;
+          w.keepAbove = true;
+          requestStateSync();
+          return;
         }
+        // Los cambios de título habituales (navegador, terminal, música)
+        // no alteran la geometría del mosaico ni requieren saturar D-Bus.
       });
     }
 

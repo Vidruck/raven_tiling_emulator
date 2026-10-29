@@ -210,7 +210,9 @@ impl RavenController {
                 let dw = (win_node.geometry.width - rect.width).abs();
                 let dh = (win_node.geometry.height - rect.height).abs();
                 
-                if dx > 3 || dy > 3 || dw > 3 || dh > 3 {
+                // Tolerancia adaptativa:
+                // Posición <= 4px; Dimensiones <= 12px (admite incrementos de celda de terminales y márgenes CSD)
+                if dx > 4 || dy > 4 || dw > 12 || dh > 12 {
                     win_rect_differs = true;
                 }
             }

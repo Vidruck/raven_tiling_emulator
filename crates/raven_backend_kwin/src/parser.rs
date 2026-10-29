@@ -115,7 +115,7 @@ pub fn parse_payload(
     for (ws_id, screen) in &payload.screens {
         workspaces.insert(
             ws_id.clone(),
-            Rect::new(screen.x, screen.y, screen.w, screen.h),
+            Rect::new(screen.x, screen.y, screen.w.max(1), screen.h.max(1)),
         );
     }
     let mut windows = Vec::new();
@@ -141,9 +141,9 @@ pub fn parse_payload(
                 win.f,
                 win.m,
                 win.p,
-                Rect::new(win.x, win.y, win.w, win.h),
-                win.min_w,
-                win.min_h,
+                Rect::new(win.x, win.y, win.w.max(0), win.h.max(0)),
+                win.min_w.max(0),
+                win.min_h.max(0),
                 win.sb,
                 win.iq,
                 win.fs,
@@ -204,9 +204,9 @@ pub fn parse_window_delta(delta_str: &str) -> Result<WindowNode, serde_json::Err
             win.f,
             win.m,
             win.p,
-            Rect::new(win.x, win.y, win.w, win.h),
-            win.min_w,
-            win.min_h,
+            Rect::new(win.x, win.y, win.w.max(0), win.h.max(0)),
+            win.min_w.max(0),
+            win.min_h.max(0),
             win.sb,
             win.iq,
             win.fs,

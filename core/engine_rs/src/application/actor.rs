@@ -257,15 +257,14 @@ impl RavenControllerActor {
                                     let reported = win.geometry;
                                     let target_opt = self.controller.get_target_rect_for_window(&window_id);
 
-                                    // Comprobamos si la ventana diverge del objetivo calculado por el motor (±2px)
-                                    // Si target_opt es None significa que la ventana aún no convergió en last_known_layout
-                                    // (sigue en posición inicial/centrada de nacimiento), por lo que DEBE rectificarse.
+                                    // Comprobamos si la ventana diverge del objetivo calculado por el motor.
+                                    // Tolerancia adaptativa: posición <= 4px, dimensiones <= 12px (admite incrementos de celda de terminales).
                                     let diverged = match target_opt {
                                         Some(target) => {
-                                            (reported.x - target.x).abs() > 2
-                                                || (reported.y - target.y).abs() > 2
-                                                || (reported.width - target.width).abs() > 2
-                                                || (reported.height - target.height).abs() > 2
+                                            (reported.x - target.x).abs() > 4
+                                                || (reported.y - target.y).abs() > 4
+                                                || (reported.width - target.width).abs() > 12
+                                                || (reported.height - target.height).abs() > 12
                                         }
                                         None => true,
                                     };
@@ -517,7 +516,8 @@ impl RavenControllerActor {
                                     let dy = (reported.y - target.y).abs();
                                     let dw = (reported.width - target.width).abs();
                                     let dh = (reported.height - target.height).abs();
-                                    if dx > 2 || dy > 2 || dw > 2 || dh > 2 {
+                                    // Tolerancia adaptativa: posición <= 4px, dimensiones <= 12px
+                                    if dx > 4 || dy > 4 || dw > 12 || dh > 12 {
                                         commands.push(RavenAction::RectifyWindow {
                                             window_id: wid.clone(),
                                             x: target.x,
@@ -893,10 +893,10 @@ impl RavenControllerActor {
 
                         if !is_special_mode {
                             if let Some(target) = self.controller.get_target_rect_for_window(&window_id) {
-                                let matches = (target.x - x).abs() <= 2
-                                    && (target.y - y).abs() <= 2
-                                    && (target.width - width).abs() <= 2
-                                    && (target.height - height).abs() <= 2;
+                                let matches = (target.x - x).abs() <= 4
+                                    && (target.y - y).abs() <= 4
+                                    && (target.width - width).abs() <= 12
+                                    && (target.height - height).abs() <= 12;
 
                                 if !matches {
                                     let attempts = self.audit_retries.entry(window_id.clone()).or_insert(0);
