@@ -31,28 +31,24 @@ Rectangle {
 
     RavenPlugin.MediaController {
         id: media
-        active: true
+        active: false
     }
 
-    // Blurred Background Album Art Effect (Con bordes suaves y recorte redondeado)
+    // Fondo de carátula sin FBO offscreen innecesario (evita fugas de VRAM / EGL_BAD_ALLOC)
     Item {
         anchors.fill: parent
         clip: true
-        layer.enabled: true
-        layer.effect: Kirigami.ShadowedRectangle {
-            radius: RavenPlugin.RavenTheme.radiusLg
-            color: "transparent"
-        }
 
         Image {
             anchors.fill: parent
-            source: media.artUrl
+            source: (rootMedia.active && media.artUrl !== "") ? media.artUrl : ""
             fillMode: Image.PreserveAspectCrop
-            sourceSize.width: 440
-            sourceSize.height: 120
+            sourceSize.width: 220
+            sourceSize.height: 80
             opacity: media.hasPlayer ? (RavenPlugin.RavenTheme.isDark ? 0.22 : 0.14) : 0
-            visible: media.artUrl !== ""
+            visible: rootMedia.active && media.artUrl !== ""
             asynchronous: true
+            cache: false
             Behavior on opacity { NumberAnimation { duration: 300 } }
         }
     }
@@ -98,13 +94,13 @@ Rectangle {
                 Image {
                     id: albumCoverImg
                     anchors.fill: parent
-                    source: media.artUrl
+                    source: (rootMedia.active && media.artUrl !== "") ? media.artUrl : ""
                     fillMode: Image.PreserveAspectCrop
                     sourceSize.width: 92
                     sourceSize.height: 92
-                    visible: media.artUrl !== "" && status !== Image.Error && status !== Image.Null
+                    visible: rootMedia.active && media.artUrl !== "" && status !== Image.Error && status !== Image.Null
                     asynchronous: true
-                    cache: true
+                    cache: false
                 }
 
                 Kirigami.Icon {
@@ -308,8 +304,8 @@ Rectangle {
             property real wavePhase: 0.0
 
             Timer {
-                interval: 32 // ~30 fps fluidos
-                running: media.isPlaying
+                interval: 32 // ~30 fps fluidos solo cuando el plasmoide está abierto y visible
+                running: rootMedia.active && rootMedia.visible && media.isPlaying
                 repeat: true
                 onTriggered: {
                     eqContainer.wavePhase = (eqContainer.wavePhase + 0.16) % 628.3;
@@ -332,7 +328,7 @@ Rectangle {
                         Layout.fillHeight: true
 
                         // Valor real entregado por CAVA (o fallback armónico si CAVA no está instalado)
-                        property real rawCavaVal: (media.spectrumList && media.spectrumList.length > index)
+                        property real rawCavaVal: (rootMedia.active && media.spectrumList && media.spectrumList.length > index)
                             ? Number(media.spectrumList[index])
                             : 0.0
 
@@ -341,7 +337,7 @@ Rectangle {
 
                         // Fallback sintético armónico cuando CAVA no esté instalado o no reporte stream
                         property real synthEnergy: {
-                            if (!media.isPlaying) return 0.05;
+                            if (!rootMedia.active || !media.isPlaying) return 0.05;
                             var p = eqContainer.wavePhase;
                             var bandIdx = index;
                             var bassBeat = (Math.sin(p * 2.2) + Math.cos(p * 4.4 + bandIdx * 0.2)) * 0.45;
@@ -354,7 +350,7 @@ Rectangle {
 
                         // Interpolación suave y mezcla reactiva: CAVA real con fallback armónico
                         property real effectiveEnergy: {
-                            if (!media.isPlaying) return 0.05;
+                            if (!rootMedia.active || !media.isPlaying) return 0.05;
                             if (rawCavaVal > 0.005) {
                                 return cavaVal;
                             }
@@ -369,7 +365,7 @@ Rectangle {
                             radius: 1.5
 
                             // Altura dinámica guiada por CAVA / espectro de audio real
-                            height: media.isPlaying
+                            height: (rootMedia.active && media.isPlaying)
                                 ? Math.max(3, Math.min(barSlot.height, barSlot.height * barSlot.effectiveEnergy))
                                 : 2
 

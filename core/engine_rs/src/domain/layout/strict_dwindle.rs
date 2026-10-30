@@ -78,7 +78,11 @@ impl LayoutStrategy for StrictDwindleStrategy {
             }
 
             let mut curr = container;
-            let current_ratio = master_ratio.clamp(0.20, 0.80);
+            let current_ratio = if split_horizontal {
+                win.custom_w_ratio.unwrap_or(master_ratio).clamp(0.15, 0.85)
+            } else {
+                win.custom_h_ratio.unwrap_or(master_ratio).clamp(0.15, 0.85)
+            };
 
             // División según la dirección alternante actual respetando requerimientos mínimos acotados
             if split_horizontal {

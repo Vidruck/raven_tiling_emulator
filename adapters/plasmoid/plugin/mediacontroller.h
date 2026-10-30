@@ -214,7 +214,8 @@ private:
     /** @brief Envía la petición asíncrona 'Position' a través de D-Bus con timeout de 500ms. */
     void queryPositionDirect();
 
-    bool m_active = true;                      ///< Bandera de actividad del widget (activo para responder a cambios MPRIS).
+    bool m_active = false;                     ///< Bandera de actividad del widget (inactivo por defecto hasta abrirse).
+    bool m_needsRefreshOnActive = true;        ///< Indica si hay cambios MPRIS pendientes de sincronizar al abrir el widget.
     bool m_hasPlayer = false;                  ///< Existencia de reproductor enlazado.
     QString m_currentService;                  ///< Nombre del servicio D-Bus actual.
     QString m_playerName;                      ///< Nombre del reproductor.

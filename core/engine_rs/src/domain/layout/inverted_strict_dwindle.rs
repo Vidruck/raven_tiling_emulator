@@ -66,7 +66,11 @@ impl LayoutStrategy for InvertedStrictDwindleStrategy {
             }
 
             let mut curr = container;
-            let current_ratio = master_ratio.clamp(0.20, 0.80);
+            let current_ratio = if (i % 4 == 0) || (i % 4 == 2) {
+                win.custom_w_ratio.unwrap_or(master_ratio).clamp(0.15, 0.85)
+            } else {
+                win.custom_h_ratio.unwrap_or(master_ratio).clamp(0.15, 0.85)
+            };
 
             match i % 4 {
                 0 => {

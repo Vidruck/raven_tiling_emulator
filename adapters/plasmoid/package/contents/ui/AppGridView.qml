@@ -160,80 +160,77 @@ Item {
             }
         }
 
-        // Cuadrícula de aplicaciones con ScrollView y ScrollBar
-        ScrollView {
-            id: scrollView
+        // Cuadrícula virtualizada de aplicaciones (instancia únicamente los delegados visibles en el viewport)
+        GridView {
+            id: appGrid
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+            cellWidth: Math.floor(width / 3)
+            cellHeight: 82
+            cacheBuffer: 164
+            boundsBehavior: Flickable.StopAtBounds
+            model: appRunner
 
-            Grid {
-                id: appGrid
-                width: scrollView.availableWidth
-                columns: 3
-                spacing: 0
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
 
-                Repeater {
-                    model: appRunner
-                    delegate: Item {
-                        id: appDelegate
-                        width: Math.floor(appGrid.width / 3)
-                        height: 82
+            delegate: Item {
+                id: appDelegate
+                width: appGrid.cellWidth
+                height: appGrid.cellHeight
 
-                        readonly property bool isCurrentSelected: (index === root.selectedIndex)
+                readonly property bool isCurrentSelected: (index === root.selectedIndex)
 
-                        MouseArea {
-                            id: ma
-                            anchors.fill: parent
-                            anchors.margins: 3
-                            hoverEnabled: true
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            onEntered: root.selectedIndex = index
-                            onClicked: (mouse) => {
-                                if (mouse.button === Qt.RightButton) {
-                                    root.selectedIndex = index;
-                                    contextMenu.openMenuForApp(model.appName, model.iconName, model.execCmd, model.desktopPath, model.actions, ma);
-                                } else {
-                                    appRunner.launchApp(model.execCmd, model.desktopPath);
-                                    root.appLaunched(model.desktopPath, model.execCmd);
-                                }
-                            }
+                MouseArea {
+                    id: ma
+                    anchors.fill: parent
+                    anchors.margins: 3
+                    hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onEntered: root.selectedIndex = index
+                    onClicked: (mouse) => {
+                        if (mouse.button === Qt.RightButton) {
+                            root.selectedIndex = index;
+                            contextMenu.openMenuForApp(model.appName, model.iconName, model.execCmd, model.desktopPath, model.actions, ma);
+                        } else {
+                            appRunner.launchApp(model.execCmd, model.desktopPath);
+                            root.appLaunched(model.desktopPath, model.execCmd);
+                        }
+                    }
 
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: RavenPlugin.RavenTheme.radiusSm
-                                color: (ma.containsMouse || isCurrentSelected)
-                                    ? RavenPlugin.RavenTheme.highlightColor
-                                    : "transparent"
-                                opacity: isCurrentSelected ? 0.22 : (ma.containsMouse ? 0.14 : 0)
-                                border.width: isCurrentSelected ? 1 : 0
-                                border.color: RavenPlugin.RavenTheme.highlightColor
-                                Behavior on opacity { NumberAnimation { duration: 120 } }
-                            }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: RavenPlugin.RavenTheme.radiusSm
+                        color: (ma.containsMouse || isCurrentSelected)
+                            ? RavenPlugin.RavenTheme.highlightColor
+                            : "transparent"
+                        opacity: isCurrentSelected ? 0.22 : (ma.containsMouse ? 0.14 : 0)
+                        border.width: isCurrentSelected ? 1 : 0
+                        border.color: RavenPlugin.RavenTheme.highlightColor
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                    }
 
-                            ColumnLayout {
-                                anchors.centerIn: parent
-                                spacing: 4
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 4
 
-                                Kirigami.Icon {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    source: model.iconName
-                                    implicitWidth: 40
-                                    implicitHeight: 40
-                                }
+                        Kirigami.Icon {
+                            Layout.alignment: Qt.AlignHCenter
+                            source: model.iconName
+                            implicitWidth: 40
+                            implicitHeight: 40
+                        }
 
-                                Text {
-                                    Layout.maximumWidth: appDelegate.width - 12
-                                    text: model.appName
-                                    horizontalAlignment: Text.AlignHCenter
-                                    elide: Text.ElideRight
-                                    color: RavenPlugin.RavenTheme.textColor
-                                    font.pixelSize: 11
-                                    font.bold: isCurrentSelected
-                                }
-                            }
+                        Text {
+                            Layout.maximumWidth: appDelegate.width - 12
+                            text: model.appName
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
+                            color: RavenPlugin.RavenTheme.textColor
+                            font.pixelSize: 11
+                            font.bold: isCurrentSelected
                         }
                     }
                 }
@@ -257,16 +254,12 @@ Item {
     }
 
     /**
-     * @brief Asegura que el elemento en el índice indicado sea visible dentro del área con scroll.
+     * @brief Asegura que el elemento en el índice indicado sea visible dentro del área virtualizada.
      * @param {number} idx Índice del elemento seleccionado.
      */
     function ensureVisible(idx) {
-        var row = Math.floor(idx / 3);
-        var itemY = row * 82;
-        if (itemY < scrollView.contentItem.contentY) {
-            scrollView.contentItem.contentY = itemY;
-        } else if (itemY + 82 > scrollView.contentItem.contentY + scrollView.height) {
-            scrollView.contentItem.contentY = itemY + 82 - scrollView.height;
+        if (idx >= 0 && idx < appGrid.count) {
+            appGrid.positionViewAtIndex(idx, GridView.Contain);
         }
     }
 

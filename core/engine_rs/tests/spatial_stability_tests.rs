@@ -227,6 +227,102 @@ async fn test_interactive_mouse_resize_neighbor_reactivity() {
 }
 
 #[tokio::test]
+async fn test_three_windows_sub_window_redistribution_35_15() {
+    let config = RavenConfig {
+        default_gaps: 10,
+        master_ratio: 0.5,
+        nmaster: 1,
+        layout_type: "raven".to_string(),
+        ..Default::default()
+    };
+    let engine = TilingEngine::new(config);
+    let mut controller = RavenController::new(engine);
+
+    let ws = "DP-1||desk_1";
+    let workspaces = common::single_workspace(ws, 1920, 1080);
+
+    let windows = vec![
+        common::make_test_window("win-top", ws, "DP-1", "desk_1"),
+        common::make_test_window("win-bot-left", ws, "DP-1", "desk_1"),
+        common::make_test_window("win-bot-right", ws, "DP-1", "desk_1"),
+    ];
+
+    let actions_init = controller.handle_state_change(workspaces, windows).unwrap();
+    let mut init_geoms = HashMap::new();
+    for act in actions_init {
+        if let raven_core::action::RavenAction::MoveWindow {
+            window_id,
+            x,
+            y,
+            width,
+            height,
+        } = act
+        {
+            init_geoms.insert(window_id, Rect { x, y, width, height });
+        }
+    }
+
+    // Verificar estado inicial: 50% superior, 25% y 25% inferior
+    assert_eq!(init_geoms["win-top"].width, 1900);
+    assert_eq!(init_geoms["win-top"].height, 525);
+    assert_eq!(init_geoms["win-bot-left"].width, 945);
+    assert_eq!(init_geoms["win-bot-right"].width, 945);
+
+    // El usuario arrastra el borde divisor entre las dos ventanas inferiores para expandir
+    // win-bot-left a ~1330px (~70% del panel inferior, que equivale a ~35% de la pantalla)
+    let actions_resize = controller
+        .handle_user_resize("win-bot-left", Rect::new(10, 545, 1330, 525))
+        .unwrap();
+
+    let mut new_geoms = HashMap::new();
+    for act in actions_resize {
+        if let raven_core::action::RavenAction::MoveWindow {
+            window_id,
+            x,
+            y,
+            width,
+            height,
+        } = act
+        {
+            new_geoms.insert(window_id, Rect { x, y, width, height });
+        }
+    }
+
+    // 1. El Master Superior debe permanecer intacto (50% de la pantalla)
+    assert_eq!(
+        new_geoms["win-top"].height, 525,
+        "El Master Superior debe seguir midiendo 50% de altura"
+    );
+    assert_eq!(new_geoms["win-top"].width, 1900);
+
+    // 2. win-bot-left debe medir ~1330px (~35% de la pantalla)
+    assert!(
+        (new_geoms["win-bot-left"].width - 1330).abs() <= 6,
+        "win-bot-left midió {}, esperado ~1330",
+        new_geoms["win-bot-left"].width
+    );
+
+    // 3. win-bot-right debe haberse contraído reactivamente a ~570px (~15% de la pantalla)
+    assert!(
+        (new_geoms["win-bot-right"].width - 570).abs() <= 15,
+        "win-bot-right midió {}, esperado ~570",
+        new_geoms["win-bot-right"].width
+    );
+
+    // 4. win-bot-right debe comenzar inmediatamente después de win-bot-left + gap
+    assert_eq!(
+        new_geoms["win-bot-right"].x,
+        new_geoms["win-bot-left"].x + new_geoms["win-bot-left"].width + 10
+    );
+
+    // 5. La suma de ambas ventanas inferiores más gaps debe completar la anchura
+    assert_eq!(
+        new_geoms["win-bot-left"].width + new_geoms["win-bot-right"].width + 30,
+        1920
+    );
+}
+
+#[tokio::test]
 async fn test_interactive_mouse_drag_to_swap_windows() {
     let config = RavenConfig {
         default_gaps: 10,

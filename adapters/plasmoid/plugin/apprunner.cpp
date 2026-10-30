@@ -384,8 +384,9 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
 
     processedDesktopIds.insert(desktopId);
 
-    // Limpiar códigos de campo Exec como %u, %f, %U, %F, %i, %c, %k
-    exec.remove(QRegularExpression(QStringLiteral("%[a-zA-Z]")));
+    // Limpiar códigos de campo Exec como %u, %f, %U, %F, %i, %c, %k usando regex precompilada estática
+    static const QRegularExpression fieldCodeRegex(QStringLiteral("%[a-zA-Z]"));
+    exec.remove(fieldCodeRegex);
 
     AppEntry entry;
     entry.name = name;
@@ -407,7 +408,7 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
                 const RawAction &ra = actionEntries.value(cleanId);
                 if (!ra.exec.isEmpty()) {
                     QString cleanActionExec = ra.exec;
-                    cleanActionExec.remove(QRegularExpression(QStringLiteral("%[a-zA-Z]")));
+                    cleanActionExec.remove(fieldCodeRegex);
                     QVariantMap actMap;
                     actMap.insert(QStringLiteral("id"), cleanId);
                     actMap.insert(QStringLiteral("name"), ra.name.isEmpty() ? cleanId : ra.name);
@@ -423,7 +424,7 @@ void AppListModel::parseDesktopFile(const QString &filePath, QSet<QString> &proc
             const RawAction &ra = it.value();
             if (!ra.exec.isEmpty()) {
                 QString cleanActionExec = ra.exec;
-                cleanActionExec.remove(QRegularExpression(QStringLiteral("%[a-zA-Z]")));
+                cleanActionExec.remove(fieldCodeRegex);
                 QVariantMap actMap;
                 actMap.insert(QStringLiteral("id"), ra.id);
                 actMap.insert(QStringLiteral("name"), ra.name.isEmpty() ? ra.id : ra.name);
@@ -516,8 +517,9 @@ void AppFilterModel::launchApp(const QString &execCmd, const QString &desktopPat
 
     // Ejecución segura sin evaluación de cadenas de shell
     if (!execCmd.isEmpty()) {
+        static const QRegularExpression fieldCodeRegex(QStringLiteral("%[a-zA-Z]"));
         QString cleanCmd = execCmd;
-        cleanCmd = cleanCmd.remove(QRegularExpression(QStringLiteral("%[a-zA-Z]"))).trimmed();
+        cleanCmd = cleanCmd.remove(fieldCodeRegex).trimmed();
         QStringList args = QProcess::splitCommand(cleanCmd);
         if (!args.isEmpty()) {
             QString program = args.takeFirst();

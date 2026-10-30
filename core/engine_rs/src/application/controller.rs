@@ -343,8 +343,16 @@ impl RavenController {
                 true
             });
 
-            // Insertar/actualizar todas las ventanas del payload
-            for win in windows {
+            // Insertar/actualizar todas las ventanas del payload preservando ratios personalizados previos
+            for mut win in windows {
+                if let Some(existing) = self.engine.current_windows.get(&win.window_id) {
+                    if win.custom_w_ratio.is_none() {
+                        win.custom_w_ratio = existing.custom_w_ratio;
+                    }
+                    if win.custom_h_ratio.is_none() {
+                        win.custom_h_ratio = existing.custom_h_ratio;
+                    }
+                }
                 self.engine.current_windows.insert(win.window_id.clone(), win);
             }
         }
@@ -358,7 +366,15 @@ impl RavenController {
     /// * `win` - Nodo de ventana con los cambios recientes.
     ///
     /// Solo actualiza el estado interno (diccionario). Para generar comandos y redibujar, debe llamarse explícitamente a `commit_layout()`.
-    pub fn handle_delta_change(&mut self, win: WindowNode) {
+    pub fn handle_delta_change(&mut self, mut win: WindowNode) {
+        if let Some(existing) = self.engine.current_windows.get(&win.window_id) {
+            if win.custom_w_ratio.is_none() {
+                win.custom_w_ratio = existing.custom_w_ratio;
+            }
+            if win.custom_h_ratio.is_none() {
+                win.custom_h_ratio = existing.custom_h_ratio;
+            }
+        }
         self.engine
             .current_windows
             .insert(win.window_id.clone(), win);
@@ -1374,68 +1390,166 @@ impl RavenController {
                     }
                 }
             } else {
-                // 3 o más ventanas
-                let frac_w = ((new_rect.width + gaps) as f32 / usable_w).clamp(0.20, 0.80);
-                match layout_type.as_str() {
-                    "divisor" => {
-                        if let Some(w) = self.engine.current_windows.get_mut(window_id) {
-                            let scale_w =
-                                (new_rect.width as f32 / old_rect.width.max(1) as f32).clamp(0.25, 3.0);
-                            let cur = w.custom_w_ratio.unwrap_or(1.0);
-                            w.custom_w_ratio = Some((cur * scale_w).clamp(0.20, 3.0));
-                        }
-                    }
-                    "tall" | "strict_dwindle" => {
-                        let raw_ratio = if win_idx < self.engine.config.nmaster.max(1) {
-                            frac_w
-                        } else {
-                            1.0 - frac_w
-                        };
-                        self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
-                        config_changed = true;
-                    }
-                    "inverted_strict_dwindle" => {
-                        let raw_ratio = if win_idx == 0 { frac_w } else { 1.0 - frac_w };
-                        self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
-                        config_changed = true;
-                    }
-                    _ => {
-                        if win_idx == 0 {
-                            self.engine.config.master_ratio = snap_canonical_ratio(frac_w);
-                            config_changed = true;
-                        } else if total_count == 3 {
-                            let aspect_ratio = usable_w / usable_h.max(1.0);
-                            if aspect_ratio < 1.55 {
-                                self.engine.config.master_ratio = snap_canonical_ratio(1.0 - frac_w);
-                                config_changed = true;
-                            } else if let Some(w) = self.engine.current_windows.get_mut(window_id) {
-                                let scale_w = (new_rect.width as f32 / old_rect.width.max(1) as f32)
-                                    .clamp(0.25, 3.0);
-                                let cur = w.custom_w_ratio.unwrap_or(1.0);
-                                w.custom_w_ratio = Some((cur * scale_w).clamp(0.20, 3.0));
+                // 3 o más ventanas: Búsqueda geométrica de ventana hermana (sibling) adyacente en la misma fila o columna.
+                let other_windows: Vec<(String, Rect)> = ws_windows
+                    .iter()
+                    .filter(|id| id.as_str() != window_id)
+                    .filter_map(|id| {
+                        let g = self
+                            .last_known_layout
+                            .get(id)
+                            .or_else(|| self.engine.current_windows.get(id).map(|w| &w.geometry))
+                            .copied()?;
+                        Some((id.clone(), g))
+                    })
+                    .collect();
+
+                let mut horizontal_sibling: Option<(String, Rect, bool)> = None;
+                if dw > 4 {
+                    for (oid, og) in &other_windows {
+                        let same_row = (old_rect.y - og.y).abs() <= gaps + 10
+                            && (old_rect.height - og.height).abs() <= gaps + 16;
+                        if same_row {
+                            let is_right = (og.x - (old_rect.x + old_rect.width)).abs() <= gaps * 2 + 14;
+                            let is_left = ((og.x + og.width) - old_rect.x).abs() <= gaps * 2 + 14;
+                            if is_right {
+                                horizontal_sibling = Some((oid.clone(), *og, true));
+                                break;
+                            } else if is_left {
+                                horizontal_sibling = Some((oid.clone(), *og, false));
+                                break;
                             }
-                        } else {
-                            let raw_ratio = (1.0 - (2.0 * frac_w)).clamp(0.25, 0.85);
-                            self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
-                            config_changed = true;
                         }
                     }
                 }
-            }
-        }
 
-        if dh > 4 && total_count >= 2 {
-            let frac_h = ((new_rect.height + gaps) as f32 / usable_h).clamp(0.15, 0.85);
-            let aspect_ratio = usable_w / usable_h.max(1.0);
-            if layout_type == "raven" && total_count == 3 && aspect_ratio >= 1.55 {
-                let raw_ratio = if win_idx == 0 { frac_h } else { 1.0 - frac_h };
-                self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
-                config_changed = true;
-            } else if let Some(w) = self.engine.current_windows.get_mut(window_id) {
-                let scale_h =
-                    (new_rect.height as f32 / old_rect.height.max(1) as f32).clamp(0.25, 3.0);
-                let cur = w.custom_h_ratio.unwrap_or(1.0);
-                w.custom_h_ratio = Some((cur * scale_h).clamp(0.20, 3.0));
+                let mut vertical_sibling: Option<(String, Rect, bool)> = None;
+                if dh > 4 {
+                    for (oid, og) in &other_windows {
+                        let same_col = (old_rect.x - og.x).abs() <= gaps + 10
+                            && (old_rect.width - og.width).abs() <= gaps + 16;
+                        if same_col {
+                            let is_bottom = (og.y - (old_rect.y + old_rect.height)).abs() <= gaps * 2 + 14;
+                            let is_top = ((og.y + og.height) - old_rect.y).abs() <= gaps * 2 + 14;
+                            if is_bottom {
+                                vertical_sibling = Some((oid.clone(), *og, true));
+                                break;
+                            } else if is_top {
+                                vertical_sibling = Some((oid.clone(), *og, false));
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // 1. Si se detectó redimensionamiento entre dos hermanas horizontales que comparten fila:
+                if let Some((sib_id, sib_geom, self_is_left)) = horizontal_sibling {
+                    let total_shared_w = (old_rect.width + sib_geom.width).max(1);
+                    let (new_left_w, new_right_w) = if self_is_left {
+                        let clamped_self = new_rect.width.clamp(80, total_shared_w - 80);
+                        (clamped_self, total_shared_w - clamped_self)
+                    } else {
+                        let clamped_self = new_rect.width.clamp(80, total_shared_w - 80);
+                        (total_shared_w - clamped_self, clamped_self)
+                    };
+
+                    let ratio_l = (new_left_w as f32 / total_shared_w as f32).clamp(0.10, 0.90);
+                    let ratio_r = (new_right_w as f32 / total_shared_w as f32).clamp(0.10, 0.90);
+
+                    let (w_left_id, w_right_id) = if self_is_left {
+                        (window_id.to_string(), sib_id)
+                    } else {
+                        (sib_id, window_id.to_string())
+                    };
+
+                    if let Some(wl) = self.engine.current_windows.get_mut(&w_left_id) {
+                        wl.custom_w_ratio = Some(ratio_l);
+                    }
+                    if let Some(wr) = self.engine.current_windows.get_mut(&w_right_id) {
+                        wr.custom_w_ratio = Some(ratio_r);
+                    }
+                    config_changed = true;
+                } else if dw > 4 {
+                    // Si no es un par de hermanas de fila, es la frontera entre Master y columnas
+                    let frac_w = ((new_rect.width + gaps) as f32 / usable_w).clamp(0.15, 0.85);
+                    match layout_type.as_str() {
+                        "divisor" => {
+                            if let Some(w) = self.engine.current_windows.get_mut(window_id) {
+                                let scale_w =
+                                    (new_rect.width as f32 / old_rect.width.max(1) as f32).clamp(0.20, 5.0);
+                                let cur = w.custom_w_ratio.unwrap_or(1.0);
+                                w.custom_w_ratio = Some((cur * scale_w).clamp(0.15, 5.0));
+                            }
+                        }
+                        "tall" | "strict_dwindle" => {
+                            let raw_ratio = if win_idx < self.engine.config.nmaster.max(1) {
+                                frac_w
+                            } else {
+                                1.0 - frac_w
+                            };
+                            self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
+                            config_changed = true;
+                        }
+                        "inverted_strict_dwindle" => {
+                            let raw_ratio = if win_idx == 0 { frac_w } else { 1.0 - frac_w };
+                            self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
+                            config_changed = true;
+                        }
+                        _ => {
+                            if win_idx == 0 {
+                                self.engine.config.master_ratio = snap_canonical_ratio(frac_w);
+                                config_changed = true;
+                            } else {
+                                let raw_ratio = (1.0 - (2.0 * frac_w)).clamp(0.20, 0.85);
+                                self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
+                                config_changed = true;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Si se detectó redimensionamiento entre dos hermanas verticales que comparten columna:
+                if let Some((sib_id, sib_geom, self_is_top)) = vertical_sibling {
+                    let total_shared_h = (old_rect.height + sib_geom.height).max(1);
+                    let (new_top_h, new_bottom_h) = if self_is_top {
+                        let clamped_self = new_rect.height.clamp(80, total_shared_h - 80);
+                        (clamped_self, total_shared_h - clamped_self)
+                    } else {
+                        let clamped_self = new_rect.height.clamp(80, total_shared_h - 80);
+                        (total_shared_h - clamped_self, clamped_self)
+                    };
+
+                    let ratio_t = (new_top_h as f32 / total_shared_h as f32).clamp(0.10, 0.90);
+                    let ratio_b = (new_bottom_h as f32 / total_shared_h as f32).clamp(0.10, 0.90);
+
+                    let (w_top_id, w_bottom_id) = if self_is_top {
+                        (window_id.to_string(), sib_id)
+                    } else {
+                        (sib_id, window_id.to_string())
+                    };
+
+                    if let Some(wt) = self.engine.current_windows.get_mut(&w_top_id) {
+                        wt.custom_h_ratio = Some(ratio_t);
+                    }
+                    if let Some(wb) = self.engine.current_windows.get_mut(&w_bottom_id) {
+                        wb.custom_h_ratio = Some(ratio_b);
+                    }
+                    config_changed = true;
+                } else if dh > 4 {
+                    // Si no es un par de hermanas de columna, es la frontera entre Master Superior y Panel Inferior
+                    let frac_h = ((new_rect.height + gaps) as f32 / usable_h).clamp(0.15, 0.85);
+                    let aspect_ratio = usable_w / usable_h.max(1.0);
+                    if layout_type == "raven" && total_count == 3 && aspect_ratio >= 1.55 {
+                        let raw_ratio = if win_idx == 0 { frac_h } else { 1.0 - frac_h };
+                        self.engine.config.master_ratio = snap_canonical_ratio(raw_ratio);
+                        config_changed = true;
+                    } else if let Some(w) = self.engine.current_windows.get_mut(window_id) {
+                        let scale_h =
+                            (new_rect.height as f32 / old_rect.height.max(1) as f32).clamp(0.20, 5.0);
+                        let cur = w.custom_h_ratio.unwrap_or(1.0);
+                        w.custom_h_ratio = Some((cur * scale_h).clamp(0.15, 5.0));
+                    }
+                }
             }
         }
 

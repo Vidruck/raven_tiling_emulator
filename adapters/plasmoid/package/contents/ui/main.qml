@@ -40,62 +40,67 @@ PlasmoidItem {
         }
     }
 
-    PlasmaCore.Dialog {
-        id: centerDialog
-        location: PlasmaCore.Types.Floating
-        flags: Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
-        // Prevenir que el panel Adaptable fuerce un fondo opaco/sólido de Plasma
-        backgroundHints: PlasmaCore.Dialog.NoBackground
-        hideOnWindowDeactivate: true
-        visible: false
+    Loader {
+        id: floatingDialogLoader
+        active: Plasmoid.location === PlasmaCore.Types.Floating
 
-        property int targetWidth: 410
-        property int maxAllowedHeight: {
-            var screenH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Plasmoid.screenGeometry.height : 1080;
-            return Math.max(300, screenH - 80);
-        }
+        sourceComponent: PlasmaCore.Dialog {
+            id: centerDialog
+            location: PlasmaCore.Types.Floating
+            flags: Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
+            // Prevenir que el panel Adaptable fuerce un fondo opaco/sólido de Plasma
+            backgroundHints: PlasmaCore.Dialog.NoBackground
+            hideOnWindowDeactivate: true
+            visible: false
 
-        width: targetWidth
-        height: Math.min(dialogContent.implicitHeight, maxAllowedHeight)
-
-        Component.onCompleted: updatePosition()
-        onWidthChanged: updatePosition()
-        onHeightChanged: updatePosition()
-
-        function updatePosition() {
-            var screenW = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.width > 0) ? Plasmoid.screenGeometry.width : 1920;
-            var screenH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Plasmoid.screenGeometry.height : 1080;
-            x = Math.round((screenW - width) / 2);
-            y = Math.round((screenH - height) / 2);
-        }
-
-        mainItem: Item {
-            id: dialogContent
-            
-            Layout.minimumWidth: 410
-            Layout.maximumWidth: 410
-            Layout.preferredWidth: centerDialog.targetWidth
-            Layout.preferredHeight: mainViewDialog.contentHeight
-            Layout.minimumHeight: mainViewDialog.contentHeight
-            Layout.maximumHeight: mainViewDialog.contentHeight
-            
-            implicitWidth: centerDialog.targetWidth
-            implicitHeight: mainViewDialog.contentHeight
-
-            onImplicitHeightChanged: {
-                centerDialog.height = Qt.binding(function() {
-                    return Math.min(dialogContent.implicitHeight, centerDialog.maxAllowedHeight);
-                });
-                centerDialog.updatePosition();
+            property int targetWidth: 410
+            property int maxAllowedHeight: {
+                var screenH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Plasmoid.screenGeometry.height : 1080;
+                return Math.max(300, screenH - 80);
             }
 
-            MainWindowView {
-                id: mainViewDialog
-                anchors.fill: parent
-                appletExpanded: centerDialog.visible
-                onAppClicked: (appUrl, execCmd) => {
-                    centerDialog.visible = false
-                    root.expanded = false
+            width: targetWidth
+            height: Math.min(dialogContent.implicitHeight, maxAllowedHeight)
+
+            Component.onCompleted: updatePosition()
+            onWidthChanged: updatePosition()
+            onHeightChanged: updatePosition()
+
+            function updatePosition() {
+                var screenW = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.width > 0) ? Plasmoid.screenGeometry.width : 1920;
+                var screenH = (Plasmoid.screenGeometry && Plasmoid.screenGeometry.height > 0) ? Plasmoid.screenGeometry.height : 1080;
+                x = Math.round((screenW - width) / 2);
+                y = Math.round((screenH - height) / 2);
+            }
+
+            mainItem: Item {
+                id: dialogContent
+                
+                Layout.minimumWidth: 410
+                Layout.maximumWidth: 410
+                Layout.preferredWidth: centerDialog.targetWidth
+                Layout.preferredHeight: mainViewDialog.contentHeight
+                Layout.minimumHeight: mainViewDialog.contentHeight
+                Layout.maximumHeight: mainViewDialog.contentHeight
+                
+                implicitWidth: centerDialog.targetWidth
+                implicitHeight: mainViewDialog.contentHeight
+
+                onImplicitHeightChanged: {
+                    centerDialog.height = Qt.binding(function() {
+                        return Math.min(dialogContent.implicitHeight, centerDialog.maxAllowedHeight);
+                    });
+                    centerDialog.updatePosition();
+                }
+
+                MainWindowView {
+                    id: mainViewDialog
+                    anchors.fill: parent
+                    appletExpanded: centerDialog.visible
+                    onAppClicked: (appUrl, execCmd) => {
+                        centerDialog.visible = false
+                        root.expanded = false
+                    }
                 }
             }
         }
@@ -125,14 +130,12 @@ PlasmoidItem {
     Connections {
         target: root
         function onExpandedChanged() {
-            if (Plasmoid.location === PlasmaCore.Types.Floating) {
+            if (Plasmoid.location === PlasmaCore.Types.Floating && floatingDialogLoader.item) {
+                var dlg = floatingDialogLoader.item;
                 if (root.expanded) {
-                    centerDialog.height = Qt.binding(function() {
-                        return Math.min(dialogContent.implicitHeight, centerDialog.maxAllowedHeight);
-                    });
-                    centerDialog.updatePosition();
+                    dlg.updatePosition();
                 }
-                centerDialog.visible = root.expanded;
+                dlg.visible = root.expanded;
             }
         }
     }

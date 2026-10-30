@@ -41,13 +41,13 @@ KCM.SimpleKCM {
             Button {
                 icon.name: iconField.text.length > 0 ? iconField.text : "document-open"
                 text: i18n("Seleccionar...")
-                onClicked: iconDialog.open()
+                onClicked: {
+                    iconDialogLoader.active = true;
+                    if (iconDialogLoader.item) {
+                        iconDialogLoader.item.open();
+                    }
+                }
             }
-        }
-
-        KIconThemes.IconDialog {
-            id: iconDialog
-            onIconNameChanged: iconField.text = iconName
         }
 
         SpinBox {
@@ -86,6 +86,20 @@ KCM.SimpleKCM {
                 text: opacitySlider.value + "%"
                 Layout.preferredWidth: 35
                 horizontalAlignment: Text.AlignRight
+            }
+        }
+    }
+
+    // Carga diferida del selector de iconos fuera del FormLayout para evitar fugas de RAM y warnings de escena QML
+    Loader {
+        id: iconDialogLoader
+        active: false
+        sourceComponent: KIconThemes.IconDialog {
+            onIconNameChanged: (newIconName) => {
+                if (newIconName && newIconName.length > 0) {
+                    iconField.text = newIconName;
+                }
+                iconDialogLoader.active = false;
             }
         }
     }

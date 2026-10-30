@@ -125,6 +125,14 @@ impl TilingEngine {
             .filter(|w| !w.is_minimized && !self.minimized_windows.contains(&w.window_id))
             .map(|w| {
                 let mut cloned = w.clone();
+                if let Some(existing) = self.current_windows.get(&cloned.window_id) {
+                    if cloned.custom_w_ratio.is_none() {
+                        cloned.custom_w_ratio = existing.custom_w_ratio;
+                    }
+                    if cloned.custom_h_ratio.is_none() {
+                        cloned.custom_h_ratio = existing.custom_h_ratio;
+                    }
+                }
                 let class_lower = cloned.resource_class.to_lowercase();
                 let caption_lower = cloned.caption.to_lowercase();
 

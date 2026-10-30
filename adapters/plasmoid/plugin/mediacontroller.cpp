@@ -302,6 +302,20 @@ void MediaController::onNameOwnerChanged(const QString &name, const QString &old
         return;
     }
 
+    if (!m_active) {
+        // Diferir el escaneo D-Bus síncrono hasta que el plasmoide se abra para evitar bloqueos y consumo en segundo plano
+        m_needsRefreshOnActive = true;
+        if (!oldOwner.isEmpty() && newOwner.isEmpty() && name == m_currentService) {
+            m_hasPlayer = false;
+            m_currentService.clear();
+            m_playbackStatus = QStringLiteral("Stopped");
+            m_positionTimer->stop();
+            updateCavaState();
+            emit mediaChanged();
+        }
+        return;
+    }
+
     if (oldOwner.isEmpty() && !newOwner.isEmpty()) {
         connectToPlayer(name);
     } else if (!oldOwner.isEmpty() && newOwner.isEmpty()) {
@@ -324,6 +338,16 @@ void MediaController::onNameOwnerChanged(const QString &name, const QString &old
 void MediaController::onPropertiesChanged(const QString &interfaceName, const QVariantMap &changedProperties, const QStringList &/*invalidatedProperties*/)
 {
     if (interfaceName != QLatin1String("org.mpris.MediaPlayer2.Player")) {
+        return;
+    }
+
+    if (!m_active) {
+        if (changedProperties.contains(QLatin1String("PlaybackStatus"))) {
+            m_playbackStatus = changedProperties.value(QLatin1String("PlaybackStatus")).toString();
+            m_positionTimer->stop();
+            updateCavaState();
+        }
+        m_needsRefreshOnActive = true;
         return;
     }
 
@@ -407,8 +431,8 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
     m_artUrl = metadata.value(QLatin1String("mpris:artUrl")).toString();
 
     // Respaldo: Si no hay artUrl pero es una URL de YouTube en xesam:url
-    if (m_artUrl.isEmpty()) {
-        QRegularExpression ytRegex(QStringLiteral("(?:v=|/v/|youtu\\.be/)([a-zA-Z0-9_-]{11})"));
+    if (m_artUrl.isEmpty() && !newTrackUrl.isEmpty()) {
+        static const QRegularExpression ytRegex(QStringLiteral("(?:v=|/v/|youtu\\.be/)([a-zA-Z0-9_-]{11})"));
         QRegularExpressionMatch match = ytRegex.match(newTrackUrl);
         if (match.hasMatch()) {
             QString videoId = match.captured(1);
@@ -429,7 +453,9 @@ void MediaController::updateMetadata(const QVariantMap &metadata)
 
     m_trackId = newTrackId.isEmpty() ? QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack") : newTrackId;
 
-    queryPositionDirect();
+    if (m_active) {
+        queryPositionDirect();
+    }
 }
 
 /**
@@ -604,6 +630,10 @@ void MediaController::setActive(bool active)
     if (m_active) {
         if (!m_hasPlayer || !isPlaying()) {
             findActivePlayer();
+            m_needsRefreshOnActive = false;
+        } else if (m_needsRefreshOnActive) {
+            refresh();
+            m_needsRefreshOnActive = false;
         }
         if (m_discoveryTimer) {
             m_discoveryTimer->start();

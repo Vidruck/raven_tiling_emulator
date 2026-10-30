@@ -135,13 +135,17 @@ Item {
             }
             Connections {
                 target: gaugeRoot
-                function onValueChanged() { canvas.requestPaint(); }
-                function onColorOverrideChanged() { canvas.requestPaint(); }
+                function onValueChanged() { if (root.appletExpanded && gaugeRoot.visible) canvas.requestPaint(); }
+                function onColorOverrideChanged() { if (root.appletExpanded && gaugeRoot.visible) canvas.requestPaint(); }
+            }
+            Connections {
+                target: root
+                function onAppletExpandedChanged() { if (root.appletExpanded && gaugeRoot.visible) canvas.requestPaint(); }
             }
             Connections {
                 target: RavenPlugin.RavenTheme
-                function onHighlightColorChanged() { canvas.requestPaint(); }
-                function onIsDarkChanged() { canvas.requestPaint(); }
+                function onHighlightColorChanged() { if (root.appletExpanded && gaugeRoot.visible) canvas.requestPaint(); }
+                function onIsDarkChanged() { if (root.appletExpanded && gaugeRoot.visible) canvas.requestPaint(); }
             }
         }
         
